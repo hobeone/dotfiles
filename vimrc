@@ -129,10 +129,7 @@ autocmd ColorScheme * highlight Normal guibg=black
 
 " Go wants tabs so don't highlight or expand them,
 autocmd BufWinEnter *.go match Tabs "\t\+$"
-autocmd BufWinEnter *.go set noexpandtab
-autocmd BufWinEnter *.go set textwidth=0
-autocmd BufWinEnter *.go set wrapmargin=0
-
+autocmd BufWinLeave *.go match Tabs "\t"
 
 
 call pathogen#infect()
@@ -261,7 +258,7 @@ if has("spell")
 endif
 
 set omnifunc=syntaxcomplete#Complete
-let g:UltiSnipsSnippetDirectories=["UltiSnips","vim-snippets/UltiSnips"]
+let g:UltiSnipsSnippetDirectories=["UltiSnips","vim-snippets/UltiSnips", "snippets/angular/UltiSnips", "bundle/vim-go/gosnippets/UltiSnips"]
 " Needed for YCM compat
 let g:UltiSnipsExpandTrigger="<c-j>"
 let g:UltiSnipsJumpForwardTrigger="<c-j>"
@@ -276,6 +273,8 @@ let g:go_fmt_command = "goimports"
 
 let g:syntastic_aggregate_errors = 1
 let g:syntastic_go_checkers = ['go', 'gotype', 'golint', 'govet']
+
+let g:syntastic_html_tidy_ignore_errors=[" proprietary attribute \"ng-", " proprietary attribute \"ui-"]
 
 au Filetype go nnoremap <leader>v :sp <CR>:exe "GoDef" <CR>
 
@@ -311,5 +310,8 @@ let g:tagbar_type_go = {
 " Don't wrap html
 autocmd BufWinEnter *.html set textwidth=0
 autocmd BufWinEnter *.html set wrapmargin=0
+
+" Javascript
+let g:used_javascript_libs = 'angular, angularui'
 
 source ~/.vim/user.vim
