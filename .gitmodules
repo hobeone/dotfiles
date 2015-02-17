@@ -74,3 +74,9 @@
 [submodule "vim/bundle/nginx-vim-syntax"]
 	path = vim/bundle/nginx-vim-syntax
 	url = https://github.com/evanmiller/nginx-vim-syntax.git
+[submodule "vim/snippets/angular"]
+	path = vim/snippets/angular
+	url = https://github.com/matthewsimo/angular-vim-snippets.git
+[submodule "vim/bundle/tern_for_vim"]
+	path = vim/bundle/tern_for_vim
+	url = https://github.com/marijnh/tern_for_vim.git
