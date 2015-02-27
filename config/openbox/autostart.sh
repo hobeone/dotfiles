@@ -1,4 +1,6 @@
 #!/bin/bash
+/usr/lib/policykit-1-gnome/polkit-gnome-authentication-agent-1 &
+eval $(gnome-keyring-daemon -s --components=pkcs11,secrets,ssh,gpg) &
 #xscreensaver &
 xmodmap ~/.Xmodmap &
 xset r rate 220 30 &
