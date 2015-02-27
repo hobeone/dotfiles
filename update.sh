@@ -1,4 +1,4 @@
-#!/bin/sh -ex
+#!/bin/bash -ex
 git pull
 git submodule update --init --remote
 git status
