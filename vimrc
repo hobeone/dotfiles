@@ -101,6 +101,28 @@ set backspace=indent,eol,start
 " keep undo files in one place
 set undodir=~/.vim/undodir
 
+" get mouse working
+set mouse=a
+
+
+" ----- bling/vim-airline settings -----
+" Always show statusbar
+set laststatus=2
+
+" Fancy arrow symbols, requires a patched font
+" To install a patched font, run over to
+"     https://github.com/abertsch/Menlo-for-Powerline
+" download all the .ttf files, double-click on them and click "Install"
+" Finally, uncomment the next line
+"let g:airline_powerline_fonts = 1
+
+" Show PASTE if in paste mode
+let g:airline_detect_paste=1
+
+" Show airline for tabs too
+let g:airline#extensions#tabline#enabled = 1
+
+
 "
 " ===================================================================
 " AutoCommands
@@ -264,6 +286,16 @@ let g:UltiSnipsExpandTrigger="<c-j>"
 let g:UltiSnipsJumpForwardTrigger="<c-j>"
 let g:UltiSnipsJumpBackwardTrigger="<c-k>"
 
+" ----- Raimondi/delimitMate settings -----
+let delimitMate_expand_cr = 1
+augroup mydelimitMate
+  au!
+  au FileType markdown let b:delimitMate_nesting_quotes = ["`"]
+  au FileType tex let b:delimitMate_quotes = ""
+  au FileType tex let b:delimitMate_matchpairs = "(:),[:],{:},`:'"
+  au FileType python let b:delimitMate_nesting_quotes = ['"', "'"]
+augroup END
+
 " Force YCM to call out to the gocode omnifunc for everything.
 let g:ycm_semantic_triggers = {
 \  'go'  : [' '],
@@ -271,6 +303,9 @@ let g:ycm_semantic_triggers = {
 
 let g:go_fmt_command = "goimports"
 
+" ----- scrooloose/syntastic settings -----
+let g:syntastic_error_symbol = '✘'
+let g:syntastic_warning_symbol = "▲"
 let g:syntastic_aggregate_errors = 1
 let g:syntastic_go_checkers = ['go', 'gotype', 'golint', 'govet']
 
