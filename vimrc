@@ -102,7 +102,7 @@ set backspace=indent,eol,start
 set undodir=~/.vim/undodir
 
 " get mouse working
-set mouse=a
+"set mouse=a
 
 
 " ----- bling/vim-airline settings -----
