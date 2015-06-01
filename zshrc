@@ -155,7 +155,7 @@ export RSYNC_RSH=ssh
 ##############################################################################
 psgrep()
 {
-  ps aux | grep $1 | grep -v "grep $1"
+  ps aux | \grep $1 | \grep -v "grep $1"
 }
 
 hgrep()
@@ -170,7 +170,7 @@ pskill()
                 print "Usage: pskill search_term [signal]" && return 1
         fi
         [[ $2 != "" ]] && signal=$2
-        set -A pids $(command ps -elf | grep $1 | grep -v "grep $1" | \
+        set -A pids $(command ps -elf | \grep $1 | \grep -v "grep $1" | \
                         awk '{ print $4 }')
         if [[ ${#pids} -lt 1 ]]; then
                 print "No matching processes for $1" && return 1
