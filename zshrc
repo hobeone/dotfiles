@@ -95,7 +95,7 @@ alias loadhistory="fc -RI"
 # basic env
 ##############################################################################
 unset MAIL
-export MAILDIR="~/Maildir/"
+#export MAILDIR="~/Maildir/"
 
 export PAGER=less
 export EDITOR="vim"
