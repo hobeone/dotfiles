@@ -94,7 +94,7 @@ alias loadhistory="fc -RI"
 ##############################################################################
 # basic env
 ##############################################################################
-unset MAIL
+#unset MAIL
 #export MAILDIR="~/Maildir/"
 
 export PAGER=less
