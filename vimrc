@@ -35,7 +35,9 @@ set   noerrorbells
 
 "       helpheight: zero disables this.
 set   helpheight=0
-"
+
+set incsearch           " search as characters are entered"
+
 "       hlsearch :  highlight search - show the current search pattern
 "       This is a nice feature sometimes - but it sure can get in the
 "       way sometimes when you edit.
@@ -49,7 +51,7 @@ set   laststatus=2
 "       in search patterns?  Certainly!  (I just *love* "\s\+"!)
 "set   magic
 "
-"set number
+set number " show line numbers
 "
 "
 "       report: show a report when N lines were changed.
@@ -69,6 +71,10 @@ set   shortmess=tI
 "
 "       showcmd:     Show current uncompleted command?  Absolutely!
 set   showcmd
+
+set cursorline          " highlight current line
+
+set lazyredraw " redraw only when we need to.
 "
 "       showmatch:   Show the matching bracket for the last ')'?
 set   showmatch
@@ -165,7 +171,7 @@ let g:solarized_termcolors = 256
 
 
 if has("gui_running")
-  set guifont=terminus\ 12 linespace=0
+  set guifont=terminus\ bold\ 12 linespace=0
   "set guifont=Source\ Code\ Pro\ 11 linespace=-2
   "no toolbar
   set guioptions-=T
