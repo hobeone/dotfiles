@@ -155,6 +155,8 @@ autocmd ColorScheme * highlight Normal guibg=black
 
 " autocmd ColorScheme * highlight Cursor ctermfg=white ctermbg=black guifg=black guibg=white
 
+"autocmd ColorScheme * highlight CursorLine cterm=NONE ctermbg=darkgrey ctermfg=white guibg=darkgrey guifg=white 
+
 " Go wants tabs so don't highlight or expand them,
 autocmd BufWinEnter *.go match Tabs "\t\+$"
 autocmd BufWinLeave *.go match Tabs "\t"
@@ -181,7 +183,7 @@ if has("gui_running")
 else
   set t_Co=256
   set bg=dark
-  colorscheme vividchalk
+  colorscheme solarized
 endif
 
 set modeline modelines=3
@@ -308,6 +310,14 @@ let g:ycm_semantic_triggers = {
 \ }
 
 let g:go_fmt_command = "goimports"
+
+" Turn on highlighting for go
+let g:go_highlight_functions = 1
+let g:go_highlight_methods = 1
+let g:go_highlight_structs = 1
+let g:go_highlight_interfaces = 1
+let g:go_highlight_operators = 1
+let g:go_highlight_build_constraints = 1
 
 " ----- scrooloose/syntastic settings -----
 
