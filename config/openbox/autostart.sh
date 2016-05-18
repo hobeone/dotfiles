@@ -15,3 +15,4 @@ xfce4-power-manager --no-daemon &
 xfce4-panel &
 #$HOME/bin/keyserver &
 feh --no-xinerama --bg-scale images/Backgrounds/mandolux-basil-lr-1920.jpg &
+#xinput set-button-map "Kingsis Peripherals Evoluent VerticalMouse 4" 1 3 8 4 5 6 7 8 2 10 11 12 13 14
