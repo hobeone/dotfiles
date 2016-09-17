@@ -10,3 +10,4 @@ synclient VertTwoFingerScroll=1
 synclient HorizTwoFingerScroll=0
 synclient VertEdgeScroll=0
 synclient HorizEdgeScroll=0
+synclient VertScrollDelta=-111
