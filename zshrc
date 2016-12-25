@@ -47,7 +47,7 @@ path=( $path $GOROOT/bin )
 path=( $path $GOPATH/bin )
 path=( $path /usr/X11R6/bin )
 path=( $path $HOME/npm $HOME/npm/bin $HOME/npm/lib )
-path=( $path $HOME/.cargo/bin )
+
 setopt AUTO_PUSHD
 setopt nobeep                  # i hate beeps
 unsetopt auto_menu              # don't cycle completions
