@@ -3,7 +3,7 @@
 	<menu id="root-menu" label="Openbox 3">
 		<item label="Google Chrome">
 			<action name="Execute">
-				<execute>google-chrome --force-device-scale-factor=1.8</execute>
+				<execute>google-chrome</execute>
 			</action>
 		</item>
 		<item label="Terminal emulator">
