@@ -187,6 +187,27 @@ pskill()
 
 compdef _files -g "*" scp
 
+# Update env vars in TMUX
+if [ -n "$TMUX" ]; then
+  function refresh {
+    new_auth=$(tmux show-environment | grep "^SSH_AUTH_SOCK")
+    new_display=$(tmux show-environment | grep "^DISPLAY")
+    if [ -n "$new_auth" ]; then
+      export "$new_auth"
+    fi
+    if [ -n "$new_display" ]; then
+      export "$new_display"
+    fi
+  }
+else
+  function refresh { }
+fi
+
+function preexec {                                                                                    
+    refresh                                                                                           
+}
+
+
 
 if [[ -e ~/.zshrc.local ]]; then
 	source ~/.zshrc.local
