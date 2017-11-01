@@ -89,3 +89,6 @@
 [submodule "vim/bundle/nginx"]
 	path = vim/bundle/nginx
 	url = https://github.com/chr4/nginx.vim
+[submodule "vim/bundle/ale"]
+	path = vim/bundle/ale
+	url = https://github.com/w0rp/ale.git
