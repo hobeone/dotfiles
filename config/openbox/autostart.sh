@@ -5,6 +5,7 @@ export SSH_AUTH_SOCK
 gsettings set com.canonical.desktop.interface scrollbar-mode normal &
 xinput set-prop 11 "Device Enabled" 1 &
 xscreensaver &
+xss-lock -- xscreensaver-command -lock &
 xmodmap ~/.Xmodmap &
 xset r rate 220 30 &
 xset dpms 300 600 600 &
