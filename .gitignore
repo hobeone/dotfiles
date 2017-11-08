@@ -5,3 +5,4 @@ vim/user.vim
 vim/undodir/*
 !vim/undodir/.gitkeep
 config/openbox/autostart.local.sh
+config/openbox/noscreenlock
