@@ -114,6 +114,9 @@ case $TERM in
   ;;
 esac
 
+# Disables warnings about "Couldn't register with accessibility bus"
+export NO_AT_BRIDGE=1
+
 ##############################################################################
 # command aliases
 ##############################################################################
