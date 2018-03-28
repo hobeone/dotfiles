@@ -125,6 +125,8 @@ if [ "$PS1" ]; then
   alias ls='ls --color=auto'
   eval `dircolors`
 fi
+# https://unix.stackexchange.com/questions/258679/why-is-ls-suddenly-wrapping-items-with-spaces-in-single-quotes
+export QUOTING_STYLE=literal
 
 alias par="parchive"
 compdef '_files -g "*.(par|PAR)2"' par2
