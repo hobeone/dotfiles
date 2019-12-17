@@ -3,6 +3,7 @@
 vim/.netrwhist
 vim/user.vim
 vim/undodir/*
+vim/bundle/*
 !vim/undodir/.gitkeep
 config/openbox/autostart.local.sh
 config/openbox/noscreenlock
