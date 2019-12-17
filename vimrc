@@ -153,8 +153,43 @@ autocmd BufWinEnter *.go match Tabs "\t\+$"
 autocmd BufWinLeave *.go match Tabs "\t"
 
 
-call pathogen#infect()
-call pathogen#helptags()
+"Vundle bootstrap
+if !filereadable($HOME . '/.vim/bundle/Vundle.vim/.git/config') && confirm("Clone Vundle?","Y\nn") == 1
+    exec '!git clone https://github.com/gmarik/Vundle.vim ~/.vim/bundle/Vundle.vim/'
+endif
+
+
+filetype off "required vundle
+
+set rtp+=~/.vim/bundle/Vundle.vim
+call vundle#begin()
+Plugin 'VundleVim/Vundle.vim'
+Plugin 'tomasr/molokai'
+Plugin 'raimondi/delimitmate'
+Plugin 'mustache/vim-mustache-handlebars'
+Plugin 'peaksea'
+Plugin 'godlygeek/tabular'
+Plugin 'sirver/ultisnips'
+Plugin 'altercation/vim-colors-solarized'
+Plugin 'alpaca-tc/vim-endwise'
+Plugin 'pangloss/vim-javascript'
+Plugin 'depuracao/vim-rdoc'
+Plugin 'vim-ruby/vim-ruby'
+Plugin 'majutsushi/tagbar'
+Plugin 'tpope/vim-sensible'
+Plugin 'christoomey/vim-tmux-navigator'
+Plugin 'chr4/nginx.vim'
+Plugin 'valloric/youcompleteme'
+Plugin 'w0rp/ale'
+Plugin 'itchyny/lightline.vim'
+Plugin 'scrooloose/nerdtree'
+Plugin 'vim-airline/vim-airline'
+Plugin 'fatih/vim-go'
+Plugin 'tpope/vim-rails'
+
+call vundle#end()            " required
+filetype plugin indent on    " required
+
 
 syntax on
 filetype on
