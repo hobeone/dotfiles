@@ -400,6 +400,9 @@ let g:ale_sign_error = '✗'
 highlight link ALEWarningSign String
 highlight link ALEErrorSign Title
 
+" NERDTree
+nnoremap <C-g> :NERDTreeToggle<CR>
+
 " Lightline
 let g:lightline = {
 \ 'colorscheme': 'wombat',
