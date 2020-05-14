@@ -185,7 +185,7 @@ Plugin 'w0rp/ale'
 Plugin 'itchyny/lightline.vim'
 Plugin 'scrooloose/nerdtree'
 Plugin 'vim-airline/vim-airline'
-Plugin 'fatih/vim-go'
+Plugin 'fatih/vim-go', { 'do': ':GoInstallBinaries' }
 Plugin 'tpope/vim-rails'
 
 call vundle#end()            " required
