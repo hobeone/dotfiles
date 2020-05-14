@@ -44,6 +44,8 @@ export GOROOT=/usr/local/go
 typeset -U path
 path=(~/bin /bin /sbin /usr/local/bin /usr/sbin /usr/local/sbin /usr/bin)
 # Extend PATH
+path=( $path /usr/games )
+path=( $path $HOME/.local/bin )
 path=( $path /usr/local/scripts )
 path=( $path $GOROOT/bin )
 path=( $path $GOPATH/bin )
@@ -162,12 +164,12 @@ export RSYNC_RSH=ssh
 ##############################################################################
 psgrep()
 {
-  ps aux | \grep $1 | \grep -v "grep $1"
+  ps aux | \grep -i $1 | \grep -vi "grep $1"
 }
 
 hgrep()
 {
-  history | grep $1 | grep -v "grep $1"
+  history | grep -i $1 | grep -vi "grep $1"
 }
 
 pskill()
