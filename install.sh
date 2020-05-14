@@ -49,6 +49,7 @@ for f in $LINKS; do
   link_file_or_dir "$INSTALL_TO"/"$f" ~/."$f"
 done
 
+mkdir -p ~/bin
 BINS="keyboard-settings file-inotify"
 for f in $BINS; do
   link_file_or_dir "$INSTALL_TO"/bin/"$f" ~/bin/"$f"
