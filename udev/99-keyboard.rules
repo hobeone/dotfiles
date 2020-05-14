@@ -1,0 +1,4 @@
+# WARNING: Command might be executed multiple times
+#
+# Copy to /etc/udev/rules.d/99-keyboard.rules
+ACTION=="add", ATTRS{phys}=="usb-0000:0b:00.3-3.?/input0", RUN+="/usr/local/bin/keyboard-udev"
