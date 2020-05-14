@@ -283,11 +283,7 @@
     </keybind>
     <keybind key="C-A-l">
       <action name="Execute">
-        <startupnotify>
-          <enabled>true</enabled>
-          <name>Lock Screen</name>
-        </startupnotify>
-        <command>xscreensaver-command -l</command>
+        <command>xscreensaver-command -lock</command>
       </action>
     </keybind>
   </keyboard>
