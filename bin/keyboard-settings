@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/bash -ex
 xset r rate 220 30
 xmodmap ${HOME}/.Xmodmap 
-#notify-send -t 2500 "Keyboard settings applied"
+notify-send -t 2500 "Keyboard settings applied"
