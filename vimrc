@@ -152,6 +152,10 @@ autocmd ColorScheme * highlight Normal guibg=black
 autocmd BufWinEnter *.go match Tabs "\t\+$"
 autocmd BufWinLeave *.go match Tabs "\t"
 
+" set fonts
+if has("gui_running")
+  set guifont=Terminus\ (TTF)\ Medium\ 12
+endif
 
 "Vundle bootstrap
 if !filereadable($HOME . '/.vim/bundle/Vundle.vim/.git/config') && confirm("Clone Vundle?","Y\nn") == 1
