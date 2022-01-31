@@ -1,0 +1,3 @@
+eval $(gnome-keyring-daemon --daemonize --start)
+export SSH_AUTH_SOCK
+export SSH_ASKPASS=/usr/libexec/seahorse/ssh-askpass
