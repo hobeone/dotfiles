@@ -50,7 +50,7 @@ for f in $LINKS; do
 done
 
 mkdir -p ~/bin
-BINS="keyboard-settings file-inotify"
+BINS="keyboard-settings file-inotify performance.sh swap2ram.sh"
 for f in $BINS; do
   link_file_or_dir "$INSTALL_TO"/bin/"$f" ~/bin/"$f"
 done
