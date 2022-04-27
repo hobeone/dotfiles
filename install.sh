@@ -50,7 +50,7 @@ for f in $LINKS; do
 done
 
 mkdir -p ~/bin
-BINS="keyboard-settings file-inotify"
+BINS="keyboard-settings file-inotify performance.sh swap2ram.sh"
 for f in $BINS; do
   link_file_or_dir "$INSTALL_TO"/bin/"$f" ~/bin/"$f"
 done
@@ -62,5 +62,7 @@ $ECHO touch ~/.zshrc.local
 
 $ECHO mkdir -p ~/.config
 $ECHO mkdir -p ~/.config/Terminal
+$ECHO mkdir -p ~/.ssh
 link_file_or_dir "$INSTALL_TO"/config/Terminal/terminalrc ~/.config/Terminal/terminalrc
 link_file_or_dir "$INSTALL_TO"/config/openbox ~/.config/openbox
+link_file_or_dir "$INSTALL_TO"/ssh/config ~/.ssh/config
