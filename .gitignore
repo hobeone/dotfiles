@@ -7,3 +7,4 @@ vim/bundle/*
 !vim/undodir/.gitkeep
 config/openbox/autostart.local.sh
 config/openbox/noscreenlock
+fonts/.uuid
