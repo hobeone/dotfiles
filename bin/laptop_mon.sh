@@ -13,6 +13,6 @@ select-pane -t 1 \; \
 send-keys 'watch -n 1 cat /sys/devices/virtual/powercap/intel-rapl-mmio/intel-rapl-mmio\:0/constraint_0_power_limit_uw' C-m \; \
 resize-pane -y 5 \; \
 select-pane -t 2 \; \
-send-keys 'intel_gpu_top' C-m \; \
+send-keys 'sudo intel_gpu_top' C-m \; \
 select-pane -t 3 \; \
 send-keys 'htop' C-m \; set -g mouse on
