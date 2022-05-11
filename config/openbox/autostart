@@ -20,11 +20,6 @@ if [ -f ~/.fehbg ]; then
   echo "Setting background"
   sh ~/.fehbg &
 fi
-if [ ! -f ~/.config/openbox/noscreenlock ]; then
-  echo "Starting screensaver ..."
-  xscreensaver &
-  xss-lock -- xscreensaver-command -lock &
-fi
 
 if [[ -e ~/.config/openbox/autostart.local.sh ]]; then
   ~/.config/openbox/autostart.local.sh
