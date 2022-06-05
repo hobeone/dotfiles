@@ -3,7 +3,7 @@
   <menu id="root-menu" label="Openbox 3">
     <item label="Google Chrome">
       <action name="Execute">
-        <execute>google-chrome --force-device-scale-factor=1.1</execute>
+        <execute>google-chrome</execute>
       </action>
     </item>
     <item label="Terminal emulator">
@@ -33,15 +33,15 @@
     <item label="calibre">
       <action name="Execute">
         <execute>
-        calibre
-      </execute>
+          calibre
+        </execute>
       </action>
     </item>
     <item label="xfce4-display-settings">
       <action name="Execute">
         <execute>
-        xfce4-display-settings
-      </execute>
+          xfce4-display-settings
+        </execute>
       </action>
     </item>
 
