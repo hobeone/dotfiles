@@ -23,10 +23,10 @@
       </execute>
       </action>
     </item>
-    <item label="finncam">
+    <item label="steam">
       <action name="Execute">
         <execute>
-        /home/hobe/bin/finncam.sh
+        steam
       </execute>
       </action>
     </item>
