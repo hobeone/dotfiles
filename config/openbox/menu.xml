@@ -19,8 +19,15 @@
     <item label="gnome-system-monitor">
       <action name="Execute">
         <execute>
-          gnome-system-monitor
-        </execute>
+        gnome-system-monitor
+      </execute>
+      </action>
+    </item>
+    <item label="steam">
+      <action name="Execute">
+        <execute>
+        steam
+      </execute>
       </action>
     </item>
     <item label="calibre">
