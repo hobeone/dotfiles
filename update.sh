@@ -1,10 +1,4 @@
 #!/bin/bash -ex
-git pull
-git submodule update --init --recursive
+git pull --recurse-submodules --verbose
 
-git status
-if hash go 2>/dev/null; then
-  ./install_go_tools.sh
-else
-  echo "No go executable found."
-fi
+git status --verbose
