@@ -31,10 +31,16 @@ DISABLE_AUTO_UPDATE="true"
 # Uncomment following line if you want red dots to be displayed while waiting for completion
 COMPLETION_WAITING_DOTS="true"
 
+# add color to suggestions
+ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE='fg=5'
+#
+ZSH_AUTOSUGGEST_STRATEGY=(history completion)
+#ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE="fg=#ff00ff,bg=cyan,bold,underline"
+
 # Which plugins would you like to load? (plugins can be found in ~/.oh-my-zsh/plugins/*)
 # Custom plugins may be added to ~/.oh-my-zsh/custom/plugins/
 # Example format: plugins=(rails git textmate ruby lighthouse)
-plugins=(git ruby rsync rvm bundler cp history-substring-search themes npm bower golang tmux colorize systemd)
+plugins=(git ruby rsync rvm bundler cp history-substring-search themes npm bower golang tmux colorize systemd zsh-autosuggestions zsh-syntax-highlighting)
 
 source $ZSH/oh-my-zsh.sh
 
