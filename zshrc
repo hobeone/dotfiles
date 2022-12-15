@@ -50,7 +50,7 @@ path=( $path /usr/local/scripts )
 path=( $path $GOROOT/bin )
 path=( $path $GOPATH/bin )
 path=( $path /usr/X11R6/bin )
-path=( $path $HOME/npm $HOME/npm/bin $HOME/npm/lib )
+path=( $path /home/hobe/.pyenv/bin )
 
 setopt AUTO_PUSHD
 setopt nobeep                  # i hate beeps

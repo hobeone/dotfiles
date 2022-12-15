@@ -21,6 +21,4 @@ if [ -f ~/.fehbg ]; then
   sh ~/.fehbg &
 fi
 
-if [[ -e ~/.config/openbox/autostart.local.sh ]]; then
-  ~/.config/openbox/autostart.local.sh
-fi
+~/.config/openbox/autostart.local.sh &
