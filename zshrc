@@ -37,8 +37,8 @@ ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE='fg=5'
 ZSH_AUTOSUGGEST_STRATEGY=(history completion)
 #ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE="fg=#ff00ff,bg=cyan,bold,underline"
 
-LANG=en_US.UTF-8
-LC_CTYPE=en_US.UTF-8
+export LANG=en_US.UTF-8
+export LC_CTYPE=en_US.UTF-8
 
 # Which plugins would you like to load? (plugins can be found in ~/.oh-my-zsh/plugins/*)
 # Custom plugins may be added to ~/.oh-my-zsh/custom/plugins/

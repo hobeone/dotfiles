@@ -8,7 +8,7 @@
     </item>
     <item label="Firefox">
       <action name="Execute">
-        <execute>firefox-esr -P</execute>
+        <execute>firefox -P</execute>
       </action>
     </item>
     <item label="Terminal emulator">
