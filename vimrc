@@ -5,6 +5,9 @@ set autoindent nocindent nosmartindent
 set textwidth=79
 set tabstop=2
 set softtabstop=2
+
+set encoding=utf-8
+
 set expandtab
 
 "ignore case in searches
@@ -189,12 +192,15 @@ Plugin 'w0rp/ale'
 Plugin 'itchyny/lightline.vim'
 Plugin 'scrooloose/nerdtree'
 Plugin 'vim-airline/vim-airline'
-Plugin 'fatih/vim-go', { 'do': ':GoInstallBinaries' }
+Plugin 'fatih/vim-go'
 Plugin 'tpope/vim-rails'
-
+Plugin 'rust-lang/rust.vim'
+Bundle 'isobit/vim-caddyfile'
+Plugin 'scrooloose/syntastic'
 call vundle#end()            " required
 filetype plugin indent on    " required
 
+let g:ycm_gopls_binary_path = expand('$GOPATH/bin/gopls')
 
 syntax on
 filetype on
@@ -335,6 +341,18 @@ let g:UltiSnipsExpandTrigger="<c-j>"
 let g:UltiSnipsJumpForwardTrigger="<c-j>"
 let g:UltiSnipsJumpBackwardTrigger="<c-k>"
 
+let g:ycm_semantic_triggers =  {
+  \   'c' : ['->', '.'],
+  \   'go' : ['.'],
+  \   'objc' : ['->', '.'],
+  \   'cpp,objcpp' : ['->', '.', '::'],
+  \   'perl' : ['->'],
+  \   'php' : ['->', '::'],
+  \   'cs,java,javascript,d,vim,ruby,python,perl6,scala,vb,elixir,go' : ['.'],
+  \   'lua' : ['.', ':'],
+  \   'erlang' : [':'],
+  \ }
+
 " ----- Raimondi/delimitMate settings -----
 let delimitMate_expand_cr = 1
 augroup mydelimitMate
@@ -344,11 +362,6 @@ augroup mydelimitMate
   au FileType tex let b:delimitMate_matchpairs = "(:),[:],{:},`:'"
   au FileType python let b:delimitMate_nesting_quotes = ['"', "'"]
 augroup END
-
-" Force YCM to call out to the gocode omnifunc for everything.
-let g:ycm_semantic_triggers = {
-\  'go'  : [' '],
-\ }
 
 let g:go_fmt_command = "goimports"
 
@@ -459,5 +472,14 @@ endfunction
 " YAML Stuff
 autocmd FileType yaml setlocal ts=2 sts=2 sw=2 expandtab
 
+" YouCompleteMe
+let g:ycm_keep_logfiles = 1
+let g:ycm_log_level = 'debug'
+let g:ycm_enable_semantic_highlighting=1
+
+" Load YCM (only)
+let &rtp .= ',' . expand( '<sfile>:p:h' )
+filetype plugin indent on
+syn on
 
 source ~/.vim/user.vim
