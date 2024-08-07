@@ -6,6 +6,11 @@
         <execute>google-chrome</execute>
       </action>
     </item>
+    <item label="Firefox">
+      <action name="Execute">
+        <execute>firefox-esr -P</execute>
+      </action>
+    </item>
     <item label="Terminal emulator">
       <action name="Execute">
         <execute>x-terminal-emulator</execute>
