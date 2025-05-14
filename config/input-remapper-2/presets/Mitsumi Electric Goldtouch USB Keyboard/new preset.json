@@ -1,0 +1,62 @@
+[
+    {
+        "input_combination": [
+            {
+                "type": 1,
+                "code": 65,
+                "origin_hash": "0aaca8a5d7d89adf8d69815322d580a6"
+            }
+        ],
+        "target_uinput": "keyboard",
+        "output_symbol": "XF86AudioLowerVolume",
+        "mapping_type": "key_macro"
+    },
+    {
+        "input_combination": [
+            {
+                "type": 1,
+                "code": 66,
+                "origin_hash": "0aaca8a5d7d89adf8d69815322d580a6"
+            }
+        ],
+        "target_uinput": "keyboard",
+        "output_symbol": "XF86AudioRaiseVolume",
+        "mapping_type": "key_macro"
+    },
+    {
+        "input_combination": [
+            {
+                "type": 1,
+                "code": 67,
+                "origin_hash": "0aaca8a5d7d89adf8d69815322d580a6"
+            }
+        ],
+        "target_uinput": "keyboard",
+        "output_symbol": "XF86AudioPrev",
+        "mapping_type": "key_macro"
+    },
+    {
+        "input_combination": [
+            {
+                "type": 1,
+                "code": 68,
+                "origin_hash": "0aaca8a5d7d89adf8d69815322d580a6"
+            }
+        ],
+        "target_uinput": "keyboard",
+        "output_symbol": "XF86AudioPlay",
+        "mapping_type": "key_macro"
+    },
+    {
+        "input_combination": [
+            {
+                "type": 1,
+                "code": 87,
+                "origin_hash": "0aaca8a5d7d89adf8d69815322d580a6"
+            }
+        ],
+        "target_uinput": "keyboard",
+        "output_symbol": "XF86AudioNext",
+        "mapping_type": "key_macro"
+    }
+]
