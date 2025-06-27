@@ -44,7 +44,7 @@ fi
 git submodule update --init --recursive
 
 
-LINKS="vimrc vim ohmyzsh fonts Xmodmap Xresources zshrc tmux.conf xscreensaver npmrc"
+LINKS="vimrc vim ohmyzsh fonts Xmodmap Xresources zshrc tmux.conf xscreensaver npmrc p10k.zsh"
 for f in $LINKS; do
   link_file_or_dir "$INSTALL_TO"/"$f" ~/."$f"
 done
