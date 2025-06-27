@@ -67,3 +67,6 @@ link_file_or_dir "$INSTALL_TO"/config/Terminal/terminalrc ~/.config/Terminal/ter
 link_file_or_dir "$INSTALL_TO"/config/openbox ~/.config/openbox
 link_file_or_dir "$INSTALL_TO"/ssh/config ~/.ssh/config
 link_file_or_dir "$INSTALL_TO"/config/input-remapper-2 ~/.config/input-remapper-2
+link_file_or_dir "$INSTALL_TO"/config/labwc ~/.config/xfce4/labwc
+link_file_or_dir "$INSTALL_TO"/config/labwc ~/.config/labwc
+
