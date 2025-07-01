@@ -1,5 +1,6 @@
 swaybg -i /usr/share/backgrounds/Gwallpaper-gLinux-default.png >/dev/null 2>&1 &
-#/usr/share/goobuntu-indicator/goobuntu_indicator.py >/dev/null 2>&1 &
+
+kanshi -c ~/.config/kanshi/config &
 
 swayidle -w \
     timeout 300 'swaylock -f -c 000000' \
