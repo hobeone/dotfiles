@@ -1,0 +1,16 @@
+labwc
+xfce4
+pamixer
+kanshi
+wdisplays
+wlopm
+wlr-randr
+sway
+sway-notification-center
+swaybg
+swayidle
+swaylock
+swayosd
+brightnessctl
+playerctl
+input-remapper

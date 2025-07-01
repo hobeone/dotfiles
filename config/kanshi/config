@@ -1,0 +1,4 @@
+profile lg2 {
+  output DP-3 enable mode "2560x1440" position 0,0
+  output DP-4 enable mode "2560x1440" position 2560,0
+}
