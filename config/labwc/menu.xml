@@ -56,7 +56,7 @@
   <menu id="client-list-combined-menu" label="Running..." />
   -->
   <item label="google-chrome">
-    <action name="Execute" command="google-chrome" />
+    <action name="Execute" command="google-chrome --password-store=gnome-libsecret --ozone-platform=wayland"/>
   </item>
   <item label="xfce4-terminal">
     <action name="Execute" command="xfce4-terminal" />
