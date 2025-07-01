@@ -1,2 +1,8 @@
 swaybg -i /usr/share/backgrounds/Gwallpaper-gLinux-default.png >/dev/null 2>&1 &
-/usr/share/goobuntu-indicator/goobuntu_indicator.py >/dev/null 2>&1 &
+#/usr/share/goobuntu-indicator/goobuntu_indicator.py >/dev/null 2>&1 &
+
+swayidle -w \
+    timeout 300 'swaylock -f -c 000000' \
+    timeout 600 'wlopm --off \*' \
+    resume 'wlopm --on \*' \
+    before-sleep 'swaylock -f -c 000000' >/dev/null 2>&1 &
