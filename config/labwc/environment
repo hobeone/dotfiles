@@ -5,3 +5,5 @@ XKB_DEFAULT_LAYOUT=us
 
 # Set cursor theme
 XCURSOR_THEME=Adwaita
+
+GVIM_ENABLE_WAYLAND=YES
