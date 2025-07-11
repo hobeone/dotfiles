@@ -1,4 +1,4 @@
-swaybg -i /usr/share/backgrounds/Gwallpaper-gLinux-default.png >/dev/null 2>&1 &
+swaybg -i /usr/share/backgrounds/Gwallpaper-gLinux-default.png &
 
 kanshi -c ~/.config/kanshi/config &
 
@@ -6,4 +6,7 @@ swayidle -w \
     timeout 300 'swaylock -f -c 000000' \
     timeout 600 'wlopm --off \*' \
     resume 'wlopm --on \*' \
-    before-sleep 'swaylock -f -c 000000' >/dev/null 2>&1 &
+    before-sleep 'swaylock -f -c 000000'  &
+
+xfce4-panel &
+nm-applet &
