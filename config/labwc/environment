@@ -7,3 +7,5 @@ XKB_DEFAULT_OPTIONS=caps:none
 
 # Set cursor theme
 XCURSOR_THEME=Adwaita
+
+GVIM_ENABLE_WAYLAND=YES
