@@ -1,6 +1,7 @@
 {
-    "version": "2.0.1",
+    "version": "2.1.1",
     "autoload": {
-        "Kingsis Peripherals Evoluent VerticalMouse 4": "hobe"
+        "Kingsis Peripherals Evoluent VerticalMouse 4": "hobe",
+        "AT Translated Set 2 keyboard": "keyboard_main"
     }
 }
