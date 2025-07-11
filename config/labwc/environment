@@ -1,8 +1,8 @@
 # Example environment file for Xfce
 
 # Set keyboard layout to English
-XKB_DEFAULT_LAYOUT=
-XKB_DEFAULT_OPTIONS="caps:none"
+XKB_DEFAULT_LAYOUT=us
+XKB_DEFAULT_OPTIONS=caps:none
 
 
 # Set cursor theme
