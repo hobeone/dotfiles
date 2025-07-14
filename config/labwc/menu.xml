@@ -61,6 +61,9 @@
   <item label="xfce4-terminal">
     <action name="Execute" command="xfce4-terminal" />
   </item>
+  <item label="foot terminal">
+    <action name="Execute" command="foot" />
+  </item>
   <item label="gnome-system-monitor">
     <action name="Execute" command="gnome-system-monitor" />
   </item>
