@@ -14,3 +14,5 @@ swayosd
 brightnessctl
 playerctl
 input-remapper
+foot
+kitty
