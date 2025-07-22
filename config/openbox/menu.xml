@@ -100,7 +100,7 @@
     </item>
     <item label="Log out">
       <action name="Execute">
-        <execute>gnome-session-save --kill --gui</execute>
+        <execute>xfce4-session-logout</execute>
       </action>
     </item>
   </menu>
