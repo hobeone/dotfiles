@@ -271,8 +271,12 @@
       <action name="Execute" command="brightnessctl set 10%-" />
     </keybind>
     <keybind key="A-e">
+      <action name="Execute" command="foot" />
+    </keybind>
+    <keybind key="S-A-e">
       <action name="Execute" command="xfce4-terminal" />
     </keybind>
+
     <keybind key="S-A-f">
       <action name="ToggleMaximize" direction="vertical" />
     </keybind>
@@ -561,8 +565,9 @@
   -->
 
   <libinput>
+    <default/>
     <device category="default">
-      <naturalScroll></naturalScroll>
+      <naturalScroll>no</naturalScroll>
       <leftHanded></leftHanded>
       <pointerSpeed></pointerSpeed>
       <accelProfile></accelProfile>

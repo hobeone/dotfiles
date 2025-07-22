@@ -16,4 +16,4 @@ gsettings set org.gnome.mutter focus-change-on-pointer-rest false
 gsettings set org.gnome.shell.extensions.dash-to-panel isolate-workspaces false
 gsettings set org.gnome.mutter workspaces-only-on-primary false
 gsettings set org.gnome.desktop.interface enable-hot-corners false
-
+gsettings set org.gnome.shell.extensions.window-list grouping-mode 'never'
