@@ -14,6 +14,7 @@ xset dpms 300 600 600 &
 xrdb ~/.Xresources &
 xfsettingsd --no-daemon &
 xfce4-power-manager --no-daemon &
+/usr/lib/x86_64-linux-gnu/xfce4/notifyd/xfce4-notifyd &
 xfce4-panel &
 
 # Index Finger: left click
