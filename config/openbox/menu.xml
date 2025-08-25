@@ -11,6 +11,11 @@
         <execute>firefox -P</execute>
       </action>
     </item>
+    <item label="alacritty">
+      <action name="Execute">
+        <execute>alacritty</execute>
+      </action>
+    </item>
     <item label="Terminal emulator">
       <action name="Execute">
         <execute>x-terminal-emulator</execute>
