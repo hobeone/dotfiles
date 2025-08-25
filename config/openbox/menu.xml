@@ -3,7 +3,7 @@
   <menu id="root-menu" label="Openbox 3">
     <item label="Google Chrome">
       <action name="Execute">
-        <execute>google-chrome --password-store=gnome-libsecret</execute>
+        <execute>google-chrome --password-store=gnome-libsecret --enable-features=DefaultANGLEVulkan,VaapiIgnoreDriverChecks,Vulkan,VulkanFromANGLE</execute>
       </action>
     </item>
     <item label="Firefox">
