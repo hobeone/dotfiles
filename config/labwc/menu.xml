@@ -58,6 +58,9 @@
   <item label="google-chrome">
     <action name="Execute" command="google-chrome --password-store=gnome-libsecret --ozone-platform=wayland"/>
   </item>
+  <item label="alacritty">
+    <action name="Execute" command="alacritty" />
+  </item>
   <item label="xfce4-terminal">
     <action name="Execute" command="xfce4-terminal" />
   </item>
