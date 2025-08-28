@@ -145,9 +145,9 @@
 
   <snapping>
     <!-- Set range to 0 to disable window snapping completely -->
-    <range>1</range>
+    <range>10</range>
     <overlay enabled="yes">
-      <delay inner="500" outer="500" />
+      <delay inner="100" outer="100" />
     </overlay>
     <topMaximize>yes</topMaximize>
     <notifyClient>always</notifyClient>
@@ -271,7 +271,7 @@
       <action name="Execute" command="brightnessctl set 10%-" />
     </keybind>
     <keybind key="A-e">
-      <action name="Execute" command="xfce4-terminal" />
+      <action name="Execute" command="alacritty" />
     </keybind>
     <keybind key="S-A-f">
       <action name="ToggleMaximize" direction="vertical" />
