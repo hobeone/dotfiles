@@ -1,3 +1,6 @@
+[env]
+TERM = "xterm-256color"
+
 [window]
 dimensions = { columns = 80, lines = 24}
 dynamic_title = true
@@ -12,3 +15,6 @@ size = 12
 [colors.primary]
 background = "#000000"
 
+[colors]
+# Use a highly visible color that won't blend with your background.
+cursor = { text = "0x000000", cursor = "0xffffff" }
