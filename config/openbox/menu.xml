@@ -96,6 +96,11 @@
     <item label="Reconfigure">
       <action name="Reconfigure"/>
     </item>
+    <item label="Suspend">
+      <action name="Execute">
+        <execute>systemctl suspend</execute>
+      </action>
+    </item>
     <item label="Restart">
       <action name="Restart"/>
     </item>
