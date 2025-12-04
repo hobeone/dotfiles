@@ -24,10 +24,10 @@ ZSH_CUSTOM=$HOME/dotfiles/zsh_custom
 # CASE_SENSITIVE="true"
 
 # Comment this out to disable bi-weekly auto-update checks
-DISABLE_AUTO_UPDATE="true"
+DISABLE_AUTO_UPDATE="false"
 
 # Uncomment to change how many often would you like to wait before auto-updates occur? (in days)
-# export UPDATE_ZSH_DAYS=13
+export UPDATE_ZSH_DAYS=3
 
 # Uncomment following line if you want to disable colors in ls
 # DISABLE_LS_COLORS="true"
@@ -42,9 +42,7 @@ COMPLETION_WAITING_DOTS="true"
 #ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE='fg=5'
 ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE="fg=#ff00ff,bg=cyan,bold,underline"
 
-#
 ZSH_AUTOSUGGEST_STRATEGY=(history completion)
-#ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE="fg=#ff00ff,bg=cyan,bold,underline"
 
 export LANG=en_US.UTF-8
 export LC_CTYPE=en_US.UTF-8
@@ -166,8 +164,6 @@ alias ri='ri --format ansi'
 
 alias vim='vim -X -o -u $HOME/.vimrc "$@"'
 alias gvim='gvim -o -u $HOME/.vimrc -geom 80x24 "$@"'
-
-alias e=gvim
 
 alias tmux='tmux -2'
 
