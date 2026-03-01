@@ -75,3 +75,4 @@ link_file_or_dir "$INSTALL_TO"/config/foot ~/.config/foot
 link_file_or_dir "$INSTALL_TO"/config/alacritty ~/.config/alacritty
 link_file_or_dir "$INSTALL_TO"/dircolors ~/.dircolors
 
+sudo apt install eza zoxide
