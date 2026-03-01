@@ -74,5 +74,8 @@ link_file_or_dir "$INSTALL_TO"/config/nvim ~/.config/nvim
 link_file_or_dir "$INSTALL_TO"/config/foot ~/.config/foot
 link_file_or_dir "$INSTALL_TO"/config/alacritty ~/.config/alacritty
 link_file_or_dir "$INSTALL_TO"/dircolors ~/.dircolors
+link_file_or_dir "$INSTALL_TO"/gitconfig ~/.gitconfig
+link_file_or_dir "$INSTALL_TO"/gitignore_global ~/.gitignore_global
 
-sudo apt install eza zoxide
+
+sudo apt install eza zoxide git-delta tmux watch xclip gh btop
