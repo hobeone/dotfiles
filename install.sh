@@ -70,7 +70,12 @@ link_file_or_dir "$INSTALL_TO"/config/input-remapper-2 ~/.config/input-remapper-
 link_file_or_dir "$INSTALL_TO"/config/labwc ~/.config/xfce4/labwc
 link_file_or_dir "$INSTALL_TO"/config/labwc ~/.config/labwc
 link_file_or_dir "$INSTALL_TO"/config/kanshi ~/.config/kanshi
+link_file_or_dir "$INSTALL_TO"/config/nvim ~/.config/nvim
 link_file_or_dir "$INSTALL_TO"/config/foot ~/.config/foot
 link_file_or_dir "$INSTALL_TO"/config/alacritty ~/.config/alacritty
 link_file_or_dir "$INSTALL_TO"/dircolors ~/.dircolors
+link_file_or_dir "$INSTALL_TO"/gitconfig ~/.gitconfig
+link_file_or_dir "$INSTALL_TO"/gitignore_global ~/.gitignore_global
 
+
+sudo apt install eza zoxide git-delta tmux watch xclip gh btop
