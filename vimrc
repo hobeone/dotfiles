@@ -197,6 +197,7 @@ Plugin 'tpope/vim-rails'
 Plugin 'rust-lang/rust.vim'
 Bundle 'isobit/vim-caddyfile'
 Plugin 'scrooloose/syntastic'
+Plugin 'hashivim/vim-terraform'
 call vundle#end()            " required
 filetype plugin indent on    " required
 
