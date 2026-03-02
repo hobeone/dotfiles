@@ -24,10 +24,10 @@ ZSH_CUSTOM=$HOME/dotfiles/zsh_custom
 # CASE_SENSITIVE="true"
 
 # Comment this out to disable bi-weekly auto-update checks
-DISABLE_AUTO_UPDATE="true"
+DISABLE_AUTO_UPDATE="false"
 
 # Uncomment to change how many often would you like to wait before auto-updates occur? (in days)
-# export UPDATE_ZSH_DAYS=13
+export UPDATE_ZSH_DAYS=3
 
 # Uncomment following line if you want to disable colors in ls
 # DISABLE_LS_COLORS="true"
@@ -42,9 +42,7 @@ COMPLETION_WAITING_DOTS="true"
 #ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE='fg=5'
 ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE="fg=#ff00ff,bg=cyan,bold,underline"
 
-#
 ZSH_AUTOSUGGEST_STRATEGY=(history completion)
-#ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE="fg=#ff00ff,bg=cyan,bold,underline"
 
 export LANG=en_US.UTF-8
 export LC_CTYPE=en_US.UTF-8
@@ -76,7 +74,12 @@ path=( $path $GOPATH/bin )
 path=( $path /usr/X11R6/bin )
 path=( $path /home/hobe/.pyenv/bin )
 
-setopt AUTO_PUSHD
+# Directory navigation
+setopt AUTO_PUSHD        # push directories to stack
+setopt PUSHD_IGNORE_DUPS # don't push duplicates
+setopt PUSHD_SILENT      # don't print directory stack
+
+
 setopt nobeep                  # i hate beeps
 unsetopt auto_menu              # don't cycle completions
 setopt nocheckjobs             # don't warn me about bg processes when exiting
@@ -92,7 +95,7 @@ unsetopt correct_all                 # spelling correction
 #setopt histverify              # when using ! cmds, confirm first
 setopt interactivecomments     # escape commands so i can use them later
 #setopt recexact                # recognise exact, ambiguous matches
-#setopt printexitvalue          # alert me if something's failed
+setopt printexitvalue          # alert me if something's failed
 
 setopt chaselinks
 
@@ -104,20 +107,38 @@ zstyle ':completion:*' users $complete_users
 
 # Only complete what I've typed, no substring matches.
 zstyle ':completion:*' matcher-list 'm:{a-zA-Z}={A-Za-z}'
+zstyle ':completion:*' use-cache on
+zstyle ':completion:*' cache-path ~/.zsh/cache
+
 
 ##############################################################################
 # history
 ##############################################################################
 export HISTFILE=~/.zsh_history
-export HISTSIZE=10000
-export SAVEHIST=10000
-setopt hist_ignore_dups
-setopt appendhistory
+HISTSIZE=32768
+SAVEHIST=32768
+setopt APPEND_HISTORY
+setopt SHARE_HISTORY
+setopt HIST_IGNORE_ALL_DUPS
+setopt HIST_REDUCE_BLANKS
 setopt EXTENDED_HISTORY
 setopt INC_APPEND_HISTORY
-#setopt SHARE_HISTORY
+setopt SHARE_HISTORY
 
 alias loadhistory="fc -RI"
+
+# History search with arrow keys (type prefix, then up/down to search)
+autoload -U up-line-or-beginning-search down-line-or-beginning-search
+zle -N up-line-or-beginning-search
+zle -N down-line-or-beginning-search
+bindkey "^[[A" up-line-or-beginning-search
+bindkey "^[[B" down-line-or-beginning-search
+
+# Make / - . act as word delimiters (for Ctrl+W, Alt+B, Alt+F, etc.)
+WORDCHARS=${WORDCHARS/\//}
+WORDCHARS=${WORDCHARS/\-/}
+WORDCHARS=${WORDCHARS/\./}
+
 
 ##############################################################################
 # basic env
@@ -128,12 +149,6 @@ alias loadhistory="fc -RI"
 export PAGER=less
 export EDITOR="vim"
 
-#if [[ $USER == 'root' ]] then
-#  PS1="%{${fg[red]}%}%n@%m:%{${fg[cyan]}%}%~%{${fg[default]}%}#"
-#else
-#  PS1="%{${fg[green]}%}%n@%m:%{${fg[cyan]}%}%~%{${fg[default]}%}>"
-#fi
-
 case $TERM in
   xterm*|rxvt|Eterm)
     precmd () {print -Pn "\e]0;%n@%M: %~\a"}
@@ -142,6 +157,9 @@ esac
 
 # Disables warnings about "Couldn't register with accessibility bus"
 export NO_AT_BRIDGE=1
+
+# Truecolor support - apps check this env var for 24-bit color capability
+export COLORTERM='truecolor'
 
 ##############################################################################
 # command aliases
@@ -167,9 +185,32 @@ alias ri='ri --format ansi'
 alias vim='vim -X -o -u $HOME/.vimrc "$@"'
 alias gvim='gvim -o -u $HOME/.vimrc -geom 80x24 "$@"'
 
-alias e=gvim
-
 alias tmux='tmux -2'
+
+
+# ==============================================================================
+# File Listing
+# ==============================================================================
+
+# Use eza if available, otherwise fall back to ls
+if command -v eza &>/dev/null; then
+    alias ls="eza"
+    alias l="eza -l --icons"
+    alias la="eza -la --icons"
+    alias lt="eza -T --icons"  # tree view
+else
+    alias ls="ls -G"
+    alias l="ls -lhF"
+    alias la="ls -lAhF"
+fi
+
+# ==============================================================================
+# zoxide (smart cd)
+# ==============================================================================
+
+if command -v zoxide &>/dev/null; then
+    eval "$(zoxide init zsh)"
+fi
 
 ##############################################################################
 # command configuration
@@ -178,7 +219,7 @@ if [ -e $HOME/bin/lesspipe.sh ]; then
     export LESSOPEN="|$HOME/bin/lesspipe.sh %s" # preprocess compressed files
 fi
 
-LESS='-M-Q'
+LESS='-R'
 LESSEDIT="%E ?lt+%lt. %f"
 LESSCHARDEF=8bcccbcc13b.4b95.33b. # show colours in ls -l | less
 export LESS LESSEDIT LESSCHARDEF

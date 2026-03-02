@@ -296,6 +296,27 @@
         <command>pamixer -i 5</command>
       </action>
     </keybind>
+    <keybind key="XF86AudioMute">
+      <action name="Execute">
+        <command>pamixer -t</command>
+      </action>
+    </keybind>
+
+    <keybind key="XF86AudioNext">
+      <action name="Execute">
+        <command>playerctl next</command>
+      </action>
+    </keybind>
+    <keybind key="XF86AudioPrev">
+      <action name="Execute">
+        <command>playerctl prev</command>
+      </action>
+    </keybind>
+    <keybind key="XF86AudioPlay">
+      <action name="Execute">
+        <command>playerctl play-pause</command>
+      </action>
+    </keybind>
   </keyboard>
   <mouse>
     <dragThreshold>8</dragThreshold>
