@@ -194,10 +194,10 @@ alias tmux='tmux -2'
 
 # Use eza if available, otherwise fall back to ls
 if command -v eza &>/dev/null; then
-    alias ls="eza"
-    alias l="eza -l --icons"
-    alias la="eza -la --icons"
-    alias lt="eza -T --icons"  # tree view
+    alias ls="eza --no-quotes"
+    alias l="eza -l --icons --no-quotes"
+    alias la="eza -la --icons --no-quotes"
+    alias lt="eza -T --icons --no-quotes"  # tree view
 else
     alias ls="ls -G"
     alias l="ls -lhF"
