@@ -9,7 +9,7 @@
 # ==============================================================================
 
 [core]
-	editor = hx
+	editor = vim
 	excludesfile = ~/.gitignore_global
 	pager = delta
 
