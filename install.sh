@@ -78,4 +78,4 @@ link_file_or_dir "$INSTALL_TO"/gitconfig ~/.gitconfig
 link_file_or_dir "$INSTALL_TO"/gitignore_global ~/.gitignore_global
 
 
-sudo apt install eza zoxide git-delta tmux watch xclip gh btop
+sudo apt install eza zoxide git-delta tmux watch xclip gh btop lazygit
