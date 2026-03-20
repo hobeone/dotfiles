@@ -140,12 +140,29 @@ link_item() {
 # 4. Initialize Submodules
 init_submodules() {
     log_info "Initializing submodules..."
+
+    # Check if all submodules are already populated
+    if [[ -f "$HOME_DIR/ohmyzsh/oh-my-zsh.sh" ]] && \
+       [[ -f "$HOME_DIR/zsh_custom/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh" ]] && \
+       [[ -f "$HOME_DIR/zsh_custom/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh" ]] && \
+       [[ -f "$HOME_DIR/zsh_custom/themes/powerlevel10k/powerlevel10k.zsh-theme" ]] && \
+       [[ -d "$DOTFILES_DIR/vendor/eza-themes/themes" ]]; then
+        log_info "Submodules already initialized."
+        return 0
+    fi
+
+    if ! command -v git >/dev/null 2>&1; then
+        log_warn "git is not installed. Skipping submodule initialization."
+        return 0
+    fi
+
     if $DRY_RUN; then
         log_info "[Dry-Run] Would run: git submodule update --init --recursive"
     else
         git submodule update --init --recursive
     fi
 }
+
 
 # 5. Ensure Local Override Files Exist
 ensure_local_files() {
