@@ -145,6 +145,29 @@ init_submodules() {
     fi
 }
 
+# 5. Ensure Local Override Files Exist
+ensure_local_files() {
+    log_info "Ensuring local override files exist..."
+    
+    local zsh_local="$HOME/.zshrc.local"
+    local vim_user="$HOME/.vim/user.vim"
+
+    if $DRY_RUN; then
+        [[ ! -f "$zsh_local" ]] && log_info "[Dry-Run] Would create empty $zsh_local"
+        [[ ! -f "$vim_user" ]] && log_info "[Dry-Run] Would create empty $vim_user"
+    else
+        if [[ ! -f "$zsh_local" ]]; then
+            touch "$zsh_local"
+            log_info "Created empty $zsh_local"
+        fi
+        
+        if [[ ! -f "$vim_user" ]]; then
+            touch "$vim_user"
+            log_info "Created empty $vim_user"
+        fi
+    fi
+}
+
 main() {
     # 1. Initialize Submodules
     init_submodules
@@ -182,6 +205,9 @@ main() {
             link_item "$item" "$HOME/.ssh/$basename"
         done
     fi
+
+    # 4. Ensure Local Files Exist
+    ensure_local_files
 
     log_info "Dotfiles installation complete!"
 }
