@@ -9,7 +9,7 @@ dynamic_title = true
 history = 10000
 
 [font]
-normal = {family = "Monospace", style = "Regular"}
+normal = {family = "JetBrainsMonoNLNFM", style = "Regular"}
 size = 12
 
 [colors.primary]
