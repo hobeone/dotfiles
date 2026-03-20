@@ -1,10 +1,10 @@
 *.swp
 *.un~
-vim/.netrwhist
-vim/user.vim
-vim/undodir/*
-vim/bundle/*
+home/vim/.netrwhist
+home/vim/user.vim
+home/vim/undodir/*
+home/vim/bundle/*
 !vim/undodir/.gitkeep
-config/openbox/autostart.local.sh
-config/openbox/noscreenlock
+home/config/openbox/autostart.local.sh
+home/config/openbox/noscreenlock
 fonts/.uuid
