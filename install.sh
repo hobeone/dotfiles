@@ -238,8 +238,8 @@ main() {
     for item in "$HOME_DIR"/*; do
         basename="$(basename "$item")"
 
-        # Skip config and ssh directories for safe merging
-        if [[ "$basename" == "config" ]] || [[ "$basename" == "ssh" ]]; then
+        # Skip config, ssh, and bin directories for safe merging
+        if [[ "$basename" == "config" ]] || [[ "$basename" == "ssh" ]] || [[ "$basename" == "bin" ]]; then
             continue
         fi
 
@@ -259,6 +259,14 @@ main() {
         for item in "$HOME_DIR/ssh"/*; do
             basename="$(basename "$item")"
             link_item "$item" "$HOME/.ssh/$basename"
+        done
+    fi
+
+    # Safe merge ~/bin
+    if [[ -d "$HOME_DIR/bin" ]]; then
+        for item in "$HOME_DIR/bin"/*; do
+            basename="$(basename "$item")"
+            link_item "$item" "$HOME/bin/$basename"
         done
     fi
 
