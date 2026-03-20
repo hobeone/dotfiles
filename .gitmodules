@@ -13,3 +13,6 @@
 [submodule "vendor/eza-themes"]
 	path = vendor/eza-themes
 	url = https://github.com/eza-community/eza-themes.git
+[submodule "vendor/tokyonight-themes"]
+	path = vendor/tokyonight-themes
+	url = https://github.com/folke/tokyonight.nvim
