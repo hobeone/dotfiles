@@ -157,7 +157,8 @@ autocmd BufWinLeave *.go match Tabs "\t"
 
 " set fonts
 if has("gui_running")
-  set guifont=Terminus\ (TTF)\ Medium\ 12
+  "set guifont=Terminus\ (TTF)\ Medium\ 12
+  set guifont=JetBrains\ Mono\ Nerd\ Font\ Mono\ 12
 endif
 
 "Vundle bootstrap
