@@ -32,6 +32,8 @@ log_error() {
     echo -e "\033[0;31m[ERROR]\033[0m $*" >&2
 }
 
+log_info "Installing dotfiles from $DOTFILES_DIR to $HOME"
+
 # 1. Detect OS and Package Manager
 detect_os() {
     if [[ "$OSTYPE" == "darwin"* ]]; then
@@ -62,9 +64,9 @@ install_packages() {
     log_info "OS: $OS, Package Manager: $PKG_MGR"
 
     # Baseline packages
-    local apt_packages=(eza zoxide git-delta tmux watch xclip gh btop lazygit)
-    local pacman_packages=(eza zoxide delta tmux watch xclip github-cli btop lazygit) # Arch package names might differ slightly
-    local dnf_packages=(eza zoxide git-delta tmux watch xclip gh btop lazygit)
+    local apt_packages=(eza zoxide git-delta tmux watch xclip gh btop lazygit unzip curl)
+    local pacman_packages=(eza zoxide delta tmux watch xclip github-cli btop lazygit unzip curl) # Arch package names might differ slightly
+    local dnf_packages=(eza zoxide git-delta tmux watch xclip gh btop lazygit unzip curl)
     local brew_packages=(eza zoxide git-delta tmux watch xclip gh btop lazygit)
 
     if $DRY_RUN; then
@@ -153,8 +155,12 @@ ensure_local_files() {
     local vim_user="$HOME/.vim/user.vim"
 
     if $DRY_RUN; then
-        [[ ! -f "$zsh_local" ]] && log_info "[Dry-Run] Would create empty $zsh_local"
-        [[ ! -f "$vim_user" ]] && log_info "[Dry-Run] Would create empty $vim_user"
+        if [[ ! -f "$zsh_local" ]]; then
+            log_info "[Dry-Run] Would create empty $zsh_local"
+        fi
+        if [[ ! -f "$vim_user" ]]; then
+            log_info "[Dry-Run] Would create empty $vim_user"
+        fi
     else
         if [[ ! -f "$zsh_local" ]]; then
             touch "$zsh_local"
@@ -168,12 +174,53 @@ ensure_local_files() {
     fi
 }
 
+# 6. Install JetBrains Mono Font
+install_fonts() {
+    log_info "Checking for JetBrains Mono Nerd Font..."
+
+    if [[ "$PKG_MGR" == "brew" ]]; then
+        if $DRY_RUN; then
+            log_info "[Dry-Run] Would install JetBrains Mono Nerd Font via Homebrew Cask"
+        else
+            if ! brew list --cask font-jetbrains-mono-nerd-font &>/dev/null; then
+                log_info "Installing JetBrains Mono Nerd Font via Homebrew..."
+                brew install --cask font-jetbrains-mono-nerd-font
+            else
+                log_info "JetBrains Mono Nerd Font already installed via Homebrew."
+            fi
+        fi
+    else
+        # Linux (Debian, Arch, Fedora)
+        if ! command -v fc-list &>/dev/null || ! fc-list | grep -qi "JetBrainsMono Nerd Font"; then
+            log_info "Installing JetBrains Mono Nerd Font..."
+            if $DRY_RUN; then
+                log_info "[Dry-Run] Would download and install JetBrains Mono Nerd Font to ~/.local/share/fonts"
+            else
+                mkdir -p "$HOME/.local/share/fonts"
+                curl -fLo /tmp/JetBrainsMono.zip "https://github.com/ryanoasis/nerd-fonts/releases/latest/download/JetBrainsMono.zip"
+                unzip -o /tmp/JetBrainsMono.zip -d "$HOME/.local/share/fonts/"
+                rm /tmp/JetBrainsMono.zip
+                if command -v fc-cache &>/dev/null; then
+                    fc-cache -fv
+                else
+                    log_warn "fc-cache not found. Please install fontconfig or reboot to refresh font cache."
+                fi
+            fi
+        else
+            log_info "JetBrains Mono Nerd Font already installed."
+        fi
+    fi
+}
+
 main() {
     # 1. Initialize Submodules
     init_submodules
 
     # 2. Install Packages
     install_packages
+
+    # 2.5 Install Fonts
+    install_fonts
 
     # 3. Create Links
     log_info "Creating symlinks..."
