@@ -203,7 +203,9 @@ filetype plugin indent on    " required
 
 let g:ycm_gopls_binary_path = expand('$GOPATH/bin/gopls')
 
-syntax on
+syntax on                     " Syntax highlighting
+set termguicolors             " Enable 24-bit RGB colors
+
 filetype on
 filetype plugin indent on
 
