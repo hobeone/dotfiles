@@ -10,3 +10,6 @@
 [submodule "zsh_custom/themes/powerlevel10k"]
 	path = home/zsh_custom/themes/powerlevel10k
 	url = https://github.com/romkatv/powerlevel10k.git
+[submodule "vendor/eza-themes"]
+	path = vendor/eza-themes
+	url = https://github.com/eza-community/eza-themes.git

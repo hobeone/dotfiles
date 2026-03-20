@@ -221,6 +221,32 @@ install_fonts() {
     fi
 }
 
+# To add the eza-themes submodule manually:
+# git submodule add https://github.com/eza-community/eza-themes.git vendor/eza-themes
+install_eza_theme() {
+    log_info "Installing eza Tokyonight theme..."
+    
+    local eza_config_dir="$HOME/.config/eza"
+    local dotfiles_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    local vendor_theme="$dotfiles_dir/vendor/eza-themes/themes/tokyonight.yml"
+
+    if [[ ! -f "$vendor_theme" ]]; then
+        log_warn "Theme file not found: $vendor_theme (submodule not initialized?)"
+        return 0
+    fi
+
+    mkdir -p "$eza_config_dir"
+
+    local dest="$eza_config_dir/theme.yml"
+
+    if $DRY_RUN; then
+        log_info "[Dry-Run] Would symlink eza theme: $dest -> $vendor_theme"
+    else
+        ln -sf "$vendor_theme" "$dest"
+        log_info "Symlinked eza theme: $dest -> $vendor_theme"
+    fi
+}
+
 main() {
     # 1. Initialize Submodules
     init_submodules
@@ -230,6 +256,9 @@ main() {
 
     # 2.5 Install Fonts
     install_fonts
+
+    # 2.6 Install Eza Theme
+    install_eza_theme
 
     # 3. Create Links
     log_info "Creating symlinks..."
