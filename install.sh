@@ -191,7 +191,16 @@ install_fonts() {
         fi
     else
         # Linux (Debian, Arch, Fedora)
-        if ! command -v fc-list &>/dev/null || ! fc-list | grep -qi "JetBrainsMono Nerd Font"; then
+        # Check both fc-list (if available) and the direct file existence
+        local font_installed=false
+        if command -v fc-list &>/dev/null && fc-list | grep -qi "JetBrains.*Nerd"; then
+            font_installed=true
+        elif [[ -f "$HOME/.local/share/fonts/JetBrainsMonoNerdFont-Regular.ttf" ]] || \
+             [[ -f "$HOME/.local/share/fonts/JetBrains Mono Regular Nerd Font Complete.ttf" ]]; then # Match old names too
+            font_installed=true
+        fi
+
+        if ! $font_installed; then
             log_info "Installing JetBrains Mono Nerd Font..."
             if $DRY_RUN; then
                 log_info "[Dry-Run] Would download and install JetBrains Mono Nerd Font to ~/.local/share/fonts"
