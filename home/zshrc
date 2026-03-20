@@ -6,7 +6,7 @@ if [[ -r "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh" ]]
 fi
 
 # Path to your oh-my-zsh configuration.
-ZSH=$HOME/dotfiles/ohmyzsh
+ZSH=$HOME/dotfiles/home/ohmyzsh
 
 # Set name of the theme to load.
 # Look in ~/.oh-my-zsh/themes/
@@ -14,7 +14,7 @@ ZSH=$HOME/dotfiles/ohmyzsh
 # time that oh-my-zsh is loaded.
 ZSH_THEME="powerlevel10k/powerlevel10k"
 
-ZSH_CUSTOM=$HOME/dotfiles/zsh_custom
+ZSH_CUSTOM=$HOME/dotfiles/home/zsh_custom
 
 # Example aliases
 # alias zshconfig="mate ~/.zshrc"
