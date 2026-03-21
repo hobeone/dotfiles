@@ -146,7 +146,6 @@ init_submodules() {
        [[ -f "$HOME_DIR/zsh_custom/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh" ]] && \
        [[ -f "$HOME_DIR/zsh_custom/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh" ]] && \
        [[ -f "$HOME_DIR/zsh_custom/themes/powerlevel10k/powerlevel10k.zsh-theme" ]] && \
-       [[ -d "$DOTFILES_DIR/vendor/eza-themes/themes" ]] && \
        [[ -f "$DOTFILES_DIR/vendor/tokyonight-themes/extras/btop/tokyonight_night.theme" ]]; then
         log_info "Submodules already initialized."
         return 0
@@ -239,32 +238,6 @@ install_fonts() {
     fi
 }
 
-# To add the eza-themes submodule manually:
-# git submodule add https://github.com/eza-community/eza-themes.git vendor/eza-themes
-install_eza_theme() {
-    log_info "Installing eza Tokyonight theme..."
-    
-    local eza_config_dir="$HOME/.config/eza"
-    local dotfiles_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    local vendor_theme="$dotfiles_dir/vendor/eza-themes/themes/tokyonight.yml"
-
-    if [[ ! -f "$vendor_theme" ]]; then
-        log_warn "Theme file not found: $vendor_theme (submodule not initialized?)"
-        return 0
-    fi
-
-    mkdir -p "$eza_config_dir"
-
-    local dest="$eza_config_dir/theme.yml"
-
-    if $DRY_RUN; then
-        log_info "[Dry-Run] Would symlink eza theme: $dest -> $vendor_theme"
-    else
-        ln -sf "$vendor_theme" "$dest"
-        log_info "Symlinked eza theme: $dest -> $vendor_theme"
-    fi
-}
-
 # To add the tokyonight.nvim submodule manually:
 # git submodule add https://github.com/folke/tokyonight.nvim vendor/tokyonight-themes
 install_tokyonight_themes() {
@@ -277,7 +250,17 @@ install_tokyonight_themes() {
         return 0
     fi
 
-    # 1. btop
+    # 1. eza
+    local eza_dest="$HOME/.config/eza/theme.yml"
+    if $DRY_RUN; then
+        log_info "[Dry-Run] Would symlink eza theme: $eza_dest"
+    else
+        mkdir -p "$(dirname "$eza_dest")"
+        ln -sf "$vendor_dir/extras/eza/tokyonight_night.yml" "$eza_dest"
+        log_info "Symlinked eza theme: $eza_dest"
+    fi
+
+    # 2. btop
     local btop_dest="$HOME/.config/btop/themes/tokyonight_night.theme"
     local btop_conf="$HOME/.config/btop/btop.conf"
     if $DRY_RUN; then
@@ -296,7 +279,7 @@ install_tokyonight_themes() {
         fi
     fi
 
-    # 2. lazygit
+    # 3. lazygit
     local lazygit_dest="$HOME/.config/lazygit/config.yml"
     if [[ ! -f "$lazygit_dest" ]]; then
         if $DRY_RUN; then
@@ -310,7 +293,7 @@ install_tokyonight_themes() {
         log_warn "lazygit config already exists. Skipping theme symlink."
     fi
     
-    # 3. tmux
+    # 4. tmux
     local tmux_dest="$HOME/.tmux.conf.tokyonight"
     if $DRY_RUN; then
         log_info "[Dry-Run] Would symlink tmux theme: $tmux_dest"
@@ -319,13 +302,23 @@ install_tokyonight_themes() {
         log_info "Symlinked tmux theme: $tmux_dest"
     fi
     
-    # 4. delta
+    # 5. delta
     local delta_dest="$HOME/.gitconfig.tokyonight"
     if $DRY_RUN; then
         log_info "[Dry-Run] Would symlink delta theme: $delta_dest"
     else
         ln -sf "$vendor_dir/extras/delta/tokyonight_night.gitconfig" "$delta_dest"
         log_info "Symlinked delta theme: $delta_dest"
+    fi
+
+    # 6. alacritty
+    local alacritty_dest="$HOME/.config/alacritty/theme.toml"
+    if $DRY_RUN; then
+        log_info "[Dry-Run] Would symlink alacritty theme: $alacritty_dest"
+    else
+        mkdir -p "$(dirname "$alacritty_dest")"
+        ln -sf "$vendor_dir/extras/alacritty/tokyonight_night.toml" "$alacritty_dest"
+        log_info "Symlinked alacritty theme: $alacritty_dest"
     fi
 }
 
@@ -339,10 +332,7 @@ main() {
     # 2.5 Install Fonts
     install_fonts
 
-    # 2.6 Install Eza Theme
-    install_eza_theme
-
-    # 2.7 Install Tokyo Night Themes
+    # 2.6 Install Tokyo Night Themes
     install_tokyonight_themes
 
     # 3. Create Links
