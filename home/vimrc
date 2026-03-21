@@ -199,6 +199,7 @@ Plugin 'rust-lang/rust.vim'
 Bundle 'isobit/vim-caddyfile'
 Plugin 'scrooloose/syntastic'
 Plugin 'hashivim/vim-terraform'
+Plugin 'ghifarit53/tokyonight-vim'
 call vundle#end()            " required
 filetype plugin indent on    " required
 
@@ -210,13 +211,17 @@ set termguicolors             " Enable 24-bit RGB colors
 filetype on
 filetype plugin indent on
 
-let g:solarized_termcolors = 256
-
 " Make sure colored syntax mode is on, and make it Just Work with newer 256
 " color terminals like iTerm2.
 set background=dark
 let g:rehash256 = 1
-colorscheme molokai
+
+"set rtp+=~/dotfiles/vendor/tokyonight-themes/extras/vim
+"colorscheme tokyonight-moon
+
+let g:tokyonight_style = 'night' " available: night, storm
+let g:tokyonight_enable_italic = 1
+colorscheme tokyonight
 
 set modeline modelines=3
 
