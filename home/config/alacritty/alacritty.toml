@@ -1,4 +1,3 @@
-import = ["theme.toml"]
 
 [env]
 TERM = "xterm-256color"
@@ -35,5 +34,8 @@ regex = "(ipfs:|ipns:|magnet:|mailto:|gemini://|gopher://|https://|http://|news:
 
 [selection]
 semantic_escape_chars = ",│`|\"' ()[]{}<>\t"
+
+[general]
+import = ["theme.toml"]
 
 
