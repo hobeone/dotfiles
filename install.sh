@@ -310,6 +310,16 @@ install_tokyonight_themes() {
         ln -sf "$vendor_dir/extras/delta/tokyonight_night.gitconfig" "$delta_dest"
         log_info "Symlinked delta theme: $delta_dest"
     fi
+
+    # 6. alacritty
+    local alacritty_dest="$HOME/.config/alacritty/theme.toml"
+    if $DRY_RUN; then
+        log_info "[Dry-Run] Would symlink alacritty theme: $alacritty_dest"
+    else
+        mkdir -p "$(dirname "$alacritty_dest")"
+        ln -sf "$vendor_dir/extras/alacritty/tokyonight_night.toml" "$alacritty_dest"
+        log_info "Symlinked alacritty theme: $alacritty_dest"
+    fi
 }
 
 main() {
