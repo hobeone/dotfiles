@@ -146,7 +146,6 @@ init_submodules() {
        [[ -f "$HOME_DIR/zsh_custom/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh" ]] && \
        [[ -f "$HOME_DIR/zsh_custom/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh" ]] && \
        [[ -f "$HOME_DIR/zsh_custom/themes/powerlevel10k/powerlevel10k.zsh-theme" ]] && \
-       [[ -d "$DOTFILES_DIR/vendor/eza-themes/themes" ]] && \
        [[ -f "$DOTFILES_DIR/vendor/tokyonight-themes/extras/btop/tokyonight_night.theme" ]]; then
         log_info "Submodules already initialized."
         return 0
@@ -239,14 +238,12 @@ install_fonts() {
     fi
 }
 
-# To add the eza-themes submodule manually:
-# git submodule add https://github.com/eza-community/eza-themes.git vendor/eza-themes
 install_eza_theme() {
     log_info "Installing eza Tokyonight theme..."
     
     local eza_config_dir="$HOME/.config/eza"
     local dotfiles_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    local vendor_theme="$dotfiles_dir/vendor/eza-themes/themes/tokyonight.yml"
+    local vendor_theme="$dotfiles_dir/vendor/tokyonight-themes/extras/eza/tokyonight_night.yml"
 
     if [[ ! -f "$vendor_theme" ]]; then
         log_warn "Theme file not found: $vendor_theme (submodule not initialized?)"
