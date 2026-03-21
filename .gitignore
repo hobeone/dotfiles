@@ -8,3 +8,4 @@ home/vim/bundle/*
 home/config/openbox/autostart.local.sh
 home/config/openbox/noscreenlock
 fonts/.uuid
+home/config/alacritty/theme.toml
