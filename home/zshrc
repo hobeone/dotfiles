@@ -187,6 +187,10 @@ alias gvim='gvim -o -u $HOME/.vimrc -geom 80x24 "$@"'
 
 alias tmux='tmux -2'
 
+# Check if 'bat' does NOT exist, but 'batcat' DOES exist.  Debian installs the command as batcat
+if ! command -v bat &> /dev/null && command -v batcat &> /dev/null; then
+    alias bat='batcat'
+fi
 
 # ==============================================================================
 # File Listing
@@ -280,8 +284,8 @@ else
   function refresh { }
 fi
 
-function preexec {                                                                                    
-    refresh                                                                                           
+function preexec {
+    refresh
 }
 
 
