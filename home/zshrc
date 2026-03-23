@@ -146,7 +146,7 @@ WORDCHARS=${WORDCHARS/\./}
 #unset MAIL
 #export MAILDIR="~/Maildir/"
 
-export PAGER=less
+export PAGER="less -r"
 export EDITOR="vim"
 
 case $TERM in
