@@ -14,58 +14,69 @@ set modelines=3               " Search first/last 3 lines for modelines
 set lazyredraw                " Only redraw when necessary
 set autowrite                 " Save modified files on external commands
 
-" Vundle bootstrap: Automatically clone Vundle if missing
-let vundle_path = expand('$HOME/.vim/bundle/Vundle.vim')
-if !filereadable(vundle_path . '/.git/config') && confirm("Clone Vundle?", "Y\nn") == 1
-    exec '!git clone https://github.com/VundleVim/Vundle.vim ' . shellescape(vundle_path)
+" vim-plug bootstrap: Automatically download vim-plug if missing
+let data_dir = has('nvim') ? stdpath('data') . '/site' : '~/.vim'
+if empty(glob(data_dir . '/autoload/plug.vim'))
+  silent execute '!curl -fLo '.data_dir.'/autoload/plug.vim --create-dirs https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim'
+  autocmd VimEnter * PlugInstall --sync | source ~/.vimrc
 endif
 
-" -----------------------------------------------------------------------------
-" 2. Plugin Management (Vundle)
-" -----------------------------------------------------------------------------
-filetype off                  " Required for Vundle initialization
-set rtp+=~/.vim/bundle/Vundle.vim
+let g:ale_completion_enabled = 1
 
-call vundle#begin()
-" Let Vundle manage Vundle
-Plugin 'VundleVim/Vundle.vim'
+" -----------------------------------------------------------------------------
+" 2. Plugin Management (vim-plug)
+" -----------------------------------------------------------------------------
+call plug#begin('~/.vim/plugged')
 
 " UI & Aesthetics
-Plugin 'tomasr/molokai'
-Plugin 'peaksea'
-Plugin 'altercation/vim-colors-solarized'
-Plugin 'ghifarit53/tokyonight-vim'
-Plugin 'itchyny/lightline.vim'
-Plugin 'vim-airline/vim-airline'
+Plug 'ghifarit53/tokyonight-vim'
+Plug 'itchyny/lightline.vim'
+Plug 'vim-airline/vim-airline'
 
 " Navigation & File Management
-Plugin 'scrooloose/nerdtree'
-Plugin 'majutsushi/tagbar'
-Plugin 'christoomey/vim-tmux-navigator'
+Plug 'scrooloose/nerdtree'
+Plug 'majutsushi/tagbar'
+Plug 'christoomey/vim-tmux-navigator'
 
 " Editing Support
-Plugin 'raimondi/delimitmate'
-Plugin 'alpaca-tc/vim-endwise'
-Plugin 'godlygeek/tabular'
-Plugin 'sirver/ultisnips'
-Plugin 'honza/vim-snippets'
-Plugin 'w0rp/ale'
+Plug 'raimondi/delimitmate'
+Plug 'alpaca-tc/vim-endwise'
+Plug 'godlygeek/tabular'
+Plug 'sirver/ultisnips'
+Plug 'honza/vim-snippets'
+Plug 'w0rp/ale'
 
 " Language Support
-Plugin 'fatih/vim-go'
-Plugin 'rust-lang/rust.vim'
-Plugin 'vim-ruby/vim-ruby'
-Plugin 'tpope/vim-rails'
-Plugin 'pangloss/vim-javascript'
-Plugin 'mustache/vim-mustache-handlebars'
-Plugin 'chr4/nginx.vim'
-Plugin 'hashivim/vim-terraform'
-Plugin 'depuracao/vim-rdoc'
-Bundle 'isobit/vim-caddyfile'
-Plugin 'scrooloose/syntastic'
+Plug 'fatih/vim-go', { 'for': 'go' }
+Plug 'rust-lang/rust.vim'
+Plug 'vim-ruby/vim-ruby'
+Plug 'tpope/vim-rails'
+Plug 'pangloss/vim-javascript'
+Plug 'mustache/vim-mustache-handlebars'
+Plug 'chr4/nginx.vim'
+Plug 'hashivim/vim-terraform'
+Plug 'depuracao/vim-rdoc'
+Plug 'isobit/vim-caddyfile'
+Plug 'scrooloose/syntastic'
 
-call vundle#end()
+" Additional plugins found in filesystem
+"Plug 'ycm-core/YouCompleteMe'
+Plug 'dense-analysis/ale'
+Plug 'tpope/vim-sensible'
+Plug 'ycm-core/YouCompleteMe'
+
+call plug#end()
 filetype plugin indent on    " Required: Enable filetype detection, plugins, and indent
+
+
+let g:ale_linters = {
+\   'go': ['gopls', 'golangci-lint']
+\}
+let g:ale_fixers = {
+\   'go': ['goimports']
+\}
+let g:ale_go_golangci_lint_package = 1
+let g:ale_fix_on_save = 1
 
 " -----------------------------------------------------------------------------
 " 3. Interface & Appearance
@@ -196,7 +207,7 @@ let g:lightline = {
 \ }
 
 " UltiSnips & Snippets
-let g:UltiSnipsSnippetDirectories=["UltiSnips", "vim-snippets/UltiSnips", "snippets/angular/UltiSnips", "bundle/vim-go/gosnippets/UltiSnips"]
+let g:UltiSnipsSnippetDirectories=["UltiSnips", "vim-snippets/UltiSnips", "snippets/angular/UltiSnips", "plugged/vim-go/gosnippets/UltiSnips"]
 let g:UltiSnipsExpandTrigger="<c-j>"
 let g:UltiSnipsJumpForwardTrigger="<c-j>"
 let g:UltiSnipsJumpBackwardTrigger="<c-k>"
