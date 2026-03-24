@@ -8,10 +8,10 @@ export XSECURELOCK_BLANK_DPMS_STATE=off
 export XSECURELOCK_BLANK_TIMEOUT=30
 
 xset s 300 15  # Invoke after 300 seconds of idle, and dim for 15 seconds.
-xss-lock -n /usr/libexec/xsecurelock/dimmer -l -- /usr/share/goobuntu-desktop-files/xsecurelock.sh &
+xss-lock -n /usr/libexec/xsecurelock/dimmer -l -- ~/bin/xsecurelock.sh &
 
 export LOCKED_BY_SESSION_IDLE=true
 xautolock -time 5 -detectsleep \
   -notify 10 \
   -notifier '/usr/libexec/xsecurelock/until_nonidle /usr/libexec/xsecurelock/dimmer' \
-  -locker /usr/share/goobuntu-desktop-files/xsecurelock.sh &
+  -locker ~/bin/xsecurelock.sh &
