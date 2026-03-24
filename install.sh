@@ -64,7 +64,7 @@ install_packages() {
     log_info "OS: $OS, Package Manager: $PKG_MGR"
 
     # Baseline packages
-    local apt_packages=(eza zoxide git-delta tmux watch xclip gh btop lazygit unzip curl ripgrep)
+    local apt_packages=(eza zoxide git-delta tmux watch xclip gh btop lazygit unzip curl ripgrep bat)
     local pacman_packages=(eza zoxide delta tmux watch xclip github-cli btop lazygit unzip curl) # Arch package names might differ slightly
     local dnf_packages=(eza zoxide git-delta tmux watch xclip gh btop lazygit unzip curl)
     local brew_packages=(eza zoxide git-delta tmux watch xclip gh btop lazygit)
@@ -281,12 +281,13 @@ install_tokyonight_themes() {
 
     # 3. lazygit
     local lazygit_dest="$HOME/.config/lazygit/config.yml"
-    if [[ ! -f "$lazygit_dest" ]]; then
+    local lazygit_theme_dest="$HOME/.config/lazygit/tokyonight_night.yml"
+    if [[ ! -f "$lazygit_theme_dest" ]]; then
         if $DRY_RUN; then
             log_info "[Dry-Run] Would symlink lazygit theme: $lazygit_dest"
         else
             mkdir -p "$(dirname "$lazygit_dest")"
-            ln -sf "$vendor_dir/extras/lazygit/tokyonight_night.yml" "$lazygit_dest"
+            ln -sf "$vendor_dir/extras/lazygit/tokyonight_night.yml" "$lazygit_theme_dest"
             log_info "Symlinked lazygit theme: $lazygit_dest"
         fi
     else
