@@ -4,6 +4,7 @@ home/vim/.netrwhist
 home/vim/user.vim
 home/vim/undodir/*
 home/vim/bundle/*
+home/vim/plugged/*
 !vim/undodir/.gitkeep
 home/config/openbox/autostart.local.sh
 home/config/openbox/noscreenlock

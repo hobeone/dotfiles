@@ -1,5 +1,5 @@
 #!/bin/bash -ex
 
-pushd ./vim/bundle/youcompleteme
-python install.py --go-completer
+pushd home/vim/plugged/YouCompleteMe/
+python3 install.py --go-completer
 popd
