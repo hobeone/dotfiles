@@ -1,414 +1,180 @@
-set   all&
-" reasonable defaults for indentation
-set autoindent nocindent nosmartindent
+" =============================================================================
+" VIM CONFIGURATION
+" =============================================================================
 
-set textwidth=79
-set tabstop=2
-set softtabstop=2
+" -----------------------------------------------------------------------------
+" 1. System & Initialization
+" -----------------------------------------------------------------------------
+set nocompatible              " Use Vim defaults instead of Vi
+set encoding=utf-8            " Standard encoding
+set hidden                    " Allow files to be open in invisible buffers
+set backspace=indent,eol,start " Make backspace behave more intuitively
+set modeline                  " Support modelines
+set modelines=3               " Search first/last 3 lines for modelines
+set lazyredraw                " Only redraw when necessary
+set autowrite                 " Save modified files on external commands
 
-set encoding=utf-8
-
-set expandtab
-
-"ignore case in searches
-set ignorecase
-
-"       autowrite: Automatically save modifications to files
-"       when you use critical (rxternal) commands.
-set   autowrite
-"
-"       backup:  backups are for wimps  ;-)
-"  set   backup
-set nobackup
-" write a backup file before overwriting a file
-set nowb
-" keep a backup after overwriting a file
-set nobk
-"
-"       compatible:  Let Vim behave like Vi?  Hell, no!
-set   nocompatible
-"
-"       comments default: sr:/*,mb:*,el:*/,://,b:#,:%,:XCOMM,n:>,fb:-
-"set   comments=b:#,:%,fb:-,n:>,n:)
-
-"
-"       errorbells: damn this beep!  ;-)
-set   noerrorbells
-
-
-"       helpheight: zero disables this.
-set   helpheight=0
-
-set incsearch           " search as characters are entered"
-
-"       hlsearch :  highlight search - show the current search pattern
-"       This is a nice feature sometimes - but it sure can get in the
-"       way sometimes when you edit.
-set   hlsearch
-
-"       laststatus:  show status line?  Yes, always!
-"       laststatus:  Even for only one buffer.
-set   laststatus=2
-"
-"       magic:  Use 'magic' patterns  (extended regular expressions)
-"       in search patterns?  Certainly!  (I just *love* "\s\+"!)
-"set   magic
-"
-set number " show line numbers
-"
-"
-"       report: show a report when N lines were changed.
-"               report=0 thus means "show all changes"!
-set   report=0
-"
-"       ruler:       show cursor position?  Yep!
-set   ruler
-
-"       shiftwidth:  Number of spaces to use for each
-"                    insertion of (auto)indent.
-set   shiftwidth=2
-"
-"       shortmess:   Kind of messages to show.   Abbreviate them all!
-"          New since vim-5.0v: flag 'I' to suppress "intro message".
-set   shortmess=tI
-"
-"       showcmd:     Show current uncompleted command?  Absolutely!
-set   showcmd
-
-set cursorline          " highlight current line
-
-set lazyredraw " redraw only when we need to.
-"
-"       showmatch:   Show the matching bracket for the last ')'?
-set   showmatch
-"
-"       showmode:    Show the current mode?  YEEEEEEEEESSSSSSSSSSS!
-set   showmode
-"
-"       startofline:  no:  do not jump to first character with page
-"       commands, ie keep the cursor in the current column.
-set nostartofline
-"
-set   splitbelow
-"
-"       title:
-set title
-
-"       visualbell:
-set   visualbell
-
-
-"set   highlight=8r,db,es,hs,mb,Mr,nu,rs,sr,tb,vr,ws
-
-
-" allows files to be open in invisible buffers
-set hidden
-
-" make backspace "more powerful"
-set backspace=indent,eol,start
-
-" keep undo files in one place
-set undodir=~/.vim/undodir
-
-" get mouse working
-"set mouse=a
-
-
-set sessionoptions-=options " Don't save runtimepath in Vim session (see tpope/vim-pathogen docs)
-
-" Always show statusbar
-set laststatus=2
-
-" Move between open buffers.
-nmap <C-n> :bnext<CR>
-nmap <C-p> :bprev<CR>
-
-"
-" ===================================================================
-" AutoCommands
-" ===================================================================
-"
-" More coding sytle colors
-
-autocmd ColorScheme * highlight ExtraWhitespace ctermbg=red guibg=red
-autocmd Syntax * syn match ExtraWhitespace /\s\+$/
-autocmd BufWinEnter * match ExtraWhitespace /\s\+$/
-
-autocmd ColorScheme * highlight Tabs ctermbg=red guibg=red
-autocmd Syntax * syn match Tabs "\t"
-autocmd BufWinEnter * match Tabs "\t"
-
-" Bright red background for text matches
-autocmd ColorScheme * highlight Search ctermbg=red ctermfg=white guifg=#FFFFFF guibg=#FF0000
-
-" Override italics in gui colorschemes
-autocmd ColorScheme * highlight Comment gui=NONE
-
-" Force a black background in the colorschme
-autocmd ColorScheme * highlight Normal guibg=black
-
-" autocmd ColorScheme * highlight Cursor ctermfg=white ctermbg=black guifg=black guibg=white
-
-"autocmd ColorScheme * highlight CursorLine cterm=NONE ctermbg=darkgrey ctermfg=white guibg=darkgrey guifg=white 
-
-" Go wants tabs so don't highlight or expand them,
-autocmd BufWinEnter *.go match Tabs "\t\+$"
-autocmd BufWinLeave *.go match Tabs "\t"
-
-" set fonts
-if has("gui_running")
-  "set guifont=Terminus\ (TTF)\ Medium\ 12
-  set guifont=JetBrains\ Mono\ Nerd\ Font\ Mono\ 12
+" Vundle bootstrap: Automatically clone Vundle if missing
+let vundle_path = expand('$HOME/.vim/bundle/Vundle.vim')
+if !filereadable(vundle_path . '/.git/config') && confirm("Clone Vundle?", "Y\nn") == 1
+    exec '!git clone https://github.com/VundleVim/Vundle.vim ' . shellescape(vundle_path)
 endif
 
-"Vundle bootstrap
-if !filereadable($HOME . '/.vim/bundle/Vundle.vim/.git/config') && confirm("Clone Vundle?","Y\nn") == 1
-    exec '!git clone https://github.com/gmarik/Vundle.vim ~/.vim/bundle/Vundle.vim/'
-endif
-
-
-filetype off "required vundle
-
+" -----------------------------------------------------------------------------
+" 2. Plugin Management (Vundle)
+" -----------------------------------------------------------------------------
+filetype off                  " Required for Vundle initialization
 set rtp+=~/.vim/bundle/Vundle.vim
+
 call vundle#begin()
+" Let Vundle manage Vundle
 Plugin 'VundleVim/Vundle.vim'
+
+" UI & Aesthetics
 Plugin 'tomasr/molokai'
-Plugin 'raimondi/delimitmate'
-Plugin 'mustache/vim-mustache-handlebars'
 Plugin 'peaksea'
+Plugin 'altercation/vim-colors-solarized'
+Plugin 'ghifarit53/tokyonight-vim'
+Plugin 'itchyny/lightline.vim'
+Plugin 'vim-airline/vim-airline'
+
+" Navigation & File Management
+Plugin 'scrooloose/nerdtree'
+Plugin 'majutsushi/tagbar'
+Plugin 'christoomey/vim-tmux-navigator'
+
+" Editing Support
+Plugin 'raimondi/delimitmate'
+Plugin 'alpaca-tc/vim-endwise'
 Plugin 'godlygeek/tabular'
 Plugin 'sirver/ultisnips'
 Plugin 'honza/vim-snippets'
-Plugin 'altercation/vim-colors-solarized'
-Plugin 'alpaca-tc/vim-endwise'
-Plugin 'pangloss/vim-javascript'
-Plugin 'depuracao/vim-rdoc'
-Plugin 'vim-ruby/vim-ruby'
-Plugin 'majutsushi/tagbar'
-Plugin 'tpope/vim-sensible'
-Plugin 'christoomey/vim-tmux-navigator'
-Plugin 'chr4/nginx.vim'
-"Plugin 'valloric/youcompleteme'
 Plugin 'w0rp/ale'
-Plugin 'itchyny/lightline.vim'
-Plugin 'scrooloose/nerdtree'
-Plugin 'vim-airline/vim-airline'
+
+" Language Support
 Plugin 'fatih/vim-go'
-Plugin 'tpope/vim-rails'
 Plugin 'rust-lang/rust.vim'
+Plugin 'vim-ruby/vim-ruby'
+Plugin 'tpope/vim-rails'
+Plugin 'pangloss/vim-javascript'
+Plugin 'mustache/vim-mustache-handlebars'
+Plugin 'chr4/nginx.vim'
+Plugin 'hashivim/vim-terraform'
+Plugin 'depuracao/vim-rdoc'
 Bundle 'isobit/vim-caddyfile'
 Plugin 'scrooloose/syntastic'
-Plugin 'hashivim/vim-terraform'
-Plugin 'ghifarit53/tokyonight-vim'
-call vundle#end()            " required
-filetype plugin indent on    " required
 
-let g:ycm_gopls_binary_path = expand('$GOPATH/bin/gopls')
+call vundle#end()
+filetype plugin indent on    " Required: Enable filetype detection, plugins, and indent
 
-syntax on                     " Syntax highlighting
+" -----------------------------------------------------------------------------
+" 3. Interface & Appearance
+" -----------------------------------------------------------------------------
+syntax on                     " Enable syntax highlighting
 set termguicolors             " Enable 24-bit RGB colors
+set background=dark           " Use dark background
+let g:rehash256 = 1           " Improved 256 color support
 
-filetype on
-filetype plugin indent on
+" --- Custom Highlight Groups ---
+" We define these early and add an autocmd to re-apply them on colorscheme change.
+function! s:SetupCustomHighlights()
+  highlight ExtraWhitespace ctermbg=red guibg=red
+  highlight Tabs ctermbg=red guibg=red
+  highlight Search ctermbg=red ctermfg=white guifg=#FFFFFF guibg=#FF0000
+  highlight Comment gui=NONE
+  highlight Normal guibg=black
+endfunction
 
-" Make sure colored syntax mode is on, and make it Just Work with newer 256
-" color terminals like iTerm2.
-set background=dark
-let g:rehash256 = 1
+augroup CustomHighlights
+  autocmd!
+  autocmd ColorScheme * call s:SetupCustomHighlights()
+augroup END
 
-"set rtp+=~/dotfiles/vendor/tokyonight-themes/extras/vim
-"colorscheme tokyonight-moon
+" Initial definition
+call s:SetupCustomHighlights()
 
-let g:tokyonight_style = 'night' " available: night, storm
+" Colorscheme Configuration
+let g:tokyonight_style = 'night'
 let g:tokyonight_enable_italic = 1
 colorscheme tokyonight
 
-set modeline modelines=3
+" UI Toggles & Indicators
+set number                    " Show line numbers
+set ruler                     " Show cursor position
+set cursorline                " Highlight the current line
+set showcmd                   " Show current uncompleted command
+set showmode                  " Always show the current mode
+set showmatch                 " Show matching brackets
+set title                     " Set window title to filename
+set laststatus=2              " Always show status bar
+set helpheight=0              " Disable minimum help window height
 
-" don't show help when F1 is pressed -- I press it too much by accident
-map <F1> <ESC>
-"map! <F1> <ESC>
+" Messages & Bells
+set shortmess=tI              " Abbreviate messages; suppress intro
+set report=0                  " Show all changes
+set noerrorbells              " Disable beeps
+set visualbell                " Use visual flash instead of beep
+
+" -----------------------------------------------------------------------------
+" 4. Indentation & Formatting
+" -----------------------------------------------------------------------------
+set autoindent                " Copy indent from current line
+set nocindent nosmartindent   " Disable C-style/smart indenting by default
+set expandtab                 " Use spaces instead of tabs
+set tabstop=2                 " Number of visual spaces per TAB
+set softtabstop=2             " Number of spaces in tab when editing
+set shiftwidth=2              " Number of spaces to use for autoindent
+set textwidth=79              " Standard line width
+set formatoptions+=ctrq        " Control formatting behavior
+
+" -----------------------------------------------------------------------------
+" 5. Search & Completion
+" -----------------------------------------------------------------------------
+set ignorecase                " Ignore case in search patterns
+set incsearch                 " Show search results as you type
+set hlsearch                  " Highlight all search matches
+set omnifunc=syntaxcomplete#Complete " Default omnicomplete
+
+" -----------------------------------------------------------------------------
+" 6. Backups, Undo, & Sessions
+" -----------------------------------------------------------------------------
+set nobackup                  " Don't keep backup files
+set nowb                      " Don't write backup before overwriting
+set nobk                      " Don't keep backup after overwriting
+set undodir=~/.vim/undodir     " Centralize undo files
+set sessionoptions-=options   " Don't save runtimepath in sessions
+
+" -----------------------------------------------------------------------------
+" 7. Key Mappings
+" -----------------------------------------------------------------------------
+" Navigation
+nmap <C-n> :bnext<CR>         " Next buffer
+nmap <C-p> :bprev<CR>         " Previous buffer
+nnoremap <C-g> :NERDTreeToggle<CR> " Toggle NERDTree
+nmap <F6> :TagbarToggle<CR>    " Toggle Tagbar
+
+" Misc Shortcuts
+map <F1> <ESC>                " Disable F1 help (I press it by accident)
 inoremap <F1> <ESC>
 
-
-augroup mkd
-  autocmd BufRead *.mkd  set ai formatoptions=tcroqn2 comments=n:>
-augroup END
-
-
-
-" Reopen files at the last seen line
-:au BufReadPost * if line("'\"") > 0 && line("'\"") <= line("$") | exe "normal g'\"" | endif
-
-" Wrapping and tabs.
-autocmd BufRead *.py set tw=78 ts=2 sw=2 sta et sts=2 ai
-
-" More syntax highlighting.
-let python_highlight_all = 1
-
-" Smart indenting
-autocmd BufRead *.py set indentexpr=GetGooglePythonIndent(v:lnum)
-
-" Auto completion via ctrl-space (instead of the nasty ctrl-x ctrl-o)
-"set omnifunc=pythoncomplete#Complete
-"inoremap <Nul> <C-x><C-o>
-
-" http://code.google.com/p/google-styleguide/source/browse/trunk/google_python_style.vim
-
-let s:maxoff = 50 " maximum number of lines to look backwards.
-
-function GetGooglePythonIndent(lnum)
-
-  " Indent inside parens.
-  " Align with the open paren unless it is at the end of the line.
-  " E.g.
-  "   open_paren_not_at_EOL(100,
-  "                         (200,
-  "                          300),
-  "                         400)
-  "   open_paren_at_EOL(
-  "       100, 200, 300, 400)
-  call cursor(a:lnum, 1)
-  let [par_line, par_col] = searchpairpos('(\|{\|\[', '', ')\|}\|\]', 'bW',
-        \ "line('.') < " . (a:lnum - s:maxoff) . " ? dummy :"
-        \ . " synIDattr(synID(line('.'), col('.'), 1), 'name')"
-        \ . " =~ '\\(Comment\\|String\\)$'")
-  if par_line > 0
-    call cursor(par_line, 1)
-    if par_col != col("$") - 1
-      return par_col
-    endif
-  endif
-
-  " Delegate the rest to the original function.
-  return GetPythonIndent(a:lnum)
-
-endfunction
-
-let pyindent_nested_paren="&sw*2"
-let pyindent_open_paren="&sw*2"
-
-set formatoptions+=ctrq
-
-" Enable spell checking, even in program source files. Hit <F4> to highlight
-" highlight spelling errors. Hit it again to turn highlighting off.
-"
-" And, if you cannot remember the keybindings, and/or too lazy to type
-"
-"     :help spell
-
-" and read the manual, here is a brief reminder:
-" ]s Next misspelled word
-" [s Previous misspelled word
-" z= Make suggestions for current word
-" zg Add to good words list
-"
+" Spell Checking
 if has("spell")
-  setlocal spell spelllang=en_us  " American English spelling.
-
-  " Toggle spelling with F4 key.
+  setlocal spell spelllang=en_us
+  set nospell                 " Off by default
+  set sps=best,10             " Max 10 suggestions
+  " Toggle spelling with F4
   map <F4> :set spell!<CR><Bar>:echo "Spell check: " . strpart("OffOn", 3 * &spell, 3)<CR>
-
-  " z= for suggestions
-
-  " Change the default highlighting colors and terminal attributes
   highlight SpellBad cterm=underline ctermfg=yellow ctermbg=gray
-
-  " Limit list of suggestions to the top 10 items
-  set sps=best,10
-
-  "Turn spelling off by default for English UK.
-  "Center is correctly spelled. Centre is not, and
-  "shows with spell local colors. Misspelled words
-  "show like soo.
-  set nospell
 endif
 
-set omnifunc=syntaxcomplete#Complete
-let g:UltiSnipsSnippetDirectories=["UltiSnips","vim-snippets/UltiSnips", "snippets/angular/UltiSnips", "bundle/vim-go/gosnippets/UltiSnips"]
-" Needed for YCM compat
-let g:UltiSnipsExpandTrigger="<c-j>"
-let g:UltiSnipsJumpForwardTrigger="<c-j>"
-let g:UltiSnipsJumpBackwardTrigger="<c-k>"
-
-let g:ycm_semantic_triggers =  {
-  \   'c' : ['->', '.'],
-  \   'go' : ['.'],
-  \   'objc' : ['->', '.'],
-  \   'cpp,objcpp' : ['->', '.', '::'],
-  \   'perl' : ['->'],
-  \   'php' : ['->', '::'],
-  \   'cs,java,javascript,d,vim,ruby,python,perl6,scala,vb,elixir,go' : ['.'],
-  \   'lua' : ['.', ':'],
-  \   'erlang' : [':'],
-  \ }
-
-" ----- Raimondi/delimitMate settings -----
-let delimitMate_expand_cr = 1
-augroup mydelimitMate
-  au!
-  au FileType markdown let b:delimitMate_nesting_quotes = ["`"]
-  au FileType tex let b:delimitMate_quotes = ""
-  au FileType tex let b:delimitMate_matchpairs = "(:),[:],{:},`:'"
-  au FileType python let b:delimitMate_nesting_quotes = ['"', "'"]
-augroup END
-
-let g:go_fmt_command = "goimports"
-
-" Turn on highlighting for go
-let g:go_highlight_functions = 1
-let g:go_highlight_methods = 1
-let g:go_highlight_structs = 1
-let g:go_highlight_interfaces = 1
-let g:go_highlight_operators = 1
-let g:go_highlight_build_constraints = 1
-
-au Filetype go nnoremap <leader>v :sp <CR>:exe "GoDef" <CR>
-
-nmap <F6> :TagbarToggle<CR>
-let g:tagbar_type_go = {  
-    \ 'ctagstype' : 'go',
-    \ 'kinds'     : [
-        \ 'p:package',
-        \ 'i:imports:1',
-        \ 'c:constants',
-        \ 'v:variables',
-        \ 't:types',
-        \ 'n:interfaces',
-        \ 'w:fields',
-        \ 'e:embedded',
-        \ 'm:methods',
-        \ 'r:constructor',
-        \ 'f:functions'
-    \ ],
-    \ 'sro' : '.',
-    \ 'kind2scope' : {
-        \ 't' : 'ctype',
-        \ 'n' : 'ntype'
-    \ },
-    \ 'scope2kind' : {
-        \ 'ctype' : 't',
-        \ 'ntype' : 'n'
-    \ },
-    \ 'ctagsbin'  : 'gotags',
-    \ 'ctagsargs' : '-sort -silent'
-\ }
-
-" Don't wrap html
-autocmd BufWinEnter *.html set textwidth=0
-autocmd BufWinEnter *.html set wrapmargin=0
-
-" Javascript
-let g:used_javascript_libs = 'angular, angularui'
-
-" ALE
+" -----------------------------------------------------------------------------
+" 8. Plugin Configurations
+" -----------------------------------------------------------------------------
+" ALE (Asynchronous Lint Engine)
 let g:ale_sign_warning = '▲'
 let g:ale_sign_error = '✗'
 highlight link ALEWarningSign String
 highlight link ALEErrorSign Title
-
-" NERDTree
-nnoremap <C-g> :NERDTreeToggle<CR>
 
 " Lightline
 let g:lightline = {
@@ -429,47 +195,136 @@ let g:lightline = {
 \ },
 \ }
 
+" UltiSnips & Snippets
+let g:UltiSnipsSnippetDirectories=["UltiSnips", "vim-snippets/UltiSnips", "snippets/angular/UltiSnips", "bundle/vim-go/gosnippets/UltiSnips"]
+let g:UltiSnipsExpandTrigger="<c-j>"
+let g:UltiSnipsJumpForwardTrigger="<c-j>"
+let g:UltiSnipsJumpBackwardTrigger="<c-k>"
+
+" delimitMate
+let delimitMate_expand_cr = 1
+
+" Go Support
+let g:go_fmt_command = "goimports"
+let g:go_highlight_functions = 1
+let g:go_highlight_methods = 1
+let g:go_highlight_structs = 1
+let g:go_highlight_interfaces = 1
+let g:go_highlight_operators = 1
+let g:go_highlight_build_constraints = 1
+
+" YCM (YouCompleteMe)
+let g:ycm_keep_logfiles = 1
+let g:ycm_log_level = 'debug'
+let g:ycm_enable_semantic_highlighting = 1
+let g:ycm_gopls_binary_path = expand('$GOPATH/bin/gopls')
+let g:ycm_semantic_triggers = {
+  \   'c' : ['->', '.'],
+  \   'go' : ['.'],
+  \   'objc' : ['->', '.'],
+  \   'cpp,objcpp' : ['->', '.', '::'],
+  \   'perl' : ['->'],
+  \   'php' : ['->', '::'],
+  \   'cs,java,javascript,d,vim,ruby,python,perl6,scala,vb,elixir,go' : ['.'],
+  \   'lua' : ['.', ':'],
+  \   'erlang' : [':'],
+  \ }
+
+" Javascript
+let g:used_javascript_libs = 'angular, angularui'
+
+" -----------------------------------------------------------------------------
+" 9. AutoCommands & Custom Logic
+" -----------------------------------------------------------------------------
+augroup GeneralAutoCmds
+  autocmd!
+  " Reopen files at the last seen line
+  autocmd BufReadPost * if line("'\"") > 0 && line("'\"") <= line("$") | exe "normal g'\"" | endif
+
+  " Aesthetics: Highlight extra whitespace and tabs
+  autocmd Syntax,BufWinEnter * match ExtraWhitespace /\s\+$/
+  autocmd Syntax,BufWinEnter * match Tabs "\t"
+augroup END
+
+augroup FileTypeLogic
+  autocmd!
+  " Markdown
+  autocmd BufRead *.mkd set ai formatoptions=tcroqn2 comments=n:>
+  autocmd FileType markdown let b:delimitMate_nesting_quotes = ["`"]
+
+  " Python
+  autocmd BufRead *.py set tw=78 ts=2 sw=2 sta et sts=2 ai
+  autocmd BufRead *.py let python_highlight_all = 1
+  autocmd BufRead *.py set indentexpr=GetGooglePythonIndent(v:lnum)
+  autocmd FileType python let b:delimitMate_nesting_quotes = ['"', "'"]
+
+  " Go
+  autocmd BufWinEnter *.go match Tabs "\t\+$"
+  autocmd BufWinLeave *.go match Tabs "\t"
+  autocmd Filetype go nnoremap <leader>v :sp <CR>:exe "GoDef" <CR>
+
+  " HTML
+  autocmd BufWinEnter *.html set textwidth=0 wrapmargin=0
+
+  " YAML
+  autocmd FileType yaml setlocal ts=2 sts=2 sw=2 expandtab
+
+  " LaTeX
+  autocmd FileType tex let b:delimitMate_quotes = ""
+  autocmd FileType tex let b:delimitMate_matchpairs = "(:),[:],{:},`:'"
+augroup END
+
+" Update Lightline on ALE events
+autocmd User ALELint call s:MaybeUpdateLightline()
+
+" -----------------------------------------------------------------------------
+" 10. Helper Functions
+" -----------------------------------------------------------------------------
+" Lightline Linter Helpers
 function! LightlineLinterWarnings() abort
   let l:counts = ale#statusline#Count(bufnr(''))
   let l:all_errors = l:counts.error + l:counts.style_error
   let l:all_non_errors = l:counts.total - l:all_errors
-  return l:counts.total == 0 ? '' : printf('%d ◆', all_non_errors)
+  return l:counts.total == 0 ? '' : printf('%d ◆', l:all_non_errors)
 endfunction
 
 function! LightlineLinterErrors() abort
   let l:counts = ale#statusline#Count(bufnr(''))
   let l:all_errors = l:counts.error + l:counts.style_error
-  let l:all_non_errors = l:counts.total - l:all_errors
-  return l:counts.total == 0 ? '' : printf('%d ✗', all_errors)
+  return l:counts.total == 0 ? '' : printf('%d ✗', l:all_errors)
 endfunction
 
 function! LightlineLinterOK() abort
   let l:counts = ale#statusline#Count(bufnr(''))
-  let l:all_errors = l:counts.error + l:counts.style_error
-  let l:all_non_errors = l:counts.total - l:all_errors
   return l:counts.total == 0 ? '✓ ' : ''
 endfunction
 
-autocmd User ALELint call s:MaybeUpdateLightline()
-
-" Update and show lightline but only if it's visible (e.g., not in Goyo)
 function! s:MaybeUpdateLightline()
   if exists('#lightline')
     call lightline#update()
   end
 endfunction
 
-" YAML Stuff
-autocmd FileType yaml setlocal ts=2 sts=2 sw=2 expandtab
+" Python Indentation Function
+let s:maxoff = 50
+function! GetGooglePythonIndent(lnum)
+  call cursor(a:lnum, 1)
+  let [par_line, par_col] = searchpairpos('(\|{\|\[', '', ')\|}\|\]', 'bW',
+        \ "line('.') < " . (a:lnum - s:maxoff) . " ? dummy :"
+        \ . " synIDattr(synID(line('.'), col('.'), 1), 'name')"
+        \ . " =~ '\\(Comment\\|String\\)$'")
+  if par_line > 0
+    call cursor(par_line, 1)
+    if par_col != col("$") - 1
+      return par_col
+    endif
+  endif
+  return GetPythonIndent(a:lnum)
+endfunction
 
-" YouCompleteMe
-let g:ycm_keep_logfiles = 1
-let g:ycm_log_level = 'debug'
-let g:ycm_enable_semantic_highlighting=1
-
-" Load YCM (only)
-let &rtp .= ',' . expand( '<sfile>:p:h' )
-filetype plugin indent on
-syn on
-
-source ~/.vim/user.vim
+" -----------------------------------------------------------------------------
+" 11. Custom Source
+" -----------------------------------------------------------------------------
+if filereadable(expand("~/.vim/user.vim"))
+  source ~/.vim/user.vim
+endif
