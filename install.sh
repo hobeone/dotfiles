@@ -64,7 +64,7 @@ install_packages() {
     log_info "OS: $OS, Package Manager: $PKG_MGR"
 
     # Baseline packages
-    local apt_packages=(eza zoxide git-delta tmux watch xclip gh btop lazygit unzip curl)
+    local apt_packages=(eza zoxide git-delta tmux watch xclip gh btop lazygit unzip curl ripgrep)
     local pacman_packages=(eza zoxide delta tmux watch xclip github-cli btop lazygit unzip curl) # Arch package names might differ slightly
     local dnf_packages=(eza zoxide git-delta tmux watch xclip gh btop lazygit unzip curl)
     local brew_packages=(eza zoxide git-delta tmux watch xclip gh btop lazygit)
