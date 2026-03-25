@@ -288,7 +288,7 @@ install_tokyonight_themes() {
         else
             mkdir -p "$(dirname "$lazygit_dest")"
             ln -sf "$vendor_dir/extras/lazygit/tokyonight_night.yml" "$lazygit_theme_dest"
-            log_info "Symlinked lazygit theme: $lazygit_dest"
+            log_info "Symlinked lazygit theme: $lazygit_theme_dest"
         fi
     else
         log_warn "lazygit config already exists. Skipping theme symlink."
