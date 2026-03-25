@@ -1,0 +1,23 @@
+#!/bin/bash
+# Pre-commit hook to sort package files in packages/
+
+set -e
+
+# Identify staged files in the packages/ directory
+PACKAGE_FILES=$(git diff --cached --name-only | grep '^packages/.*\.txt$' || true)
+
+if [ -z "$PACKAGE_FILES" ]; then
+    exit 0
+fi
+
+for file in $PACKAGE_FILES; do
+    if [ -f "$file" ]; then
+        # Sort unique and handle potential line ending issues
+        LC_ALL=C sort -u "$file" -o "$file"
+        # Stage the sorted file
+        git add "$file"
+        echo "Sorted $file"
+    fi
+done
+
+exit 0

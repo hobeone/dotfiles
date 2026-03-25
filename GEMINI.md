@@ -11,8 +11,9 @@ This project is a modular and modernized dotfiles repository designed to manage 
 ## Core Components & Architecture
 
 ### 1. Installation & Management
-*   **`install.sh`**: The main entry point. It handles OS detection, package installation, submodule initialization, font installation, and symlinking via GNU Stow.
+*   **`install.sh`**: The main entry point. It handles git hook setup, OS detection, package installation, submodule initialization, font installation, and symlinking via GNU Stow.
     *   **Usage:** `./install.sh [-v] [-n]` (Verbose / Dry-run).
+*   **`.githooks/`**: Tracked directory for git hooks. The `pre-commit` hook automatically sorts and deduplicates package lists in `packages/`.
 *   **`scripts/`**: Contains specialized helper scripts:
     *   `scripts/update.sh`: Synchronizes all submodules and updates Oh My Zsh.
     *   `scripts/install_go.sh`: Standalone script for installing/upgrading Go.

@@ -57,7 +57,19 @@ execute() {
     fi
 }
 
-# 1. Detect OS and Package Manager
+# 1. Setup Git Hooks
+setup_git_hooks() {
+    log_info "Setting up git hooks..."
+    if ! command -v git >/dev/null 2>&1; then
+        log_warn "git is not installed. Skipping git hook setup."
+        return 0
+    fi
+
+    # Set the hooksPath to the tracked .githooks directory
+    execute git config core.hooksPath .githooks
+}
+
+# 2. Detect OS and Package Manager
 detect_os() {
     log_info "Detecting OS and package manager..."
     if [[ "$OSTYPE" == "darwin"* ]]; then
@@ -287,22 +299,25 @@ install_glow() {
 main() {
     log_info "Installing dotfiles from $DOTFILES_DIR to $HOME"
     
-    # 1. Initialize Submodules
-    init_submodules
+    # 1. Setup Git Hooks
+    setup_git_hooks
 
     # 2. Detect OS and Package Manager
     detect_os
 
-    # 3. Install Packages
+    # 3. Initialize Submodules
+    init_submodules
+
+    # 4. Install Packages
     install_packages
 
-    # 4. Install Fonts
+    # 5. Install Fonts
     install_fonts
 
-    # 5. Install Tokyo Night Themes
+    # 6. Install Tokyo Night Themes
     install_tokyonight_themes
 
-    # 6. Create Links via GNU Stow
+    # 7. Create Links via GNU Stow
     log_info "Creating symlinks with GNU Stow..."
 
     if ! command -v stow >/dev/null 2>&1; then
@@ -316,7 +331,7 @@ main() {
     # Handle glow separately (copied instead of linked)
     install_glow
 
-    # 7. Ensure Local Files Exist
+    # 8. Ensure Local Files Exist
     ensure_local_files
 
     log_info "Dotfiles installation complete!"
