@@ -67,8 +67,8 @@ source "$ZSH/oh-my-zsh.sh"
 # ------------------------------------------------------------------------------
 # 3. Path Configuration
 # ------------------------------------------------------------------------------
-export GOPATH="$HOME/go"
-export GOROOT="/usr/local/go"
+[[ -d "/usr/local/go" ]] && export GOROOT="/usr/local/go"
+[[ -d "$HOME/go" ]] && export GOPATH="$HOME/go"
 
 typeset -U path
 path=(
@@ -82,8 +82,8 @@ path=(
     /usr/games
     "$HOME/.local/bin"
     /usr/local/scripts
-    "$GOROOT/bin"
-    "$GOPATH/bin"
+    ${GOROOT:+"$GOROOT/bin"}
+    ${GOPATH:+"$GOPATH/bin"}
     /usr/X11R6/bin
     /home/hobe/.pyenv/bin
 )
