@@ -8,12 +8,25 @@ set -euo pipefail
 DRY_RUN=false
 VERBOSE=false
 
+usage() {
+    cat <<EOF
+Usage: $(basename "$0") [OPTIONS]
+
+Options:
+    -n, --dry-run   Dry-run mode. Don't make any changes.
+    -v, --verbose   Verbose output. Show commands being executed.
+    -h, --help      Show this help message and exit.
+
+EOF
+}
+
 # Flags
-while getopts "nv" opt; do
-    case ${opt} in
-        n) DRY_RUN=true ;;
-        v) VERBOSE=true ;;
-        \?) echo "Usage: $0 [-n] [-v]" >&2; exit 1 ;;
+while [[ $# -gt 0 ]]; do
+    case ${1} in
+        -n|--dry-run) DRY_RUN=true; shift ;;
+        -v|--verbose) VERBOSE=true; shift ;;
+        -h|--help)    usage; exit 0 ;;
+        *)            echo "Unknown option: $1" >&2; usage; exit 1 ;;
     esac
 done
 
@@ -33,6 +46,10 @@ log_error() {
 }
 
 execute() {
+    if $VERBOSE; then
+        log_info "Executing: $*"
+    fi
+
     if $DRY_RUN; then
         log_info "[Dry-Run] Would run: $*"
     else
@@ -40,14 +57,14 @@ execute() {
     fi
 }
 
-log_info "Installing dotfiles from $DOTFILES_DIR to $HOME"
-
 # 1. Detect OS and Package Manager
 detect_os() {
+    log_info "Detecting OS and package manager..."
     if [[ "$OSTYPE" == "darwin"* ]]; then
         OS="macOS"
         PKG_MGR="brew"
     elif [[ -f /etc/os-release ]]; then
+        # shellcheck disable=SC1091
         . /etc/os-release
         OS=$NAME
         if [[ "$ID" == "ubuntu" ]] || [[ "$ID" == "debian" ]] || [[ "$ID_LIKE" == *"debian"* ]]; then
@@ -63,14 +80,11 @@ detect_os() {
         OS="Unknown"
         PKG_MGR="unknown"
     fi
+    log_info "OS: $OS, Package Manager: $PKG_MGR"
 }
 
 # 2. Install Packages
 install_packages() {
-    log_info "Detecting OS and package manager..."
-    detect_os
-    log_info "OS: $OS, Package Manager: $PKG_MGR"
-
     if [[ "$PKG_MGR" == "unknown" ]]; then
         log_warn "Unknown package manager. Please install baseline packages manually."
         return 0
@@ -87,6 +101,11 @@ install_packages() {
         [[ -z "$line" || "$line" == \#* ]] && continue
         packages+=("$line")
     done < "$pkg_file"
+
+    if [[ ${#packages[@]} -eq 0 ]]; then
+        log_info "No packages to install for $PKG_MGR."
+        return 0
+    fi
 
     case "$PKG_MGR" in
         apt)
@@ -113,18 +132,14 @@ install_packages() {
 init_submodules() {
     log_info "Initializing submodules..."
 
-    # Check if all submodules are already populated
-    if [[ -f "$HOME_DIR/.ohmyzsh/oh-my-zsh.sh" ]] && \
-       [[ -f "$HOME_DIR/zsh_custom/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh" ]] && \
-       [[ -f "$HOME_DIR/zsh_custom/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh" ]] && \
-       [[ -f "$HOME_DIR/zsh_custom/themes/powerlevel10k/powerlevel10k.zsh-theme" ]] && \
-       [[ -f "$DOTFILES_DIR/vendor/tokyonight-themes/extras/btop/tokyonight_night.theme" ]]; then
-        log_info "Submodules already initialized."
+    if ! command -v git >/dev/null 2>&1; then
+        log_warn "git is not installed. Skipping submodule initialization."
         return 0
     fi
 
-    if ! command -v git >/dev/null 2>&1; then
-        log_warn "git is not installed. Skipping submodule initialization."
+    # More robust check: check if any submodules are uninitialized
+    if [[ -z "$(git submodule status --recursive | grep '^-')" ]]; then
+        log_info "Submodules already initialized."
         return 0
     fi
 
@@ -172,6 +187,11 @@ install_fonts() {
         fi
 
         if ! $font_installed; then
+            if ! command -v curl >/dev/null 2>&1 || ! command -v unzip >/dev/null 2>&1; then
+                log_warn "curl or unzip not found. Skipping JetBrains Mono Nerd Font installation."
+                return 0
+            fi
+
             log_info "Installing JetBrains Mono Nerd Font..."
             local tmp_dir
             tmp_dir=$(mktemp -d)
@@ -227,7 +247,12 @@ install_tokyonight_themes() {
     # Update btop config specifically
     local btop_conf="$HOME/.config/btop/btop.conf"
     if [[ -f "$btop_conf" ]]; then
-        execute sed -i 's/^color_theme = .*/color_theme = "tokyonight_night.theme"/' "$btop_conf"
+        # Use execute for sed as well
+        if [[ "$OSTYPE" == "darwin"* ]]; then
+             execute sed -i '' 's/^color_theme = .*/color_theme = "tokyonight_night.theme"/' "$btop_conf"
+        else
+             execute sed -i 's/^color_theme = .*/color_theme = "tokyonight_night.theme"/' "$btop_conf"
+        fi
         log_info "Updated btop.conf to use tokyonight_night.theme"
     fi
 }
@@ -260,19 +285,24 @@ install_glow() {
 }
 
 main() {
+    log_info "Installing dotfiles from $DOTFILES_DIR to $HOME"
+    
     # 1. Initialize Submodules
     init_submodules
 
-    # 2. Install Packages
+    # 2. Detect OS and Package Manager
+    detect_os
+
+    # 3. Install Packages
     install_packages
 
-    # 2.5 Install Fonts
+    # 4. Install Fonts
     install_fonts
 
-    # 2.6 Install Tokyo Night Themes
+    # 5. Install Tokyo Night Themes
     install_tokyonight_themes
 
-    # 3. Create Links via GNU Stow
+    # 6. Create Links via GNU Stow
     log_info "Creating symlinks with GNU Stow..."
 
     if ! command -v stow >/dev/null 2>&1; then
@@ -281,14 +311,12 @@ main() {
     fi
 
     # Stow everything in home/, ignoring glow (handled separately)
-    # We use --adopt if not in dry run? No, --adopt can overwrite repo files.
-    # Better to just use -t $HOME home
     execute stow --ignore="glow" -t "$HOME" home
 
     # Handle glow separately (copied instead of linked)
     install_glow
 
-    # 4. Ensure Local Files Exist
+    # 7. Ensure Local Files Exist
     ensure_local_files
 
     log_info "Dotfiles installation complete!"
