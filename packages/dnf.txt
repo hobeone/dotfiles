@@ -1,0 +1,11 @@
+eza
+zoxide
+git-delta
+tmux
+watch
+xclip
+gh
+btop
+lazygit
+unzip
+curl

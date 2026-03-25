@@ -32,6 +32,14 @@ log_error() {
     echo -e "\033[0;31m[ERROR]\033[0m $*" >&2
 }
 
+execute() {
+    if $DRY_RUN; then
+        log_info "[Dry-Run] Would run: $*"
+    else
+        "$@"
+    fi
+}
+
 log_info "Installing dotfiles from $DOTFILES_DIR to $HOME"
 
 # 1. Detect OS and Package Manager
@@ -63,37 +71,40 @@ install_packages() {
     detect_os
     log_info "OS: $OS, Package Manager: $PKG_MGR"
 
-    # Baseline packages
-    local apt_packages=(eza zoxide git-delta tmux watch xclip gh btop lazygit unzip curl ripgrep bat)
-    local pacman_packages=(eza zoxide delta tmux watch xclip github-cli btop lazygit unzip curl) # Arch package names might differ slightly
-    local dnf_packages=(eza zoxide git-delta tmux watch xclip gh btop lazygit unzip curl)
-    local brew_packages=(eza zoxide git-delta tmux watch xclip gh btop lazygit)
-
-    if $DRY_RUN; then
-        log_info "[Dry-Run] Would install packages for $PKG_MGR"
+    if [[ "$PKG_MGR" == "unknown" ]]; then
+        log_warn "Unknown package manager. Please install baseline packages manually."
         return 0
     fi
+
+    local pkg_file="$DOTFILES_DIR/packages/$PKG_MGR.txt"
+    if [[ ! -f "$pkg_file" ]]; then
+        log_warn "Package list not found: $pkg_file"
+        return 0
+    fi
+
+    local packages=()
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        [[ -z "$line" || "$line" == \#* ]] && continue
+        packages+=("$line")
+    done < "$pkg_file"
 
     case "$PKG_MGR" in
         apt)
             log_info "Installing packages via apt..."
-            sudo apt update
-            sudo apt install -y "${apt_packages[@]}"
+            execute sudo apt update
+            execute sudo apt install -y "${packages[@]}"
             ;;
         pacman)
             log_info "Installing packages via pacman..."
-            sudo pacman -Sy --needed "${pacman_packages[@]}"
+            execute sudo pacman -Sy --needed "${packages[@]}"
             ;;
         dnf)
             log_info "Installing packages via dnf..."
-            sudo dnf install -y "${dnf_packages[@]}"
+            execute sudo dnf install -y "${packages[@]}"
             ;;
         brew)
             log_info "Installing packages via Homebrew..."
-            brew install "${brew_packages[@]}"
-            ;;
-        *)
-            log_warn "Unknown package manager. Please install baseline packages manually: ${apt_packages[*]}"
+            execute brew install "${packages[@]}"
             ;;
     esac
 }
@@ -128,13 +139,9 @@ link_item() {
         fi
     fi
 
-    if $DRY_RUN; then
-        log_info "[Dry-Run] Would link $dst -> $src"
-    else
-        mkdir -p "$(dirname "$dst")"
-        ln -s "$src" "$dst"
-        log_info "Linked $dst -> $src"
-    fi
+    execute mkdir -p "$(dirname "$dst")"
+    execute ln -s "$src" "$dst"
+    log_info "Linked $dst -> $src"
 }
 
 # 4. Initialize Submodules
@@ -156,11 +163,7 @@ init_submodules() {
         return 0
     fi
 
-    if $DRY_RUN; then
-        log_info "[Dry-Run] Would run: git submodule update --init --recursive"
-    else
-        git submodule update --init --recursive
-    fi
+    execute git submodule update --init --recursive
 }
 
 
@@ -171,23 +174,14 @@ ensure_local_files() {
     local zsh_local="$HOME/.zshrc.local"
     local vim_user="$HOME/.vim/user.vim"
 
-    if $DRY_RUN; then
-        if [[ ! -f "$zsh_local" ]]; then
-            log_info "[Dry-Run] Would create empty $zsh_local"
-        fi
-        if [[ ! -f "$vim_user" ]]; then
-            log_info "[Dry-Run] Would create empty $vim_user"
-        fi
-    else
-        if [[ ! -f "$zsh_local" ]]; then
-            touch "$zsh_local"
-            log_info "Created empty $zsh_local"
-        fi
-        
-        if [[ ! -f "$vim_user" ]]; then
-            touch "$vim_user"
-            log_info "Created empty $vim_user"
-        fi
+    if [[ ! -f "$zsh_local" ]]; then
+        execute touch "$zsh_local"
+        log_info "Created empty $zsh_local"
+    fi
+    
+    if [[ ! -f "$vim_user" ]]; then
+        execute touch "$vim_user"
+        log_info "Created empty $vim_user"
     fi
 }
 
@@ -196,15 +190,11 @@ install_fonts() {
     log_info "Checking for JetBrains Mono Nerd Font..."
 
     if [[ "$PKG_MGR" == "brew" ]]; then
-        if $DRY_RUN; then
-            log_info "[Dry-Run] Would install JetBrains Mono Nerd Font via Homebrew Cask"
+        if ! brew list --cask font-jetbrains-mono-nerd-font &>/dev/null; then
+            log_info "Installing JetBrains Mono Nerd Font via Homebrew..."
+            execute brew install --cask font-jetbrains-mono-nerd-font
         else
-            if ! brew list --cask font-jetbrains-mono-nerd-font &>/dev/null; then
-                log_info "Installing JetBrains Mono Nerd Font via Homebrew..."
-                brew install --cask font-jetbrains-mono-nerd-font
-            else
-                log_info "JetBrains Mono Nerd Font already installed via Homebrew."
-            fi
+            log_info "JetBrains Mono Nerd Font already installed via Homebrew."
         fi
     else
         # Linux (Debian, Arch, Fedora)
@@ -219,18 +209,14 @@ install_fonts() {
 
         if ! $font_installed; then
             log_info "Installing JetBrains Mono Nerd Font..."
-            if $DRY_RUN; then
-                log_info "[Dry-Run] Would download and install JetBrains Mono Nerd Font to ~/.local/share/fonts"
+            execute mkdir -p "$HOME/.local/share/fonts"
+            execute curl -fLo /tmp/JetBrainsMono.zip "https://github.com/ryanoasis/nerd-fonts/releases/latest/download/JetBrainsMono.zip"
+            execute unzip -o /tmp/JetBrainsMono.zip -d "$HOME/.local/share/fonts/"
+            execute rm /tmp/JetBrainsMono.zip
+            if command -v fc-cache &>/dev/null; then
+                execute fc-cache -fv
             else
-                mkdir -p "$HOME/.local/share/fonts"
-                curl -fLo /tmp/JetBrainsMono.zip "https://github.com/ryanoasis/nerd-fonts/releases/latest/download/JetBrainsMono.zip"
-                unzip -o /tmp/JetBrainsMono.zip -d "$HOME/.local/share/fonts/"
-                rm /tmp/JetBrainsMono.zip
-                if command -v fc-cache &>/dev/null; then
-                    fc-cache -fv
-                else
-                    log_warn "fc-cache not found. Please install fontconfig or reboot to refresh font cache."
-                fi
+                log_warn "fc-cache not found. Please install fontconfig or reboot to refresh font cache."
             fi
         else
             log_info "JetBrains Mono Nerd Font already installed."
@@ -252,75 +238,48 @@ install_tokyonight_themes() {
 
     # 1. eza
     local eza_dest="$HOME/.config/eza/theme.yml"
-    if $DRY_RUN; then
-        log_info "[Dry-Run] Would symlink eza theme: $eza_dest"
-    else
-        mkdir -p "$(dirname "$eza_dest")"
-        ln -sf "$vendor_dir/extras/eza/tokyonight_night.yml" "$eza_dest"
-        log_info "Symlinked eza theme: $eza_dest"
-    fi
+    execute mkdir -p "$(dirname "$eza_dest")"
+    execute ln -sf "$vendor_dir/extras/eza/tokyonight_night.yml" "$eza_dest"
+    log_info "Symlinked eza theme: $eza_dest"
 
     # 2. btop
     local btop_dest="$HOME/.config/btop/themes/tokyonight_night.theme"
     local btop_conf="$HOME/.config/btop/btop.conf"
-    if $DRY_RUN; then
-        log_info "[Dry-Run] Would symlink btop theme: $btop_dest"
-        if [[ -f "$btop_conf" ]]; then
-            log_info "[Dry-Run] Would update btop.conf to use tokyonight_night.theme"
-        fi
-    else
-        mkdir -p "$(dirname "$btop_dest")"
-        ln -sf "$vendor_dir/extras/btop/tokyonight_night.theme" "$btop_dest"
-        log_info "Symlinked btop theme: $btop_dest"
-        
-        if [[ -f "$btop_conf" ]]; then
-            sed -i 's/^color_theme = .*/color_theme = "tokyonight_night.theme"/' "$btop_conf"
-            log_info "Updated btop.conf to use tokyonight_night.theme"
-        fi
+    execute mkdir -p "$(dirname "$btop_dest")"
+    execute ln -sf "$vendor_dir/extras/btop/tokyonight_night.theme" "$btop_dest"
+    log_info "Symlinked btop theme: $btop_dest"
+    
+    if [[ -f "$btop_conf" ]]; then
+        execute sed -i 's/^color_theme = .*/color_theme = "tokyonight_night.theme"/' "$btop_conf"
+        log_info "Updated btop.conf to use tokyonight_night.theme"
     fi
 
     # 3. lazygit
     local lazygit_dest="$HOME/.config/lazygit/config.yml"
     local lazygit_theme_dest="$HOME/.config/lazygit/tokyonight_night.yml"
     if [[ ! -f "$lazygit_theme_dest" ]]; then
-        if $DRY_RUN; then
-            log_info "[Dry-Run] Would symlink lazygit theme: $lazygit_dest"
-        else
-            mkdir -p "$(dirname "$lazygit_dest")"
-            ln -sf "$vendor_dir/extras/lazygit/tokyonight_night.yml" "$lazygit_theme_dest"
-            log_info "Symlinked lazygit theme: $lazygit_theme_dest"
-        fi
+        execute mkdir -p "$(dirname "$lazygit_dest")"
+        execute ln -sf "$vendor_dir/extras/lazygit/tokyonight_night.yml" "$lazygit_theme_dest"
+        log_info "Symlinked lazygit theme: $lazygit_theme_dest"
     else
         log_warn "lazygit config already exists. Skipping theme symlink."
     fi
     
     # 4. tmux
     local tmux_dest="$HOME/.tmux.conf.tokyonight"
-    if $DRY_RUN; then
-        log_info "[Dry-Run] Would symlink tmux theme: $tmux_dest"
-    else
-        ln -sf "$vendor_dir/extras/tmux/tokyonight_night.tmux" "$tmux_dest"
-        log_info "Symlinked tmux theme: $tmux_dest"
-    fi
+    execute ln -sf "$vendor_dir/extras/tmux/tokyonight_night.tmux" "$tmux_dest"
+    log_info "Symlinked tmux theme: $tmux_dest"
     
     # 5. delta
     local delta_dest="$HOME/.gitconfig.tokyonight"
-    if $DRY_RUN; then
-        log_info "[Dry-Run] Would symlink delta theme: $delta_dest"
-    else
-        ln -sf "$vendor_dir/extras/delta/tokyonight_night.gitconfig" "$delta_dest"
-        log_info "Symlinked delta theme: $delta_dest"
-    fi
+    execute ln -sf "$vendor_dir/extras/delta/tokyonight_night.gitconfig" "$delta_dest"
+    log_info "Symlinked delta theme: $delta_dest"
 
     # 6. alacritty
     local alacritty_dest="$HOME/.config/alacritty/theme.toml"
-    if $DRY_RUN; then
-        log_info "[Dry-Run] Would symlink alacritty theme: $alacritty_dest"
-    else
-        mkdir -p "$(dirname "$alacritty_dest")"
-        ln -sf "$vendor_dir/extras/alacritty/tokyonight_night.toml" "$alacritty_dest"
-        log_info "Symlinked alacritty theme: $alacritty_dest"
-    fi
+    execute mkdir -p "$(dirname "$alacritty_dest")"
+    execute ln -sf "$vendor_dir/extras/alacritty/tokyonight_night.toml" "$alacritty_dest"
+    log_info "Symlinked alacritty theme: $alacritty_dest"
 }
 
 install_glow() {
@@ -328,29 +287,24 @@ install_glow() {
     local glow_src_dir="$HOME_DIR/config/glow"
     local glow_dst_dir="$HOME/.config/glow"
 
-    if $DRY_RUN; then
-        log_info "[Dry-Run] Would create $glow_dst_dir, copy glow.yml, and link tokyo_night.json"
-        return 0
-    fi
-
     # If the destination is a symlink, remove it to make way for a directory
     if [[ -L "$glow_dst_dir" ]]; then
-        rm "$glow_dst_dir"
+        execute rm "$glow_dst_dir"
     fi
 
-    mkdir -p "$glow_dst_dir"
+    execute mkdir -p "$glow_dst_dir"
     
     # Copy glow.yml
-    cp "$glow_src_dir/glow.yml" "$glow_dst_dir/glow.yml"
+    execute cp "$glow_src_dir/glow.yml" "$glow_dst_dir/glow.yml"
     
     # Link tokyo_night.json (since it's not being modified, linking is fine)
-    ln -sf "$glow_src_dir/tokyo_night.json" "$glow_dst_dir/tokyo_night.json"
+    execute ln -sf "$glow_src_dir/tokyo_night.json" "$glow_dst_dir/tokyo_night.json"
 
     # Rewrite style path in the COPIED file
     if [[ "$OS" == "macOS" ]]; then
-        sed -i '' "s|style: \"~/.config/glow/tokyo_night.json\"|style: \"$HOME/.config/glow/tokyo_night.json\"|g" "$glow_dst_dir/glow.yml"
+        execute sed -i '' "s|style: \"~/.config/glow/tokyo_night.json\"|style: \"$HOME/.config/glow/tokyo_night.json\"|g" "$glow_dst_dir/glow.yml"
     else
-        sed -i "s|style: \"~/.config/glow/tokyo_night.json\"|style: \"$HOME/.config/glow/tokyo_night.json\"|g" "$glow_dst_dir/glow.yml"
+        execute sed -i "s|style: \"~/.config/glow/tokyo_night.json\"|style: \"$HOME/.config/glow/tokyo_night.json\"|g" "$glow_dst_dir/glow.yml"
     fi
     log_info "Copied and updated glow.yml in $glow_dst_dir"
 }
