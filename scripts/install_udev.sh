@@ -5,6 +5,8 @@
 #
 # run with ECHO=echo to debug
 
+DOTFILES_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
 if hash inotifywait 2>/dev/null; then
   echo "Found inotifywait command installed"
 else
@@ -12,6 +14,6 @@ else
   $ECHO apt install inotify-tools
 fi
 
-$ECHO cp -v udev/99-keyboard.rules /etc/udev/rules.d/99-keyboard.rules
-$ECHO cp -v bin/keyboard-udev /usr/local/bin/keyboard-udev
+$ECHO cp -v "$DOTFILES_DIR/udev/99-keyboard.rules" /etc/udev/rules.d/99-keyboard.rules
+$ECHO cp -v "$DOTFILES_DIR/home/bin/keyboard-udev" /usr/local/bin/keyboard-udev
 $ECHO udevadm control --reload-rules
