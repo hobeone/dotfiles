@@ -322,6 +322,38 @@ install_tokyonight_themes() {
     fi
 }
 
+install_glow() {
+    log_info "Installing glow config (copying to avoid git diffs)..."
+    local glow_src_dir="$HOME_DIR/config/glow"
+    local glow_dst_dir="$HOME/.config/glow"
+
+    if $DRY_RUN; then
+        log_info "[Dry-Run] Would create $glow_dst_dir, copy glow.yml, and link tokyo_night.json"
+        return 0
+    fi
+
+    # If the destination is a symlink, remove it to make way for a directory
+    if [[ -L "$glow_dst_dir" ]]; then
+        rm "$glow_dst_dir"
+    fi
+
+    mkdir -p "$glow_dst_dir"
+    
+    # Copy glow.yml
+    cp "$glow_src_dir/glow.yml" "$glow_dst_dir/glow.yml"
+    
+    # Link tokyo_night.json (since it's not being modified, linking is fine)
+    ln -sf "$glow_src_dir/tokyo_night.json" "$glow_dst_dir/tokyo_night.json"
+
+    # Rewrite style path in the COPIED file
+    if [[ "$OS" == "macOS" ]]; then
+        sed -i '' "s|style: \"~/.config/glow/tokyo_night.json\"|style: \"$HOME/.config/glow/tokyo_night.json\"|g" "$glow_dst_dir/glow.yml"
+    else
+        sed -i "s|style: \"~/.config/glow/tokyo_night.json\"|style: \"$HOME/.config/glow/tokyo_night.json\"|g" "$glow_dst_dir/glow.yml"
+    fi
+    log_info "Copied and updated glow.yml in $glow_dst_dir"
+}
+
 main() {
     # 1. Initialize Submodules
     init_submodules
@@ -354,9 +386,15 @@ main() {
     if [[ -d "$HOME_DIR/config" ]]; then
         for item in "$HOME_DIR/config"/*; do
             basename="$(basename "$item")"
+            if [[ "$basename" == "glow" ]]; then
+                continue
+            fi
             link_item "$item" "$HOME/.config/$basename"
         done
     fi
+
+    # Handle glow separately (copied instead of linked)
+    install_glow
 
     # Safe merge .ssh
     if [[ -d "$HOME_DIR/ssh" ]]; then
