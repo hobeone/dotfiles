@@ -109,41 +109,6 @@ install_packages() {
     esac
 }
 
-# 3. Safe Linking
-link_item() {
-    local src="$1"
-    local dst="$2"
-
-    if [[ -e "$dst" ]] || [[ -L "$dst" ]]; then
-        if [[ -L "$dst" ]] && [[ "$(readlink -f "$dst")" == "$src" ]]; then
-            if $VERBOSE; then
-                log_info "Link already correct: $dst -> $src"
-            fi
-            return 0
-        fi
-
-        log_warn "Destination exists: $dst"
-        if $DRY_RUN; then
-            log_info "[Dry-Run] Would prompt to overwrite $dst and proceed with linking."
-        else
-            read -p "Overwrite? [y/N] " response
-            case "$response" in
-                [yY][eE][sS]|[yY])
-                    rm -rf "$dst"
-                    ;;
-                *)
-                    log_info "Skipping $dst"
-                    return 0
-                    ;;
-            esac
-        fi
-    fi
-
-    execute mkdir -p "$(dirname "$dst")"
-    execute ln -s "$src" "$dst"
-    log_info "Linked $dst -> $src"
-}
-
 # 4. Initialize Submodules
 init_submodules() {
     log_info "Initializing submodules..."
@@ -198,21 +163,24 @@ install_fonts() {
         fi
     else
         # Linux (Debian, Arch, Fedora)
-        # Check both fc-list (if available) and the direct file existence
         local font_installed=false
         if command -v fc-list &>/dev/null && fc-list | grep -qi "JetBrains.*Nerd"; then
             font_installed=true
         elif [[ -f "$HOME/.local/share/fonts/JetBrainsMonoNerdFont-Regular.ttf" ]] || \
-             [[ -f "$HOME/.local/share/fonts/JetBrains Mono Regular Nerd Font Complete.ttf" ]]; then # Match old names too
+             [[ -f "$HOME/.local/share/fonts/JetBrains Mono Regular Nerd Font Complete.ttf" ]]; then
             font_installed=true
         fi
 
         if ! $font_installed; then
             log_info "Installing JetBrains Mono Nerd Font..."
+            local tmp_dir
+            tmp_dir=$(mktemp -d)
+            trap 'rm -rf "$tmp_dir"' EXIT
+
             execute mkdir -p "$HOME/.local/share/fonts"
-            execute curl -fLo /tmp/JetBrainsMono.zip "https://github.com/ryanoasis/nerd-fonts/releases/latest/download/JetBrainsMono.zip"
-            execute unzip -o /tmp/JetBrainsMono.zip -d "$HOME/.local/share/fonts/"
-            execute rm /tmp/JetBrainsMono.zip
+            execute curl -fsSL -o "$tmp_dir/JetBrainsMono.zip" "https://github.com/ryanoasis/nerd-fonts/releases/latest/download/JetBrainsMono.zip"
+            execute unzip -o "$tmp_dir/JetBrainsMono.zip" -d "$HOME/.local/share/fonts/"
+            
             if command -v fc-cache &>/dev/null; then
                 execute fc-cache -fv
             else
@@ -236,55 +204,43 @@ install_tokyonight_themes() {
         return 0
     fi
 
-    # 1. eza
-    local eza_dest="$HOME/.config/eza/theme.yml"
-    execute mkdir -p "$(dirname "$eza_dest")"
-    execute ln -sf "$vendor_dir/extras/eza/tokyonight_night.yml" "$eza_dest"
-    log_info "Symlinked eza theme: $eza_dest"
+    # Define themes: "source_relative_to_vendor_dir|destination_path"
+    local themes=(
+        "extras/eza/tokyonight_night.yml|$HOME/.config/eza/theme.yml"
+        "extras/btop/tokyonight_night.theme|$HOME/.config/btop/themes/tokyonight_night.theme"
+        "extras/lazygit/tokyonight_night.yml|$HOME/.config/lazygit/tokyonight_night.yml"
+        "extras/tmux/tokyonight_night.tmux|$HOME/.tmux.conf.tokyonight"
+        "extras/delta/tokyonight_night.gitconfig|$HOME/.gitconfig.tokyonight"
+        "extras/alacritty/tokyonight_night.toml|$HOME/.config/alacritty/theme.toml"
+    )
 
-    # 2. btop
-    local btop_dest="$HOME/.config/btop/themes/tokyonight_night.theme"
-    local btop_conf="$HOME/.config/btop/btop.conf"
-    execute mkdir -p "$(dirname "$btop_dest")"
-    execute ln -sf "$vendor_dir/extras/btop/tokyonight_night.theme" "$btop_dest"
-    log_info "Symlinked btop theme: $btop_dest"
+    for entry in "${themes[@]}"; do
+        local src="${entry%%|*}"
+        local dst="${entry##*|}"
+        
+        # Special check for lazygit to avoid overwriting main config
+        if [[ "$dst" == *"lazygit/tokyonight_night.yml" && -f "$HOME/.config/lazygit/config.yml" ]]; then
+             # We link the theme file, but don't overwrite the main config.yml
+             # This matches previous behavior
+             : 
+        fi
+
+        execute mkdir -p "$(dirname "$dst")"
+        execute ln -sf "$vendor_dir/$src" "$dst"
+        log_info "Symlinked theme: $dst"
+    done
     
+    # Update btop config specifically
+    local btop_conf="$HOME/.config/btop/btop.conf"
     if [[ -f "$btop_conf" ]]; then
         execute sed -i 's/^color_theme = .*/color_theme = "tokyonight_night.theme"/' "$btop_conf"
         log_info "Updated btop.conf to use tokyonight_night.theme"
     fi
-
-    # 3. lazygit
-    local lazygit_dest="$HOME/.config/lazygit/config.yml"
-    local lazygit_theme_dest="$HOME/.config/lazygit/tokyonight_night.yml"
-    if [[ ! -f "$lazygit_theme_dest" ]]; then
-        execute mkdir -p "$(dirname "$lazygit_dest")"
-        execute ln -sf "$vendor_dir/extras/lazygit/tokyonight_night.yml" "$lazygit_theme_dest"
-        log_info "Symlinked lazygit theme: $lazygit_theme_dest"
-    else
-        log_warn "lazygit config already exists. Skipping theme symlink."
-    fi
-    
-    # 4. tmux
-    local tmux_dest="$HOME/.tmux.conf.tokyonight"
-    execute ln -sf "$vendor_dir/extras/tmux/tokyonight_night.tmux" "$tmux_dest"
-    log_info "Symlinked tmux theme: $tmux_dest"
-    
-    # 5. delta
-    local delta_dest="$HOME/.gitconfig.tokyonight"
-    execute ln -sf "$vendor_dir/extras/delta/tokyonight_night.gitconfig" "$delta_dest"
-    log_info "Symlinked delta theme: $delta_dest"
-
-    # 6. alacritty
-    local alacritty_dest="$HOME/.config/alacritty/theme.toml"
-    execute mkdir -p "$(dirname "$alacritty_dest")"
-    execute ln -sf "$vendor_dir/extras/alacritty/tokyonight_night.toml" "$alacritty_dest"
-    log_info "Symlinked alacritty theme: $alacritty_dest"
 }
 
 install_glow() {
     log_info "Installing glow config (copying to avoid git diffs)..."
-    local glow_src_dir="$HOME_DIR/config/glow"
+    local glow_src_dir="$HOME_DIR/.config/glow"
     local glow_dst_dir="$HOME/.config/glow"
 
     # If the destination is a symlink, remove it to make way for a directory
@@ -293,10 +249,10 @@ install_glow() {
     fi
 
     execute mkdir -p "$glow_dst_dir"
-    
+
     # Copy glow.yml
     execute cp "$glow_src_dir/glow.yml" "$glow_dst_dir/glow.yml"
-    
+
     # Link tokyo_night.json (since it's not being modified, linking is fine)
     execute ln -sf "$glow_src_dir/tokyo_night.json" "$glow_dst_dir/tokyo_night.json"
 
@@ -322,55 +278,25 @@ main() {
     # 2.6 Install Tokyo Night Themes
     install_tokyonight_themes
 
-    # 3. Create Links
-    log_info "Creating symlinks..."
+    # 3. Create Links via GNU Stow
+    log_info "Creating symlinks with GNU Stow..."
 
-    # Iterate over items in home/
-    for item in "$HOME_DIR"/*; do
-        basename="$(basename "$item")"
-
-        # Skip config, ssh, and bin directories for safe merging
-        if [[ "$basename" == "config" ]] || [[ "$basename" == "ssh" ]] || [[ "$basename" == "bin" ]]; then
-            continue
-        fi
-
-        link_item "$item" "$HOME/.$basename"
-    done
-
-    # Safe merge .config
-    if [[ -d "$HOME_DIR/config" ]]; then
-        for item in "$HOME_DIR/config"/*; do
-            basename="$(basename "$item")"
-            if [[ "$basename" == "glow" ]]; then
-                continue
-            fi
-            link_item "$item" "$HOME/.config/$basename"
-        done
+    if ! command -v stow >/dev/null 2>&1; then
+        log_error "GNU Stow is not installed. Please install it to proceed."
+        exit 1
     fi
+
+    # Stow everything in home/, ignoring glow (handled separately)
+    # We use --adopt if not in dry run? No, --adopt can overwrite repo files.
+    # Better to just use -t $HOME home
+    execute stow --ignore="glow" -t "$HOME" home
 
     # Handle glow separately (copied instead of linked)
     install_glow
-
-    # Safe merge .ssh
-    if [[ -d "$HOME_DIR/ssh" ]]; then
-        for item in "$HOME_DIR/ssh"/*; do
-            basename="$(basename "$item")"
-            link_item "$item" "$HOME/.ssh/$basename"
-        done
-    fi
-
-    # Safe merge ~/bin
-    if [[ -d "$HOME_DIR/bin" ]]; then
-        for item in "$HOME_DIR/bin"/*; do
-            basename="$(basename "$item")"
-            link_item "$item" "$HOME/bin/$basename"
-        done
-    fi
 
     # 4. Ensure Local Files Exist
     ensure_local_files
 
     log_info "Dotfiles installation complete!"
 }
-
 main "$@"

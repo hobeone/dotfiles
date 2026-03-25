@@ -11,3 +11,4 @@ unzip
 curl
 ripgrep
 bat
+stow

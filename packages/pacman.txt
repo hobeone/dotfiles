@@ -9,3 +9,4 @@ btop
 lazygit
 unzip
 curl
+stow
