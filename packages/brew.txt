@@ -1,10 +1,10 @@
+btop
 eza
-zoxide
+gh
 git-delta
+lazygit
+stow
 tmux
 watch
 xclip
-gh
-btop
-lazygit
-stow
+zoxide
