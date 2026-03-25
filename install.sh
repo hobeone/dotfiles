@@ -114,7 +114,7 @@ init_submodules() {
     log_info "Initializing submodules..."
 
     # Check if all submodules are already populated
-    if [[ -f "$HOME_DIR/ohmyzsh/oh-my-zsh.sh" ]] && \
+    if [[ -f "$HOME_DIR/.ohmyzsh/oh-my-zsh.sh" ]] && \
        [[ -f "$HOME_DIR/zsh_custom/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh" ]] && \
        [[ -f "$HOME_DIR/zsh_custom/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh" ]] && \
        [[ -f "$HOME_DIR/zsh_custom/themes/powerlevel10k/powerlevel10k.zsh-theme" ]] && \
@@ -218,12 +218,6 @@ install_tokyonight_themes() {
         local src="${entry%%|*}"
         local dst="${entry##*|}"
         
-        # Special check for lazygit to avoid overwriting main config
-        if [[ "$dst" == *"lazygit/tokyonight_night.yml" && -f "$HOME/.config/lazygit/config.yml" ]]; then
-             # We link the theme file, but don't overwrite the main config.yml
-             # This matches previous behavior
-             : 
-        fi
 
         execute mkdir -p "$(dirname "$dst")"
         execute ln -sf "$vendor_dir/$src" "$dst"
