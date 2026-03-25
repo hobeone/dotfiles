@@ -209,7 +209,7 @@ install_tokyonight_themes() {
         "extras/eza/tokyonight_night.yml|$HOME/.config/eza/theme.yml"
         "extras/btop/tokyonight_night.theme|$HOME/.config/btop/themes/tokyonight_night.theme"
         "extras/lazygit/tokyonight_night.yml|$HOME/.config/lazygit/tokyonight_night.yml"
-        "extras/tmux/tokyonight_night.tmux|$HOME/.tmux.conf.tokyonight"
+        "extras/tmux/tokyonight_night.tmux|$HOME/.config/tmux/tmux.conf.tokyonight"
         "extras/delta/tokyonight_night.gitconfig|$HOME/.gitconfig.tokyonight"
         "extras/alacritty/tokyonight_night.toml|$HOME/.config/alacritty/theme.toml"
     )

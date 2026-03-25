@@ -17,13 +17,13 @@ fi
 # 2. Oh-My-Zsh Configuration
 # ------------------------------------------------------------------------------
 # Path to your oh-my-zsh configuration.
-export ZSH="$HOME/dotfiles/home/ohmyzsh"
+export ZSH="$HOME/dotfiles/home/.ohmyzsh"
 
 # Set name of the theme to load.
 ZSH_THEME="powerlevel10k/powerlevel10k"
 
 # Custom plugins directory
-ZSH_CUSTOM="$HOME/dotfiles/home/zsh_custom"
+ZSH_CUSTOM="$HOME/dotfiles/home/.zsh_custom"
 
 # Auto-update settings
 DISABLE_AUTO_UPDATE="false"
