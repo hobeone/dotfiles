@@ -7,3 +7,4 @@ xclip
 gh
 btop
 lazygit
+stow
