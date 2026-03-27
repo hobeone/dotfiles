@@ -8,9 +8,9 @@ job="$2"
 dirname=$(dirname "$1")
 
 inotifywait -m -e close_write --format '%w%f' "$dirname" \
-	| while read file
+  | while read file
 do
-	if [[ $(realpath "$file") == "$path" ]]; then
-		sh -c "$job"
-	fi
+  if [[ $(realpath "$file") == "$path" ]]; then
+    sh -c "$job"
+  fi
 done
