@@ -15,4 +15,4 @@ resize-pane -y 5 \; \
 select-pane -t 2 \; \
 send-keys 'sudo intel_gpu_top' C-m \; \
 select-pane -t 3 \; \
-send-keys 'htop' C-m \; set -g mouse on
+send-keys 'btop' C-m \; set -g mouse on
