@@ -35,6 +35,11 @@ This project is a modular and modernized dotfiles repository designed to manage 
 *   **Visuals:** Uses `git-delta` for side-by-side, syntax-highlighted diffs.
 *   **Workflow:** Global `.gitignore_global` and various aliases (`st`, `co`, `br`, `lg`).
 
+### 5. Claude Code Configuration
+*   **Global Config:** `home/.claude/` contains agents, commands, hooks, and skills.
+*   **Symlinking:** Automatically symlinked to `~/.claude/` via GNU Stow.
+*   **Automation:** Hooks for lifecycle events and custom statusline for the Claude CLI.
+
 ## Development & Usage Conventions
 
 ### Symlinking Strategy
