@@ -15,6 +15,7 @@ Usage: $(basename "$0") [OPTIONS]
 Options:
     -n, --dry-run   Dry-run mode. Don't make any changes.
     -v, --verbose   Verbose output. Show commands being executed.
+    -d, --desktop   Desktop mode.  Install X11 desktop packages.
     -h, --help      Show this help message and exit.
 
 EOF

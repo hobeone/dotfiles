@@ -220,6 +220,10 @@ if ! command -v bat &> /dev/null && command -v batcat &> /dev/null; then
     alias bat='batcat'
 fi
 
+if command -v bat &>/dev/null; then
+  alias cat="bat"
+fi
+
 # ==============================================================================
 # File Listing
 # ==============================================================================
@@ -230,6 +234,7 @@ if command -v eza &>/dev/null; then
     alias l="eza -l --icons --no-quotes"
     alias la="eza -la --icons --no-quotes"
     alias lt="eza -T --icons --no-quotes"  # tree view
+    alias lan="eza -la -snew --icons --no-quotes"
 else
     alias ls="ls -G"
     alias l="ls -lhF"
