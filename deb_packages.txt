@@ -19,3 +19,4 @@ xautolock
 xfce4
 xsecurelock
 xss-lock
+inotify-tools
