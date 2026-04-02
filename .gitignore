@@ -12,3 +12,11 @@ home/.config/openbox/noscreenlock
 fonts/.uuid
 home/.config/alacritty/theme.toml
 home/.config/lazygit/tokyonight_night.yml
+
+# Claude Code
+/.claude/
+.worktrees/
+.parallel-context.md
+home/.claude/contrib/agent-event-bus/
+home/.claude/contrib/agent-session-analytics/
+home/.claude/contrib/agent-memory-store/

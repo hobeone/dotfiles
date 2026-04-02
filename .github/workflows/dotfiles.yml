@@ -1,0 +1,67 @@
+name: Dotfiles
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Install shellcheck
+        run: sudo apt-get install -y shellcheck
+
+      - name: Run shellcheck
+        run: make lint
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install zsh
+        run: sudo apt-get install -y zsh
+
+      - name: Run syntax checks
+        run: make test
+
+  hooks:
+    name: Hooks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install jq
+        run: sudo apt-get install -y jq
+
+      - name: Run hook tests
+        run: make test-hooks
+
+  bootstrap:
+    name: Bootstrap
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Verify scripts are executable
+        run: |
+          test -x bootstrap.sh
+          test -x uninstall.sh
+          test -x tests/test-hooks.sh
+
+      - name: Check for required files
+        run: |
+          test -f home/.zshrc
+          test -f home/.gitconfig
+          test -f home/.vimrc
+          test -f home/.tmux.conf
