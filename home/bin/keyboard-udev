@@ -1,17 +1,53 @@
 #!/bin/bash
-# Background process to allow udev to continue
+# keyboard-udev — udev bridge: runs as root, activates the user's keyboard-reset.service
+#
+# Triggered by /etc/udev/rules.d/99-keyboard.rules on USB keyboard add events.
+# Finds the active graphical session on seat0 and starts keyboard-reset.service
+# in that user's systemd session.
+#
+# Installed to /usr/local/bin/keyboard-udev by scripts/install_udev.sh
 
-# Path to lock file
-lock="/tmp/keyboard.lock"
+set -euo pipefail
 
-# Lock the file (other atomic alternatives would be "ln" or "mkdir")
-exec 9>"$lock"
+# Lock to prevent concurrent runs — udev fires one event per input interface
+# (e.g. keyboard + media keys = 2 events for one physical device)
+LOCK="/run/keyboard-udev.lock"
+exec 9>"$LOCK"
 if ! flock -n 9; then
-	notify-send -t 5000 "Keyboard script is already running."
-	exit 1
+    exit 0
+fi
+sleep 1  # let sibling udev events for the same device settle
+
+# ---------------------------------------------------------------------------
+# Find the first graphical session on seat0
+# ---------------------------------------------------------------------------
+SESSION=""
+while IFS= read -r line; do
+    session_id=$(awk '{print $1}' <<< "$line")
+    seat=$(awk      '{print $4}' <<< "$line")
+    [[ "$seat" == "seat0" ]] || continue
+    SESSION="$session_id"
+    break
+done < <(loginctl list-sessions --no-legend 2>/dev/null)
+
+if [[ -z "$SESSION" ]]; then
+    echo "keyboard-udev: no seat0 session found, skipping" >&2
+    exit 0
 fi
 
-#/usr/local/bin/keyboard &  # If Xorg would not reset settings after udev finished
-echo '' > /tmp/keyboard.lock &
+UID_NUM=$(loginctl show-session "$SESSION" -p User  --value)
+USER_NAME=$(id -nu "$UID_NUM")
+XDG_RUNTIME_DIR="/run/user/$UID_NUM"
 
-# The lock file will be unlocked when the script ends
+if [[ ! -d "$XDG_RUNTIME_DIR" ]]; then
+    echo "keyboard-udev: XDG_RUNTIME_DIR $XDG_RUNTIME_DIR not found, skipping" >&2
+    exit 0
+fi
+
+# ---------------------------------------------------------------------------
+# Start keyboard-reset.service in the user's systemd session
+# ---------------------------------------------------------------------------
+runuser -u "$USER_NAME" -- \
+    env XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" \
+        DBUS_SESSION_BUS_ADDRESS="unix:path=$XDG_RUNTIME_DIR/bus" \
+    systemctl --user start keyboard-reset.service

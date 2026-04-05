@@ -1,0 +1,29 @@
+#!/bin/bash
+# keyboard-sleep — re-apply keyboard settings after suspend/hibernate resume
+#
+# systemd-sleep calls scripts in /lib/systemd/system-sleep/ with:
+#   $1 = pre | post
+#   $2 = suspend | hibernate | hybrid-sleep | suspend-then-hibernate
+#
+# Installed to /lib/systemd/system-sleep/keyboard-sleep by scripts/install_udev.sh
+
+set -euo pipefail
+
+[[ "$1" == "post" ]] || exit 0
+
+while IFS= read -r line; do
+    session_id=$(awk '{print $1}' <<< "$line")
+    seat=$(awk      '{print $4}' <<< "$line")
+    [[ "$seat" == "seat0" ]] || continue
+
+    uid=$(loginctl show-session "$session_id" -p User --value 2>/dev/null) || continue
+    user=$(id -nu "$uid" 2>/dev/null) || continue
+    xdg_runtime="/run/user/$uid"
+    [[ -d "$xdg_runtime" ]] || continue
+
+    runuser -u "$user" -- \
+        env XDG_RUNTIME_DIR="$xdg_runtime" \
+            DBUS_SESSION_BUS_ADDRESS="unix:path=$xdg_runtime/bus" \
+        systemctl --user start keyboard-reset.service
+
+done < <(loginctl list-sessions --no-legend 2>/dev/null)
