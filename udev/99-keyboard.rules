@@ -1,4 +1,14 @@
-# WARNING: Command might be executed multiple times
+# 99-keyboard.rules — re-apply keyboard settings whenever a USB keyboard appears
 #
-# Copy to /etc/udev/rules.d/99-keyboard.rules
-ACTION=="add", ATTRS{idVendor}=="03ee", ATTRS{idProduct}=="5616", RUN+="/usr/local/bin/keyboard-udev"
+# ID_INPUT_KEYBOARD is set by udev's input_id builtin for any device that
+# presents keyboard capabilities. Fires on:
+#   - USB keyboard physically plugged in
+#   - KVM switches that re-enumerate the USB device on port switch
+#
+# keyboard-udev (root) bridges into the user's systemd session and starts
+# keyboard-reset.service, which calls ~/bin/keyboard-settings.
+
+SUBSYSTEM=="input", ACTION=="add", \
+    ENV{ID_INPUT_KEYBOARD}=="1", \
+    ENV{ID_BUS}=="usb", \
+    RUN+="/usr/local/bin/keyboard-udev"
