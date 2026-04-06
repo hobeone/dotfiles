@@ -1,36 +1,10 @@
 #!/bin/bash
 # keyboard-settings — apply keyboard and mouse settings for the current X session
 #
-# Called by keyboard-reset.service (triggered on USB keyboard add and suspend resume).
 # Safe to run multiple times.
 
-set -xuo pipefail
+set -euo pipefail
 
-# ---------------------------------------------------------------------------
-# Resolve display / authority
-# ---------------------------------------------------------------------------
-# When invoked from a udev/systemd service, DISPLAY and XAUTHORITY are not
-# set. Discover them from the environment of a process that is already
-# connected to the X session (e.g. the window manager or desktop session).
-if [[ -z "${DISPLAY:-}" || -z "${XAUTHORITY:-}" ]]; then
-    for pid in $(pgrep -u "${SUDO_USER:-$USER}" -x "Xorg|X|openbox|i3|sway|gnome-session|xfce4-session|startx" 2>/dev/null); do
-        env_file="/proc/$pid/environ"
-        [[ -r "$env_file" ]] || continue
-        _d=$(tr '\0' '\n' < "$env_file" | grep '^DISPLAY=' | cut -d= -f2-)
-        _xa=$(tr '\0' '\n' < "$env_file" | grep '^XAUTHORITY=' | cut -d= -f2-)
-        if [[ -n "$_d" ]]; then
-            DISPLAY="$_d"
-            [[ -n "$_xa" ]] && XAUTHORITY="$_xa"
-            break
-        fi
-    done
-fi
-
-: "${DISPLAY:=:0}"
-: "${XAUTHORITY:=$HOME/.Xauthority}"
-export DISPLAY XAUTHORITY
-
-# Bail out early if X is not reachable (e.g. called before login completes)
 if ! xset q &>/dev/null; then
     echo "keyboard-settings: X display $DISPLAY not available, skipping" >&2
     exit 0
@@ -43,20 +17,10 @@ fi
 xset r rate 220 30
 
 # ---------------------------------------------------------------------------
-# IBus — must use system keyboard layout or it will overwrite our XKB keymap
+# xmodmap
 # ---------------------------------------------------------------------------
-gsettings set org.freedesktop.ibus.general use-system-keyboard-layout true
 
-# ---------------------------------------------------------------------------
-# XKB keymap — load via xkbcomp so IBus sees one atomic update
-# ---------------------------------------------------------------------------
-# setxkbmap -print emits the current keymap spec; we inject an include for
-# our custom symbols (F7–F11 media keys, ctrl:nocaps) then compile and load
-# it in one shot.  xkbcomp -I adds ~/.config/xkb to the search path so
-# include "custom(fkeys)" resolves to ~/.config/xkb/symbols/custom.
-setxkbmap -option ctrl:nocaps -print \
-    | sed '/xkb_symbols/ s/[[:space:]]*};[[:space:]]*$/ include "custom(fkeys)" };/' \
-    | xkbcomp -I"$HOME/.config/xkb" - "$DISPLAY" 2>/dev/null
+xmodmap "$HOME/.Xmodmap"
 
 # ---------------------------------------------------------------------------
 # xinput
