@@ -25,6 +25,12 @@ xmodmap "$HOME/.Xmodmap"
 # ---------------------------------------------------------------------------
 # xinput
 # ---------------------------------------------------------------------------
+# Index Finger: left click
+# Middle Finger: Right Click
+# Ring Finger: Back
+# Scoll Click: Middle Click/Paste
+# Top Thumb: Forward
+# Bottom Thumb: Backward
 
 # Evoluent VerticalMouse 4 — remap buttons
 for mouse in "Kingsis Peripherals Evoluent VerticalMouse 4" "Evoluent VerticalMouse 4"; do
