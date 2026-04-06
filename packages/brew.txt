@@ -2,6 +2,7 @@ btop
 eza
 gh
 git-delta
+jq
 lazygit
 stow
 tmux

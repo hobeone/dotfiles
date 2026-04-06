@@ -268,6 +268,17 @@ install_tokyonight_themes() {
         fi
         log_info "Updated btop.conf to use tokyonight_night.theme"
     fi
+
+    # Update Gemini CLI theme
+    local gemini_settings="$HOME/.gemini/settings.json"
+    local gemini_theme="$vendor_dir/extras/gemini_cli/tokyonight_night.json"
+    if [[ -f "$gemini_settings" ]] && command -v jq &>/dev/null; then
+        local tmp
+        tmp=$(mktemp)
+        jq --arg t "$gemini_theme" '.ui.theme = $t' "$gemini_settings" > "$tmp"
+        execute mv "$tmp" "$gemini_settings"
+        log_info "Updated Gemini CLI theme in $gemini_settings"
+    fi
 }
 
 install_glow() {
