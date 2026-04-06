@@ -3,6 +3,7 @@ curl
 delta
 eza
 github-cli
+jq
 lazygit
 stow
 tmux
