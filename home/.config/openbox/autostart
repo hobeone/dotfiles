@@ -7,7 +7,12 @@ gsettings set com.canonical.desktop.interface scrollbar-mode normal &
 # Enable touchpad
 #xinput set-prop 11 "Device Enabled" 1 &
 
-xmodmap ~/.Xmodmap &
+# ---------------
+# Set keyboard & mouse settings and watch for changes to reapply them.
+# ---------------
+~/bin/keyboard-settings &
+~/bin/keyboard-watch &
+#xmodmap ~/.Xmodmap &
 #xset r rate 220 30 &
 
 xset dpms 300 600 600 &
@@ -29,5 +34,8 @@ if [ -f ~/.fehbg ]; then
   echo "Setting background"
   sh ~/.fehbg &
 fi
+
+# Set up screen lock
+~/bin/start-xss-lock &
 
 ~/.config/openbox/autostart.local.sh &
