@@ -7,6 +7,7 @@ set -euo pipefail
 
 DRY_RUN=false
 VERBOSE=false
+INSTALL_CLAUDE=false
 
 usage() {
     cat <<EOF
@@ -16,6 +17,7 @@ Options:
     -n, --dry-run   Dry-run mode. Don't make any changes.
     -v, --verbose   Verbose output. Show commands being executed.
     -d, --desktop   Desktop mode.  Install X11 desktop packages.
+    -c, --claude    Claude mode. Install Claude CLI configurations.
     -h, --help      Show this help message and exit.
 
 EOF
@@ -26,6 +28,7 @@ while [[ $# -gt 0 ]]; do
     case ${1} in
         -n|--dry-run) DRY_RUN=true; shift ;;
         -v|--verbose) VERBOSE=true; shift ;;
+        -c|--claude)  INSTALL_CLAUDE=true; shift ;;
         -h|--help)    usage; exit 0 ;;
         *)            echo "Unknown option: $1" >&2; usage; exit 1 ;;
     esac
@@ -338,7 +341,13 @@ main() {
     fi
 
     # Stow everything in home/, ignoring glow (handled separately)
-    execute stow --ignore="glow" -t "$HOME" home
+    # Ignore .claude unless explicitly requested
+    local stow_opts=("--ignore=glow" "-t" "$HOME" "home")
+    if ! $INSTALL_CLAUDE; then
+        stow_opts=("--ignore=\.claude" "${stow_opts[@]}")
+    fi
+
+    execute stow "${stow_opts[@]}"
 
     # Handle glow separately (copied instead of linked)
     install_glow

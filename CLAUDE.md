@@ -5,15 +5,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Repository Overview
 
 Modular and modernized dotfiles for Zsh, Vim, and system-level configurations. Supports Debian/Ubuntu, Arch Linux, Fedora, and macOS. Uses GNU Stow for symlinking, custom shell scripts for automation, and git submodules for third-party plugin management.
-
 ## Commands
 
 ```bash
 ./install.sh           # Full sync: pull, install/update packages, sync dotfiles
+./install.sh -c        # Full sync including Claude Code configurations
 ./install.sh -n        # Dry-run mode
 ./install.sh -v        # Verbose output
-git submodule update --init --recursive  # Update submodules
 ./scripts/update.sh    # Synchronize all submodules and update Oh My Zsh
+git submodule update --init --recursive  # Update submodules
 ```
 
 ## Architecture
