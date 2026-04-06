@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=Keyboard Watch
+Comment=Re-apply keyboard settings when devices change (KVM switch, USB plug)
+Exec=/home/hobe/bin/keyboard-watch
+Hidden=false
+X-GNOME-Autostart-enabled=true
