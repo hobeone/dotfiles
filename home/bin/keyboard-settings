@@ -2,7 +2,6 @@
 # keyboard-settings — apply keyboard and mouse settings for the current X session
 #
 # Safe to run multiple times.
-
 set -euo pipefail
 
 if ! xset q &>/dev/null; then
@@ -14,12 +13,13 @@ fi
 # ---------------------------------------------------------------------------
 # xset
 # ---------------------------------------------------------------------------
+echo "Setting keyboard repeat rate"
 xset r rate 220 30
 
 # ---------------------------------------------------------------------------
 # xmodmap
 # ---------------------------------------------------------------------------
-
+echo "Setting keyboard map with $HOME/.Xmodmap"
 xmodmap "$HOME/.Xmodmap"
 
 # ---------------------------------------------------------------------------
