@@ -36,17 +36,27 @@ if ! xset q &>/dev/null; then
     exit 0
 fi
 
+
 # ---------------------------------------------------------------------------
 # xset
 # ---------------------------------------------------------------------------
 xset r rate 220 30
 
 # ---------------------------------------------------------------------------
-# xmodmap
+# IBus — must use system keyboard layout or it will overwrite our XKB keymap
 # ---------------------------------------------------------------------------
-if [[ -f "$HOME/.Xmodmap" ]]; then
-    xmodmap -verbose "$HOME/.Xmodmap"
-fi
+gsettings set org.freedesktop.ibus.general use-system-keyboard-layout true
+
+# ---------------------------------------------------------------------------
+# XKB keymap — load via xkbcomp so IBus sees one atomic update
+# ---------------------------------------------------------------------------
+# setxkbmap -print emits the current keymap spec; we inject an include for
+# our custom symbols (F7–F11 media keys, ctrl:nocaps) then compile and load
+# it in one shot.  xkbcomp -I adds ~/.config/xkb to the search path so
+# include "custom(fkeys)" resolves to ~/.config/xkb/symbols/custom.
+setxkbmap -option ctrl:nocaps -print \
+    | sed '/xkb_symbols/ s/[[:space:]]*};[[:space:]]*$/ include "custom(fkeys)" };/' \
+    | xkbcomp -I"$HOME/.config/xkb" - "$DISPLAY" 2>/dev/null
 
 # ---------------------------------------------------------------------------
 # xinput

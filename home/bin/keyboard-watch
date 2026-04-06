@@ -1,0 +1,31 @@
+#!/bin/bash
+# keyboard-watch — X session daemon: re-apply keyboard settings on device changes
+#
+# Listens for XI2 HierarchyChanged events on the root window. X fires this event
+# after it has fully initialized a new keyboard device (including resetting the
+# global XKB keymap to its default xkb_layout). Reacting here — rather than to
+# the raw udev event — guarantees keyboard-settings runs after X's reset, not
+# before it.
+#
+# Autostarted by ~/.config/autostart/keyboard-watch.desktop
+
+set -euo pipefail
+
+LOCK="/tmp/keyboard-watch.lock"
+
+apply() {
+    ( flock -n 200 || exit 0
+      keyboard-settings
+    ) 200>"$LOCK" &
+}
+
+# Apply once at session start
+apply
+wait
+
+# Watch for keyboard hierarchy changes (KVM switch, USB plug/unplug)
+xinput test-xi2 --root 2>/dev/null \
+    | grep --line-buffered 'HierarchyChanged' \
+    | while IFS= read -r _; do
+          apply
+      done
