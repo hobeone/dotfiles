@@ -9,7 +9,7 @@
 # Previously used `xinput test-xi2 --root`, which selects all XI2 events on the
 # root window and interferes with Openbox receiving mouse events on the desktop.
 #
-# Autostarted by ~/.config/autostart/keyboard-watch.desktop
+# started by ~/.config/openbox/autostart
 
 set -euo pipefail
 

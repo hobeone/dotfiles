@@ -21,9 +21,16 @@ while IFS= read -r line; do
     xdg_runtime="/run/user/$uid"
     [[ -d "$xdg_runtime" ]] || continue
 
+    display=$(loginctl show-session "$session_id" -p Display --value 2>/dev/null) || continue
+    [[ -n "$display" ]] || continue
+
+    home=$(getent passwd "$user" | cut -d: -f6) || continue
+
     runuser -u "$user" -- \
         env XDG_RUNTIME_DIR="$xdg_runtime" \
             DBUS_SESSION_BUS_ADDRESS="unix:path=$xdg_runtime/bus" \
-        systemctl --user start keyboard-reset.service
+            DISPLAY="$display" \
+            XAUTHORITY="$home/.Xauthority" \
+        keyboard-settings
 
 done < <(loginctl list-sessions --no-legend 2>/dev/null)
