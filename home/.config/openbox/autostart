@@ -35,7 +35,9 @@ if [ -f ~/.fehbg ]; then
   sh ~/.fehbg &
 fi
 
+
 # Set up screen lock
 ~/bin/start-xss-lock &
+xfconf-query --create -c xfce4-session -p /general/LockCommand -t string -s "xset s activate" &
 
 ~/.config/openbox/autostart.local.sh &
