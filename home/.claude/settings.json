@@ -9,7 +9,6 @@
     "allow": [],
     "defaultMode": "bypassPermissions"
   },
-  "model": "opus[1m]",
   "hooks": {
     "UserPromptSubmit": [
       {
@@ -68,7 +67,8 @@
   },
   "statusLine": {
     "type": "command",
-    "command": "~/.claude/statusline-command.sh"
+    "command": "~/.claude/statusline-command.sh",
+    "padding": 0
   },
   "enabledPlugins": {
     "feature-dev@claude-plugins-official": true,
@@ -87,6 +87,5 @@
     "pyright-lsp@claude-plugins-official": true,
     "typescript-lsp@claude-plugins-official": true
   },
-  "fastMode": true,
   "skipDangerousModePermissionPrompt": true
 }
