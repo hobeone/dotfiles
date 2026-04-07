@@ -1,17 +1,20 @@
-#!/bin/sh -ex
+#!/bin/sh -e
 # Note: the following have to be set here because the dimmer program doesn't
 # read from ~/.xsecurelockrc.
-export XSECURELOCK_DIM_TIME_MS=15000   # must match the second param of `xset s`
-export XSECURELOCK_WAIT_TIME_MS=16000  # must be greater than value above
+DIM_SECS=15
+export XSECURELOCK_DIM_TIME_MS=$((DIM_SECS * 1000))   # must match the second param of `xset s`
+export XSECURELOCK_WAIT_TIME_MS=$(((DIM_SECS + 1) * 1000))  # must be greater than value above
 
 export XSECURELOCK_BLANK_DPMS_STATE=off
 export XSECURELOCK_BLANK_TIMEOUT=30
 
-xset s 300 15  # Invoke after 300 seconds of idle, and dim for 15 seconds.
-xss-lock -n /usr/libexec/xsecurelock/dimmer -l -- ~/bin/xsecurelock.sh &
+xset s 300 $DIM_SECS  # Invoke after 300 seconds of idle, and dim for 15 seconds.
+xss-lock -n /usr/libexec/xsecurelock/dimmer -l -- "$HOME/bin/xsecurelock.sh" &
 
+# LOCKED_BY_SESSION_IDLE is intentionally only set for xautolock's locker, not
+# the xss-lock locker above.
 export LOCKED_BY_SESSION_IDLE=true
 xautolock -time 5 -detectsleep \
   -notify 10 \
   -notifier '/usr/libexec/xsecurelock/until_nonidle /usr/libexec/xsecurelock/dimmer' \
-  -locker ~/bin/xsecurelock.sh &
+  -locker "$HOME/bin/xsecurelock.sh" &
