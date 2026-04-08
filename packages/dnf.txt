@@ -11,9 +11,4 @@ stow
 tmux
 unzip
 watch
-xautolock
-xclip
-xorg-x11-server-utils
-xsecurelock
-xss-lock
 zoxide
