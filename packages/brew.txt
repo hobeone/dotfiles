@@ -1,9 +1,11 @@
+bat
 btop
 eza
 gh
 git-delta
 jq
 lazygit
+ripgrep
 stow
 tmux
 watch
