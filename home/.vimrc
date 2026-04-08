@@ -21,7 +21,7 @@ if empty(glob(data_dir . '/autoload/plug.vim'))
   autocmd VimEnter * PlugInstall --sync | source ~/.vimrc
 endif
 
-let g:ale_completion_enabled = 1
+" let g:ale_completion_enabled = 1  " disabled: using ALE for linting only; YCM commented out
 
 " -----------------------------------------------------------------------------
 " 2. Plugin Management (vim-plug)
@@ -31,7 +31,6 @@ call plug#begin('~/.vim/plugged')
 " UI & Aesthetics
 Plug 'ghifarit53/tokyonight-vim'
 Plug 'itchyny/lightline.vim'
-Plug 'vim-airline/vim-airline'
 
 " Navigation & File Management
 Plug 'scrooloose/nerdtree'
@@ -44,7 +43,7 @@ Plug 'alpaca-tc/vim-endwise'
 Plug 'godlygeek/tabular'
 Plug 'sirver/ultisnips'
 Plug 'honza/vim-snippets'
-Plug 'w0rp/ale'
+Plug 'dense-analysis/ale'
 
 " Language Support
 Plug 'fatih/vim-go', { 'for': 'go' }
@@ -57,13 +56,9 @@ Plug 'chr4/nginx.vim'
 Plug 'hashivim/vim-terraform'
 Plug 'depuracao/vim-rdoc'
 Plug 'isobit/vim-caddyfile'
-Plug 'scrooloose/syntastic'
-
 " Additional plugins found in filesystem
-"Plug 'ycm-core/YouCompleteMe'
-Plug 'dense-analysis/ale'
 Plug 'tpope/vim-sensible'
-Plug 'ycm-core/YouCompleteMe'
+"Plug 'ycm-core/YouCompleteMe'
 
 call plug#end()
 filetype plugin indent on    " Required: Enable filetype detection, plugins, and indent
@@ -224,22 +219,24 @@ let g:go_highlight_interfaces = 1
 let g:go_highlight_operators = 1
 let g:go_highlight_build_constraints = 1
 
-" YCM (YouCompleteMe)
-let g:ycm_keep_logfiles = 1
-let g:ycm_log_level = 'debug'
-let g:ycm_enable_semantic_highlighting = 1
-let g:ycm_gopls_binary_path = expand('$GOPATH/bin/gopls')
-let g:ycm_semantic_triggers = {
-  \   'c' : ['->', '.'],
-  \   'go' : ['.'],
-  \   'objc' : ['->', '.'],
-  \   'cpp,objcpp' : ['->', '.', '::'],
-  \   'perl' : ['->'],
-  \   'php' : ['->', '::'],
-  \   'cs,java,javascript,d,vim,ruby,python,perl6,scala,vb,elixir,go' : ['.'],
-  \   'lua' : ['.', ':'],
-  \   'erlang' : [':'],
-  \ }
+" YCM (YouCompleteMe) — commented out; using ALE for linting, no completion engine
+" To re-enable: uncomment below, uncomment Plug 'ycm-core/YouCompleteMe', and
+" set g:ale_completion_enabled = 1 -> 0 to avoid conflicts.
+"let g:ycm_keep_logfiles = 1
+"let g:ycm_log_level = 'debug'
+"let g:ycm_enable_semantic_highlighting = 1
+"let g:ycm_gopls_binary_path = expand('$GOPATH/bin/gopls')
+"let g:ycm_semantic_triggers = {
+"  \   'c' : ['->', '.'],
+"  \   'go' : ['.'],
+"  \   'objc' : ['->', '.'],
+"  \   'cpp,objcpp' : ['->', '.', '::'],
+"  \   'perl' : ['->'],
+"  \   'php' : ['->', '::'],
+"  \   'cs,java,javascript,d,vim,ruby,python,perl6,scala,vb,elixir,go' : ['.'],
+"  \   'lua' : ['.', ':'],
+"  \   'erlang' : [':'],
+"  \ }
 
 " Javascript
 let g:used_javascript_libs = 'angular, angularui'
