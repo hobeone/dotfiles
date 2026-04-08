@@ -17,6 +17,13 @@ gsettings set com.canonical.desktop.interface scrollbar-mode normal &
 
 xset dpms 300 600 600 &
 xrdb ~/.Xresources &
+# Set up screen lock
+~/bin/start-xss-lock &
+
+# xfsettingsd will capture lock screen key commands unless we remove them:
+xfconf-query -c xfce4-keyboard-shortcuts -p '/commands/custom/<Primary><Alt>l' -r
+xfconf-query --create -c xfce4-session -p /general/LockCommand -t string -s "xset s activate" &
+
 xfsettingsd --no-daemon &
 xfce4-power-manager --no-daemon &
 /usr/lib/x86_64-linux-gnu/xfce4/notifyd/xfce4-notifyd &
@@ -36,8 +43,5 @@ if [ -f ~/.fehbg ]; then
 fi
 
 
-# Set up screen lock
-~/bin/start-xss-lock &
-xfconf-query --create -c xfce4-session -p /general/LockCommand -t string -s "xset s activate" &
 
 ~/.config/openbox/autostart.local.sh &
