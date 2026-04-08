@@ -168,102 +168,6 @@ WORDCHARS=${WORDCHARS/\-/}
 WORDCHARS=${WORDCHARS/\./}
 
 
-##############################################################################
-# basic env
-##############################################################################
-#unset MAIL
-#export MAILDIR="~/Maildir/"
-
-export PAGER="less -r"
-export EDITOR="vim"
-
-case $TERM in
-  xterm*|rxvt|Eterm)
-    precmd () {print -Pn "\e]0;%n@%M: %~\a"}
-  ;;
-esac
-
-# Disables warnings about "Couldn't register with accessibility bus"
-export NO_AT_BRIDGE=1
-
-# Truecolor support - apps check this env var for 24-bit color capability
-export COLORTERM='truecolor'
-
-##############################################################################
-# command aliases
-##############################################################################
-# If running interactively, then:
-if [ "$PS1" ]; then
-  alias ls='ls --color=auto'
-  eval `dircolors`
-fi
-d=~/.dircolors
-test -r $d && eval "$(dircolors $d)"
-
-# https://unix.stackexchange.com/questions/258679/why-is-ls-suddenly-wrapping-items-with-spaces-in-single-quotes
-export QUOTING_STYLE=literal
-
-alias par="parchive"
-compdef '_files -g "*.(par|PAR)2"' par2
-compdef '_files -g "*.rar"' rar
-
-alias irb='irb -r irb/completion'
-alias ri='ri --format ansi'
-
-alias vim='vim -X -o -u $HOME/.vimrc "$@"'
-alias gvim='gvim -o -u $HOME/.vimrc -geom 80x24 "$@"'
-
-alias tmux='tmux -2'
-
-# Check if 'bat' does NOT exist, but 'batcat' DOES exist.  Debian installs the command as batcat
-if ! command -v bat &> /dev/null && command -v batcat &> /dev/null; then
-    alias bat='batcat'
-fi
-
-if command -v bat &>/dev/null; then
-  alias cat="bat"
-fi
-
-# ==============================================================================
-# File Listing
-# ==============================================================================
-
-# Use eza if available, otherwise fall back to ls
-if command -v eza &>/dev/null; then
-    alias ls="eza --no-quotes"
-    alias l="eza -l --icons --no-quotes"
-    alias la="eza -la --icons --no-quotes"
-    alias lt="eza -T --icons --no-quotes"  # tree view
-    alias lan="eza -la -snew --icons --no-quotes"
-else
-    alias ls="ls -G"
-    alias l="ls -lhF"
-    alias la="ls -lAhF"
-fi
-
-# ==============================================================================
-# zoxide (smart cd)
-# ==============================================================================
-
-if command -v zoxide &>/dev/null; then
-    eval "$(zoxide init zsh)"
-fi
-
-##############################################################################
-# command configuration
-##############################################################################
-if [ -e $HOME/bin/lesspipe.sh ]; then
-    export LESSOPEN="|$HOME/bin/lesspipe.sh %s" # preprocess compressed files
-fi
-
-LESS='-R'
-LESSEDIT="%E ?lt+%lt. %f"
-LESSCHARDEF=8bcccbcc13b.4b95.33b. # show colours in ls -l | less
-export LESS LESSEDIT LESSCHARDEF
-
-export CVS_RSH=ssh
-export RSYNC_RSH=ssh
-
 # ------------------------------------------------------------------------------
 # 8. Helper Functions
 # ------------------------------------------------------------------------------
@@ -351,12 +255,21 @@ case $TERM in
   ;;
 esac
 
+# bat (cat replacement; Debian installs as batcat)
+if ! command -v bat &>/dev/null && command -v batcat &>/dev/null; then
+    alias bat='batcat'
+fi
+if command -v bat &>/dev/null; then
+    alias cat="bat"
+fi
+
 # Modern Tooling (eza & zoxide)
 if command -v eza &>/dev/null; then
     alias ls="eza --no-quotes"
     alias l="eza -l --icons --no-quotes"
     alias la="eza -la --icons --no-quotes"
     alias lt="eza -T --icons --no-quotes"
+    alias lan="eza -la -snew --icons --no-quotes"
 else
     alias ls="ls -G"
     alias l="ls -lhF"
