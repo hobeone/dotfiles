@@ -16,7 +16,9 @@ swayosd
 wdisplays
 wlopm
 wlr-randr
+x11-xserver-utils
 xautolock
+xclip
 xfce4
 xsecurelock
 xss-lock
