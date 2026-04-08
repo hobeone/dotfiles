@@ -21,7 +21,7 @@ if empty(glob(data_dir . '/autoload/plug.vim'))
   autocmd VimEnter * PlugInstall --sync | source ~/.vimrc
 endif
 
-let g:ale_completion_enabled = 1  " disabled: using ALE for linting only; YCM commented out
+let g:ale_completion_enabled = 1
 
 " -----------------------------------------------------------------------------
 " 2. Plugin Management (vim-plug)
@@ -62,10 +62,11 @@ filetype plugin indent on    " Required: Enable filetype detection, plugins, and
 
 
 let g:ale_linters = {
-\   'go': ['gopls', 'golangci-lint']
+\   'go': ['gopls', 'golangci-lint'],
 \}
 let g:ale_fixers = {
-\   'go': ['goimports']
+\   '*': ['remove_trailing_lines', 'trim_whitespace'],
+\   'go': ['goimports'],
 \}
 let g:ale_go_golangci_lint_package = 1
 let g:ale_fix_on_save = 1
@@ -83,9 +84,9 @@ let g:rehash256 = 1           " Improved 256 color support
 function! s:SetupCustomHighlights()
   highlight ExtraWhitespace ctermbg=red guibg=red
   highlight Tabs ctermbg=red guibg=red
-  highlight Search ctermbg=red ctermfg=white guifg=#FFFFFF guibg=#FF0000
-  highlight Comment gui=NONE
-  highlight Normal guibg=black
+  "highlight Search ctermbg=red ctermfg=white guifg=#FFFFFF guibg=#FF0000
+  "highlight Comment gui=NONE
+  "highlight Normal guibg=black
 endfunction
 
 augroup CustomHighlights
@@ -208,32 +209,27 @@ let g:UltiSnipsJumpBackwardTrigger="<c-k>"
 let delimitMate_expand_cr = 1
 
 " Go Support
-let g:go_fmt_command = "goimports"
+" ALE owns gopls (completion, diagnostics, formatting) — vim-go handles tooling commands
+let g:go_def_mode = 'gopls'
+let g:go_info_mode = 'gopls'
+let g:go_referrers_mode = 'gopls'
+let g:go_rename_command = 'gopls'
+let g:go_fmt_autosave = 0           " ALE handles goimports on save
+let g:go_imports_autosave = 0
+let g:go_diagnostics_enabled = 0    " ALE shows diagnostics
+let g:go_metalinter_autosave = 0    " ALE handles golangci-lint
+
 let g:go_highlight_functions = 1
 let g:go_highlight_methods = 1
 let g:go_highlight_structs = 1
 let g:go_highlight_interfaces = 1
 let g:go_highlight_operators = 1
 let g:go_highlight_build_constraints = 1
+let g:go_highlight_types = 1
+let g:go_highlight_fields = 1
+let g:go_highlight_function_calls = 1
+let g:go_highlight_extra_types = 1
 
-" YCM (YouCompleteMe) — commented out; using ALE for linting, no completion engine
-" To re-enable: uncomment below, uncomment Plug 'ycm-core/YouCompleteMe', and
-" set g:ale_completion_enabled = 1 -> 0 to avoid conflicts.
-"let g:ycm_keep_logfiles = 1
-"let g:ycm_log_level = 'debug'
-"let g:ycm_enable_semantic_highlighting = 1
-"let g:ycm_gopls_binary_path = expand('$GOPATH/bin/gopls')
-"let g:ycm_semantic_triggers = {
-"  \   'c' : ['->', '.'],
-"  \   'go' : ['.'],
-"  \   'objc' : ['->', '.'],
-"  \   'cpp,objcpp' : ['->', '.', '::'],
-"  \   'perl' : ['->'],
-"  \   'php' : ['->', '::'],
-"  \   'cs,java,javascript,d,vim,ruby,python,perl6,scala,vb,elixir,go' : ['.'],
-"  \   'lua' : ['.', ':'],
-"  \   'erlang' : [':'],
-"  \ }
 
 " -----------------------------------------------------------------------------
 " 9. AutoCommands & Custom Logic
@@ -260,10 +256,14 @@ augroup FileTypeLogic
   autocmd BufRead *.py set indentexpr=GetGooglePythonIndent(v:lnum)
   autocmd FileType python let b:delimitMate_nesting_quotes = ['"', "'"]
 
-  " Go
-  autocmd BufWinEnter *.go match Tabs "\t\+$"
-  autocmd BufWinLeave *.go match Tabs "\t"
-  autocmd Filetype go nnoremap <leader>v :sp <CR>:exe "GoDef" <CR>
+  " Go — use real tabs (goimports expects them); don't highlight them
+  autocmd FileType go setlocal noexpandtab tabstop=2 shiftwidth=2
+  autocmd BufWinEnter *.go match none
+  autocmd FileType go nnoremap <buffer> <leader>v :sp<CR>:GoDef<CR>
+  autocmd FileType go nnoremap <buffer> <leader>t :GoTest<CR>
+  autocmd FileType go nnoremap <buffer> <leader>b :GoBuild<CR>
+  autocmd FileType go nnoremap <buffer> <leader>c :GoCoverage<CR>
+  autocmd FileType go nnoremap <buffer> <leader>i :GoInfo<CR>
 
   " HTML
   autocmd BufWinEnter *.html set textwidth=0 wrapmargin=0
