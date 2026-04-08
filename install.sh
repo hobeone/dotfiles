@@ -143,6 +143,46 @@ install_packages() {
     esac
 }
 
+# 3. Install Desktop Packages
+install_desktop_packages() {
+    if ! $INSTALL_DESKTOP; then
+        return 0
+    fi
+
+    local pkg_file="$DOTFILES_DIR/packages/$PKG_MGR-desktop.txt"
+    if [[ ! -f "$pkg_file" ]]; then
+        log_warn "No desktop package list for $PKG_MGR (looked for $pkg_file). Skipping."
+        return 0
+    fi
+
+    local packages=()
+    mapfile -t packages < <(grep -Ev '^\s*(#|$)' "$pkg_file")
+
+    if [[ ${#packages[@]} -eq 0 ]]; then
+        log_info "No desktop packages to install."
+        return 0
+    fi
+
+    case "$PKG_MGR" in
+        apt)
+            log_info "Installing desktop packages via apt..."
+            execute sudo apt update
+            execute sudo apt install -y "${packages[@]}"
+            ;;
+        pacman)
+            log_info "Installing desktop packages via pacman..."
+            execute sudo pacman -Sy --needed "${packages[@]}"
+            ;;
+        dnf)
+            log_info "Installing desktop packages via dnf..."
+            execute sudo dnf install -y "${packages[@]}"
+            ;;
+        brew)
+            log_warn "Desktop packages are Linux-only. Skipping on macOS."
+            ;;
+    esac
+}
+
 # 4. Initialize Submodules
 init_submodules() {
     log_info "Initializing submodules..."
@@ -348,6 +388,9 @@ main() {
 
     # 4. Install Packages
     install_packages
+
+    # 4b. Install Desktop Packages (only with -d flag)
+    install_desktop_packages
 
     # 5. Install Fonts
     install_fonts

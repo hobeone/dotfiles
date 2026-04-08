@@ -1,3 +1,4 @@
+bat
 btop
 curl
 delta
@@ -5,6 +6,7 @@ eza
 github-cli
 jq
 lazygit
+ripgrep
 stow
 tmux
 unzip

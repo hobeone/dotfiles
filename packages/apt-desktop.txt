@@ -1,5 +1,6 @@
 brightnessctl
 foot
+inotify-tools
 input-remapper
 kanshi
 kitty
@@ -7,10 +8,10 @@ labwc
 pamixer
 playerctl
 sway
+sway-notification-center
 swaybg
 swayidle
 swaylock
-sway-notification-center
 swayosd
 wdisplays
 wlopm
@@ -19,4 +20,3 @@ xautolock
 xfce4
 xsecurelock
 xss-lock
-inotify-tools
