@@ -284,6 +284,57 @@ install_tokyonight_themes() {
     fi
 }
 
+symlink_claude_dir() {
+    local dir_name="$1"
+    local src_dir="$HOME_DIR/.claude/$dir_name"
+    local dest_dir="$HOME/.claude/$dir_name"
+
+    if [[ ! -d "$src_dir" ]]; then
+        return 0
+    fi
+
+    mkdir -p "$HOME/.claude"
+
+    # Skip if already correctly symlinked
+    if [[ -L "$dest_dir" && "$(readlink "$dest_dir")" == "$src_dir" ]]; then
+        return 0
+    fi
+
+    # Remove existing directory/symlink if present
+    if [[ -e "$dest_dir" || -L "$dest_dir" ]]; then
+        rm -rf "$dest_dir"
+    fi
+
+    ln -s "$src_dir" "$dest_dir"
+    log_info "Linked: ~/.claude/$dir_name/"
+}
+
+install_claude_dirs() {
+    local src_claude="$HOME_DIR/.claude"
+    log_info "Symlinking Claude Code directories and files..."
+    mkdir -p "$HOME/.claude"
+
+    for src in "$src_claude"/*; do
+        local name="${src##*/}"
+        local dest="$HOME/.claude/$name"
+
+        # Skip if already correctly symlinked
+        if [[ -L "$dest" && "$(readlink "$dest")" == "$src" ]]; then
+            continue
+        fi
+
+        if [[ -d "$src" ]]; then
+            # For directories, use symlink_claude_dir (preserves content-only logic)
+            symlink_claude_dir "$name"
+        elif [[ -f "$src" ]]; then
+            # Remove stale entry and symlink the file
+            [[ -e "$dest" || -L "$dest" ]] && rm -f "$dest"
+            ln -s "$src" "$dest"
+            log_info "Linked: ~/.claude/$name"
+        fi
+    done
+}
+
 install_glow() {
     log_info "Installing glow config (copying to avoid git diffs)..."
     local glow_src_dir="$HOME_DIR/.config/glow"
@@ -340,17 +391,21 @@ main() {
         exit 1
     fi
 
-    # Stow everything in home/, ignoring glow (handled separately)
-    # Ignore .claude unless explicitly requested
-    local stow_opts=("--ignore=glow" "-t" "$HOME" "home")
-    if ! $INSTALL_CLAUDE; then
-        stow_opts=("--ignore=\.claude" "${stow_opts[@]}")
+    # Stow everything in home/, ignoring glow and .claude (handled separately)
+    local stow_opts=("--ignore=glow" "--ignore=\.claude" "-t" "$HOME" "home")
+    if $VERBOSE; then
+        stow_opts=("--verbose=3" "${stow_opts[@]}")
     fi
 
     execute stow "${stow_opts[@]}"
 
     # Handle glow separately (copied instead of linked)
     install_glow
+
+    # Handle .claude subdirs separately (symlinked per-directory, not via stow)
+    if $INSTALL_CLAUDE; then
+        install_claude_dirs
+    fi
 
     # 8. Ensure Local Files Exist
     ensure_local_files
