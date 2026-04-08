@@ -7,6 +7,7 @@ set -euo pipefail
 
 DRY_RUN=false
 VERBOSE=false
+INSTALL_DESKTOP=false
 INSTALL_CLAUDE=false
 
 usage() {
@@ -28,6 +29,7 @@ while [[ $# -gt 0 ]]; do
     case ${1} in
         -n|--dry-run) DRY_RUN=true; shift ;;
         -v|--verbose) VERBOSE=true; shift ;;
+        -d|--desktop) INSTALL_DESKTOP=true; shift ;;
         -c|--claude)  INSTALL_CLAUDE=true; shift ;;
         -h|--help)    usage; exit 0 ;;
         *)            echo "Unknown option: $1" >&2; usage; exit 1 ;;
@@ -83,11 +85,11 @@ detect_os() {
         # shellcheck disable=SC1091
         . /etc/os-release
         OS=$NAME
-        if [[ "$ID" == "ubuntu" ]] || [[ "$ID" == "debian" ]] || [[ "$ID_LIKE" == *"debian"* ]]; then
+        if [[ "$ID" == "ubuntu" ]] || [[ "$ID" == "debian" ]] || [[ "${ID_LIKE:-}" == *"debian"* ]]; then
             PKG_MGR="apt"
-        elif [[ "$ID" == "arch" ]] || [[ "$ID_LIKE" == *"arch"* ]]; then
+        elif [[ "$ID" == "arch" ]] || [[ "${ID_LIKE:-}" == *"arch"* ]]; then
             PKG_MGR="pacman"
-        elif [[ "$ID" == "fedora" ]] || [[ "$ID_LIKE" == *"rhel"* ]]; then
+        elif [[ "$ID" == "fedora" ]] || [[ "${ID_LIKE:-}" == *"rhel"* ]]; then
             PKG_MGR="dnf"
         else
             PKG_MGR="unknown"
@@ -113,10 +115,7 @@ install_packages() {
     fi
 
     local packages=()
-    while IFS= read -r line || [[ -n "$line" ]]; do
-        [[ -z "$line" || "$line" == \#* ]] && continue
-        packages+=("$line")
-    done < "$pkg_file"
+    mapfile -t packages < <(grep -Ev '^\s*(#|$)' "$pkg_file")
 
     if [[ ${#packages[@]} -eq 0 ]]; then
         log_info "No packages to install for $PKG_MGR."
@@ -154,7 +153,7 @@ init_submodules() {
     fi
 
     # More robust check: check if any submodules are uninitialized
-    if [[ -z "$(git submodule status --recursive | grep '^-')" ]]; then
+    if ! git submodule status --recursive | grep -q '^-'; then
         log_info "Submodules already initialized."
         return 0
     fi
@@ -211,11 +210,11 @@ install_fonts() {
             log_info "Installing JetBrains Mono Nerd Font..."
             local tmp_dir
             tmp_dir=$(mktemp -d)
-            trap 'rm -rf "$tmp_dir"' EXIT
 
             execute mkdir -p "$HOME/.local/share/fonts"
             execute curl -fsSL -o "$tmp_dir/JetBrainsMono.zip" "https://github.com/ryanoasis/nerd-fonts/releases/latest/download/JetBrainsMono.zip"
             execute unzip -o "$tmp_dir/JetBrainsMono.zip" -d "$HOME/.local/share/fonts/"
+            rm -rf "$tmp_dir"
             
             if command -v fc-cache &>/dev/null; then
                 execute fc-cache -fv
@@ -284,35 +283,10 @@ install_tokyonight_themes() {
     fi
 }
 
-symlink_claude_dir() {
-    local dir_name="$1"
-    local src_dir="$HOME_DIR/.claude/$dir_name"
-    local dest_dir="$HOME/.claude/$dir_name"
-
-    if [[ ! -d "$src_dir" ]]; then
-        return 0
-    fi
-
-    mkdir -p "$HOME/.claude"
-
-    # Skip if already correctly symlinked
-    if [[ -L "$dest_dir" && "$(readlink "$dest_dir")" == "$src_dir" ]]; then
-        return 0
-    fi
-
-    # Remove existing directory/symlink if present
-    if [[ -e "$dest_dir" || -L "$dest_dir" ]]; then
-        rm -rf "$dest_dir"
-    fi
-
-    ln -s "$src_dir" "$dest_dir"
-    log_info "Linked: ~/.claude/$dir_name/"
-}
-
 install_claude_dirs() {
     local src_claude="$HOME_DIR/.claude"
     log_info "Symlinking Claude Code directories and files..."
-    mkdir -p "$HOME/.claude"
+    execute mkdir -p "$HOME/.claude"
 
     for src in "$src_claude"/*; do
         local name="${src##*/}"
@@ -323,15 +297,13 @@ install_claude_dirs() {
             continue
         fi
 
-        if [[ -d "$src" ]]; then
-            # For directories, use symlink_claude_dir (preserves content-only logic)
-            symlink_claude_dir "$name"
-        elif [[ -f "$src" ]]; then
-            # Remove stale entry and symlink the file
-            [[ -e "$dest" || -L "$dest" ]] && rm -f "$dest"
-            ln -s "$src" "$dest"
-            log_info "Linked: ~/.claude/$name"
+        # Remove stale entry if present
+        if [[ -e "$dest" || -L "$dest" ]]; then
+            execute rm -rf "$dest"
         fi
+
+        execute ln -s "$src" "$dest"
+        log_info "Linked: ~/.claude/$name"
     done
 }
 
