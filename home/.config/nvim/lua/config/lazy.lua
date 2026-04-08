@@ -59,6 +59,22 @@ require("lazy").setup({
 })
 local opt = vim.opt
 
+-- Editor options
+
+opt.number = true -- Print the line number in front of each line
+opt.relativenumber = false -- Show the line number relative to the line with the cursor in front of each line.
+opt.clipboard = "unnamedplus" -- uses the clipboard register for all operations except yank.
+opt.syntax = "on" -- When this option is set, the syntax with this name is loaded.
+opt.autoindent = true -- Copy indent from current line when starting a new line.
+opt.cursorline = true -- Highlight the screen line of the cursor with CursorLine.
+opt.expandtab = true -- In Insert mode: Use the appropriate number of spaces to insert a <Tab>.
+opt.encoding = "UTF-8" -- Sets the character encoding used inside Vim.
+opt.mouse = "a" -- Enable the use of the mouse. "a" you can use on all modes
+opt.title = true -- When on, the title of the window will be set to the value of 'titlestring'
+opt.hidden = true -- When on a buffer becomes hidden when it is |abandon|ed
+opt.ttimeoutlen = 0 -- The time in milliseconds that is waited for a key code or mapped key sequence to complete.
+opt.showcmd = true -- Show (partial) command in the last line of the screen. Set this option off if your terminal is slow.
+opt.showmatch = true -- When a bracket is inserted, briefly jump to the matching one.
 opt.foldlevel = 99
 opt.foldmethod = "indent"
 opt.foldtext = ""
