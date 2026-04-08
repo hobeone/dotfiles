@@ -41,22 +41,16 @@ ZSH_AUTOSUGGEST_STRATEGY=(history completion)
 
 # Which plugins would you like to load?
 plugins=(
-    git 
-    ruby 
-    rsync 
-    rvm 
-    bundler 
-    cp 
-    history-substring-search 
-    themes 
-    npm 
-    bower 
-    golang 
-    tmux 
-    colorize 
-    systemd 
-    zsh-autosuggestions 
-    zsh-syntax-highlighting 
+    git
+    rsync
+    cp
+    history-substring-search
+    golang
+    tmux
+    colorize
+    systemd
+    zsh-autosuggestions
+    zsh-syntax-highlighting
     ssh-agent
 )
 

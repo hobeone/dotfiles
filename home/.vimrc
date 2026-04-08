@@ -51,11 +51,8 @@ Plug 'rust-lang/rust.vim'
 Plug 'vim-ruby/vim-ruby'
 Plug 'tpope/vim-rails'
 Plug 'pangloss/vim-javascript'
-Plug 'mustache/vim-mustache-handlebars'
 Plug 'chr4/nginx.vim'
 Plug 'hashivim/vim-terraform'
-Plug 'depuracao/vim-rdoc'
-Plug 'isobit/vim-caddyfile'
 " Additional plugins found in filesystem
 Plug 'tpope/vim-sensible'
 "Plug 'ycm-core/YouCompleteMe'
@@ -237,9 +234,6 @@ let g:go_highlight_build_constraints = 1
 "  \   'lua' : ['.', ':'],
 "  \   'erlang' : [':'],
 "  \ }
-
-" Javascript
-let g:used_javascript_libs = 'angular, angularui'
 
 " -----------------------------------------------------------------------------
 " 9. AutoCommands & Custom Logic
