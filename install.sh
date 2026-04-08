@@ -409,7 +409,7 @@ main() {
     # Stow everything in home/, ignoring glow and .claude (handled separately)
     local stow_opts=("--ignore=glow" "--ignore=\.claude" "-t" "$HOME" "home")
     if $VERBOSE; then
-        stow_opts=("--verbose=3" "${stow_opts[@]}")
+        stow_opts=("--verbose=2" "${stow_opts[@]}")
     fi
 
     execute stow "${stow_opts[@]}"
