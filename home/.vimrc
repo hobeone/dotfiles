@@ -21,7 +21,7 @@ if empty(glob(data_dir . '/autoload/plug.vim'))
   autocmd VimEnter * PlugInstall --sync | source ~/.vimrc
 endif
 
-" let g:ale_completion_enabled = 1  " disabled: using ALE for linting only; YCM commented out
+let g:ale_completion_enabled = 1  " disabled: using ALE for linting only; YCM commented out
 
 " -----------------------------------------------------------------------------
 " 2. Plugin Management (vim-plug)
