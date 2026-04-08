@@ -213,9 +213,8 @@ else
 fi
 
 # Run refresh before each command
-function preexec {                                                                                    
-    refresh                                                                                           
-}
+autoload -Uz add-zsh-hook
+add-zsh-hook preexec refresh
 
 
 # ------------------------------------------------------------------------------
@@ -244,7 +243,7 @@ fi
 
 # Terminal Title Management
 case $TERM in
-  xterm*|rxvt|Eterm)
+  xterm*|rxvt|Eterm|tmux*|screen*)
     precmd () {print -Pn "\e]0;%n@%M: %~\a"}
   ;;
 esac
