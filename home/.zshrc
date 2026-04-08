@@ -66,12 +66,12 @@ source "$ZSH/oh-my-zsh.sh"
 
 typeset -U path
 path=(
-    ~/bin 
-    /bin 
-    /sbin 
-    /usr/local/bin 
-    /usr/sbin 
-    /usr/local/sbin 
+    ~/bin
+    /bin
+    /sbin
+    /usr/local/bin
+    /usr/sbin
+    /usr/local/sbin
     /usr/bin
     /usr/games
     "$HOME/.local/bin"
@@ -88,13 +88,13 @@ path=(
 # ------------------------------------------------------------------------------
 export LANG=en_US.UTF-8
 export LC_CTYPE=en_US.UTF-8
-export PAGER=less
+export PAGER="less -r"
 export EDITOR="vim"
 export NO_AT_BRIDGE=1      # Disable accessibility bus warnings
 export COLORTERM='truecolor' # Enable 24-bit color support
 export QUOTING_STYLE=literal # Prevent ls from wrapping spaces in single quotes
 
-export LG_CONFIG_FILE="$HOME/.config/lazygit/config.yml,$HOME/.config/lazygit/tokyonight_night.yml" 
+export LG_CONFIG_FILE="$HOME/.config/lazygit/config.yml,$HOME/.config/lazygit/tokyonight_night.yml"
 
 
 # ------------------------------------------------------------------------------
@@ -183,7 +183,7 @@ pskill() {
     fi
     [[ $2 != "" ]] && signal=$2
     set -A pids $(command ps -elf | \grep "$1" | \grep -v "grep $1" | awk '{ print $4 }')
-    
+
     if [[ ${#pids} -lt 1 ]]; then
         print "No matching processes for $1" && return 1
     fi
