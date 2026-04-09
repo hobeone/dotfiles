@@ -29,6 +29,9 @@ ZSH_CUSTOM="$HOME/dotfiles/home/.zsh_custom"
 DISABLE_AUTO_UPDATE="false"
 export UPDATE_ZSH_DAYS=3
 
+# Disable OMZ's built-in title management — we set it ourselves below
+DISABLE_AUTO_TITLE="true"
+
 # Plugin settings
 COMPLETION_WAITING_DOTS="true"
 zstyle :omz:plugins:ssh-agent agent-forwarding yes
@@ -242,9 +245,12 @@ fi
 [[ -r ~/.dircolors ]] && eval "$(dircolors ~/.dircolors)"
 
 # Terminal Title Management
+# precmd: set title to "user@host: ~/dir" when idle at prompt
+# preexec: set title to "user@host: ~/dir | command" while a command runs
 case $TERM in
   xterm*|rxvt|Eterm|tmux*|screen*)
-    precmd () {print -Pn "\e]0;%n@%M: %~\a"}
+    precmd () { print -Pn "\e]0;%~\a" }
+    preexec () { print -Pn "\e]0;%~ | ${1}\a" }
   ;;
 esac
 
