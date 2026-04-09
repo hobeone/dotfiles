@@ -249,8 +249,13 @@ fi
 # preexec: set title to "user@host: ~/dir | command" while a command runs
 case $TERM in
   xterm*|rxvt|Eterm|tmux*|screen*)
-    precmd () { print -Pn "\e]0;%~\a" }
-    preexec () { print -Pn "\e]0;%~ | ${1}\a" }
+    if [[ -n "$TMUX" ]]; then
+      precmd () { print -Pn "\e]0;%~\a" }
+      preexec () { print -Pn "\e]0;%~ | ${1}\a" }
+    else
+      precmd () { print -Pn "\e]0;%n@%M: %~\a" }
+      preexec () { print -Pn "\e]0;%n@%M: %~ | ${1}\a" }
+    fi
   ;;
 esac
 
