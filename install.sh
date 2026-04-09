@@ -302,24 +302,28 @@ install_tokyonight_themes() {
     # Update btop config specifically
     local btop_conf="$HOME/.config/btop/btop.conf"
     if [[ -f "$btop_conf" ]]; then
+        # Backup before modifying
+        execute cp "$btop_conf" "$btop_conf.bak"
         # Use execute for sed as well
         if [[ "$OSTYPE" == "darwin"* ]]; then
              execute sed -i '' 's/^color_theme = .*/color_theme = "tokyonight_night.theme"/' "$btop_conf"
         else
              execute sed -i 's/^color_theme = .*/color_theme = "tokyonight_night.theme"/' "$btop_conf"
         fi
-        log_info "Updated btop.conf to use tokyonight_night.theme"
+        log_info "Updated btop.conf (backup created) to use tokyonight_night.theme"
     fi
 
     # Update Gemini CLI theme
     local gemini_settings="$HOME/.gemini/settings.json"
     local gemini_theme="$vendor_dir/extras/gemini_cli/tokyonight_night.json"
     if [[ -f "$gemini_settings" ]] && command -v jq &>/dev/null; then
+        # Backup before modifying
+        execute cp "$gemini_settings" "$gemini_settings.bak"
         local tmp
         tmp=$(mktemp)
         jq --arg t "$gemini_theme" '.ui.theme = $t' "$gemini_settings" > "$tmp"
         execute mv "$tmp" "$gemini_settings"
-        log_info "Updated Gemini CLI theme in $gemini_settings"
+        log_info "Updated Gemini CLI theme in $gemini_settings (backup created)"
     fi
 }
 

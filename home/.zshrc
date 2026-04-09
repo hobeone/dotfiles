@@ -82,7 +82,7 @@ path=(
     ${GOROOT:+"$GOROOT/bin"}
     ${GOPATH:+"$GOPATH/bin"}
     /usr/X11R6/bin
-    /home/hobe/.pyenv/bin
+    "$HOME/.pyenv/bin"
 )
 
 
