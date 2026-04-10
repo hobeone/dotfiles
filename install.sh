@@ -332,6 +332,11 @@ install_claude_dirs() {
         local name="${src##*/}"
         local dest="$HOME/.claude/$name"
 
+        # skills dir is handled separately (merged from multiple sources)
+        if [[ "$name" == "skills" ]]; then
+            continue
+        fi
+
         # Skip if already correctly symlinked
         if [[ -L "$dest" && "$(readlink "$dest")" == "$src" ]]; then
             continue
@@ -345,6 +350,60 @@ install_claude_dirs() {
         execute ln -s "$src" "$dest"
         log_info "Linked: ~/.claude/$name"
     done
+
+    install_claude_skills
+}
+
+# Merge skills from dotfiles (home/.claude/skills/) and public library (~/.agents/skills/)
+# into ~/.claude/skills/ as a real directory with per-skill symlinks.
+# This keeps ~/.agents/ symlinks out of the dotfiles repo, avoiding git diffs.
+install_claude_skills() {
+    local skills_dest="$HOME/.claude/skills"
+    log_info "Merging Claude skills into $skills_dest..."
+
+    # If skills_dest is currently a plain symlink (old-style), remove it
+    if [[ -L "$skills_dest" ]]; then
+        execute rm "$skills_dest"
+    fi
+    execute mkdir -p "$skills_dest"
+
+    # 1. Symlink private skills from dotfiles
+    local dotfiles_skills="$HOME_DIR/.claude/skills"
+    if [[ -d "$dotfiles_skills" ]]; then
+        for src in "$dotfiles_skills"/*/; do
+            [[ -d "$src" ]] || continue
+            local name
+            name="$(basename "$src")"
+            local dest="$skills_dest/$name"
+            if [[ -L "$dest" && "$(readlink "$dest")" == "$src" ]]; then
+                continue
+            fi
+            if [[ -e "$dest" || -L "$dest" ]]; then
+                execute rm -rf "$dest"
+            fi
+            execute ln -s "$src" "$dest"
+            log_info "Linked dotfiles skill: $name"
+        done
+    fi
+
+    # 2. Symlink public skills from ~/.agents/skills/
+    local agents_skills="$HOME/.agents/skills"
+    if [[ -d "$agents_skills" ]]; then
+        for src in "$agents_skills"/*/; do
+            [[ -d "$src" ]] || continue
+            local name
+            name="$(basename "$src")"
+            local dest="$skills_dest/$name"
+            # Don't overwrite a dotfiles skill with the same name
+            if [[ -e "$dest" || -L "$dest" ]]; then
+                continue
+            fi
+            execute ln -s "$src" "$dest"
+            log_info "Linked public skill: $name"
+        done
+    else
+        log_info "No public skills directory found at $agents_skills — skipping."
+    fi
 }
 
 install_glow() {
