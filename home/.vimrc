@@ -182,7 +182,7 @@ highlight link ALEErrorSign Title
 
 " Lightline
 let g:lightline = {
-\ 'colorscheme': 'wombat',
+\ 'colorscheme': 'tokyonight',
 \ 'active': {
 \   'left': [['mode', 'paste'], ['filename', 'modified']],
 \   'right': [['lineinfo'], ['percent'], ['readonly', 'linter_warnings', 'linter_errors', 'linter_ok']]
@@ -198,6 +198,7 @@ let g:lightline = {
 \   'linter_errors': 'error'
 \ },
 \ }
+
 
 " UltiSnips & Snippets
 let g:UltiSnipsSnippetDirectories=["UltiSnips", "vim-snippets/UltiSnips", "snippets/angular/UltiSnips", "plugged/vim-go/gosnippets/UltiSnips"]
