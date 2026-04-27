@@ -451,8 +451,9 @@ install_glow() {
     # Link tokyo_night.json (since it's not being modified, linking is fine)
     execute ln -sf "$glow_src_dir/tokyo_night.json" "$glow_dst_dir/tokyo_night.json"
 
-    # Rewrite style path in the COPIED file
-    sed_inplace "s|style: \"~/.config/glow/tokyo_night.json\"|style: \"$HOME/.config/glow/tokyo_night.json\"|g" "$glow_dst_dir/glow.yml"
+    # Rewrite style path in the COPIED file to use the absolute $HOME path
+    # Pattern matches any path (~/..., /home/..., etc.) before the filename
+    sed_inplace "s|style: \".*tokyo_night.json\"|style: \"$HOME/.config/glow/tokyo_night.json\"|g" "$glow_dst_dir/glow.yml"
     log_info "Copied and updated glow.yml in $glow_dst_dir"
 }
 
