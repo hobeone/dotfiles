@@ -63,6 +63,59 @@ execute() {
     fi
 }
 
+# Portable in-place sed (macOS requires sed -i '', Linux uses sed -i)
+sed_inplace() {
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        execute sed -i '' "$@"
+    else
+        execute sed -i "$@"
+    fi
+}
+
+# Ensure required tools are present, offering to install any that are missing.
+# Must be called after detect_os so PKG_MGR is set.
+check_prerequisites() {
+    log_info "Checking prerequisites..."
+    local missing=()
+    for cmd in git stow curl; do
+        command -v "$cmd" &>/dev/null || missing+=("$cmd")
+    done
+    [[ ${#missing[@]} -eq 0 ]] && return 0
+
+    log_warn "Missing required tools: ${missing[*]}"
+
+    if [[ "$PKG_MGR" == "unknown" ]]; then
+        log_error "Cannot auto-install — unknown package manager."
+        log_error "Install ${missing[*]} manually, then re-run."
+        exit 1
+    fi
+
+    echo ""
+    read -rp "Install ${missing[*]} via $PKG_MGR? [y/N] " response
+    if [[ ! "$response" =~ ^[yY] ]]; then
+        log_error "Cannot continue without: ${missing[*]}"
+        exit 1
+    fi
+
+    case "$PKG_MGR" in
+        apt)    execute sudo apt update && execute sudo apt install -y "${missing[@]}" ;;
+        pacman) execute sudo pacman -Sy --needed "${missing[@]}" ;;
+        dnf)    execute sudo dnf install -y "${missing[@]}" ;;
+        brew)   execute brew install "${missing[@]}" ;;
+    esac
+
+    # Verify everything installed successfully
+    local still_missing=()
+    for cmd in "${missing[@]}"; do
+        command -v "$cmd" &>/dev/null || still_missing+=("$cmd")
+    done
+    if [[ ${#still_missing[@]} -gt 0 ]]; then
+        log_error "Failed to install: ${still_missing[*]}"
+        exit 1
+    fi
+    log_info "Installed: ${missing[*]}"
+}
+
 # 1. Setup Git Hooks
 setup_git_hooks() {
     log_info "Setting up git hooks..."
@@ -101,7 +154,7 @@ detect_os() {
     log_info "OS: $OS, Package Manager: $PKG_MGR"
 }
 
-# 2. Install Packages
+# 3. Install Packages
 install_packages() {
     if [[ "$PKG_MGR" == "unknown" ]]; then
         log_warn "Unknown package manager. Please install baseline packages manually."
@@ -143,7 +196,7 @@ install_packages() {
     esac
 }
 
-# 3. Install Desktop Packages
+# 4. Install Desktop Packages
 install_desktop_packages() {
     if ! $INSTALL_DESKTOP; then
         return 0
@@ -183,7 +236,7 @@ install_desktop_packages() {
     esac
 }
 
-# 4. Initialize Submodules
+# 2. Initialize Submodules
 init_submodules() {
     log_info "Initializing submodules..."
 
@@ -302,14 +355,8 @@ install_tokyonight_themes() {
     # Update btop config specifically
     local btop_conf="$HOME/.config/btop/btop.conf"
     if [[ -f "$btop_conf" ]]; then
-        # Backup before modifying
         execute cp "$btop_conf" "$btop_conf.bak"
-        # Use execute for sed as well
-        if [[ "$OSTYPE" == "darwin"* ]]; then
-             execute sed -i '' 's/^color_theme = .*/color_theme = "tokyonight_night.theme"/' "$btop_conf"
-        else
-             execute sed -i 's/^color_theme = .*/color_theme = "tokyonight_night.theme"/' "$btop_conf"
-        fi
+        sed_inplace 's/^color_theme = .*/color_theme = "tokyonight_night.theme"/' "$btop_conf"
         log_info "Updated btop.conf (backup created) to use tokyonight_night.theme"
     fi
 
@@ -317,13 +364,16 @@ install_tokyonight_themes() {
     local gemini_settings="$HOME/.gemini/settings.json"
     local gemini_theme="$vendor_dir/extras/gemini_cli/tokyonight_night.json"
     if [[ -f "$gemini_settings" ]] && command -v jq &>/dev/null; then
-        # Backup before modifying
-        execute cp "$gemini_settings" "$gemini_settings.bak"
-        local tmp
-        tmp=$(mktemp)
-        jq --arg t "$gemini_theme" '.ui.theme = $t' "$gemini_settings" > "$tmp"
-        execute mv "$tmp" "$gemini_settings"
-        log_info "Updated Gemini CLI theme in $gemini_settings (backup created)"
+        if $DRY_RUN; then
+            log_info "[Dry-Run] Would set .ui.theme = $gemini_theme in $gemini_settings"
+        else
+            execute cp "$gemini_settings" "$gemini_settings.bak"
+            local tmp
+            tmp=$(mktemp)
+            jq --arg t "$gemini_theme" '.ui.theme = $t' "$gemini_settings" > "$tmp"
+            mv "$tmp" "$gemini_settings"
+            log_info "Updated Gemini CLI theme in $gemini_settings (backup created)"
+        fi
     fi
 }
 
@@ -429,22 +479,21 @@ install_glow() {
     execute ln -sf "$glow_src_dir/tokyo_night.json" "$glow_dst_dir/tokyo_night.json"
 
     # Rewrite style path in the COPIED file
-    if [[ "$OS" == "macOS" ]]; then
-        execute sed -i '' "s|style: \"~/.config/glow/tokyo_night.json\"|style: \"$HOME/.config/glow/tokyo_night.json\"|g" "$glow_dst_dir/glow.yml"
-    else
-        execute sed -i "s|style: \"~/.config/glow/tokyo_night.json\"|style: \"$HOME/.config/glow/tokyo_night.json\"|g" "$glow_dst_dir/glow.yml"
-    fi
+    sed_inplace "s|style: \"~/.config/glow/tokyo_night.json\"|style: \"$HOME/.config/glow/tokyo_night.json\"|g" "$glow_dst_dir/glow.yml"
     log_info "Copied and updated glow.yml in $glow_dst_dir"
 }
 
 main() {
     log_info "Installing dotfiles from $DOTFILES_DIR to $HOME"
-    
-    # 1. Setup Git Hooks
-    setup_git_hooks
 
-    # 2. Detect OS and Package Manager
+    # 0. Detect OS first (needed by prerequisite check)
     detect_os
+
+    # 1. Check prerequisites (offers to install missing tools)
+    check_prerequisites
+
+    # 2. Setup Git Hooks
+    setup_git_hooks
 
     # 3. Initialize Submodules
     init_submodules
@@ -452,25 +501,21 @@ main() {
     # 4. Install Packages
     install_packages
 
-    # 4b. Install Desktop Packages (only with -d flag)
+    # 5. Install Desktop Packages (only with -d flag)
     install_desktop_packages
 
-    # 5. Install Fonts
+    # 6. Install Fonts
     install_fonts
 
-    # 6. Install Tokyo Night Themes
+    # 7. Install Tokyo Night Themes
     install_tokyonight_themes
 
-    # 7. Create Links via GNU Stow
+    # 8. Create Links via GNU Stow
     log_info "Creating symlinks with GNU Stow..."
 
-    if ! command -v stow >/dev/null 2>&1; then
-        log_error "GNU Stow is not installed. Please install it to proceed."
-        exit 1
-    fi
-
     # Stow everything in home/, ignoring glow and .claude (handled separately)
-    local stow_opts=("--ignore=glow" "--ignore=\.claude" "-t" "$HOME" "home")
+    # --restow (-R) prunes stale symlinks, making re-runs idempotent
+    local stow_opts=("-R" "--ignore=glow" "--ignore=\.claude" "-t" "$HOME" "home")
     if $VERBOSE; then
         stow_opts=("--verbose=2" "${stow_opts[@]}")
     fi
