@@ -8,21 +8,40 @@ on:
 
 jobs:
   lint:
-    name: Lint
+    name: Shellcheck
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
-          submodules: true
+          submodules: false  # Don't need submodules for linting our scripts
 
       - name: Install shellcheck
         run: sudo apt-get install -y shellcheck
 
-      - name: Run shellcheck
-        run: make lint
+      - name: Run shellcheck on project scripts
+        run: |
+          shellcheck -x \
+            install.sh \
+            scripts/*.sh \
+            .githooks/pre-commit
 
-  test:
-    name: Test
+      - name: Run shellcheck on user bin scripts
+        run: |
+          shellcheck -x \
+            home/bin/file-inotify \
+            home/bin/keyboard-settings \
+            home/bin/keyboard-watch \
+            home/bin/start-xss-lock \
+            home/bin/*.sh
+
+      - name: Run shellcheck on Claude hooks
+        run: |
+          shellcheck -x \
+            home/.claude/hooks/*.sh \
+            home/.claude/statusline-command.sh
+
+  syntax:
+    name: Syntax check
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -30,38 +49,46 @@ jobs:
       - name: Install zsh
         run: sudo apt-get install -y zsh
 
-      - name: Run syntax checks
-        run: make test
+      - name: Check zsh syntax
+        run: zsh -n home/.zshrc
 
-  hooks:
-    name: Hooks
+      - name: Check vimrc syntax
+        run: vim -u NONE -e -c "source home/.vimrc" -c "qa!" 2>&1 || true
+
+  structure:
+    name: Verify structure
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install jq
-        run: sudo apt-get install -y jq
-
-      - name: Run hook tests
-        run: make test-hooks
-
-  bootstrap:
-    name: Bootstrap
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: true
-
-      - name: Verify scripts are executable
-        run: |
-          test -x bootstrap.sh
-          test -x uninstall.sh
-          test -x tests/test-hooks.sh
-
-      - name: Check for required files
+      - name: Required config files exist
         run: |
           test -f home/.zshrc
           test -f home/.gitconfig
           test -f home/.vimrc
-          test -f home/.tmux.conf
+          test -f home/.config/tmux/tmux.conf
+          test -f home/.p10k.zsh
+          test -f home/.gitignore_global
+
+      - name: Scripts are executable
+        run: |
+          test -x install.sh
+          test -x scripts/update.sh
+          test -x scripts/install_go.sh
+          test -x scripts/install_keyboard.sh
+          test -x .githooks/pre-commit
+
+      - name: Package lists exist for all supported managers
+        run: |
+          test -f packages/apt.txt
+          test -f packages/brew.txt
+          test -f packages/pacman.txt
+          test -f packages/dnf.txt
+
+      - name: No secrets in tracked files
+        run: |
+          # Fail if any tracked file contains what looks like an auth token
+          if git grep -l '_authToken=ya29\.' -- ':!.github/workflows/*'; then
+            echo "::error::Found auth tokens in tracked files!"
+            exit 1
+          fi

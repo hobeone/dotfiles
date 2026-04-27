@@ -13,6 +13,7 @@ home/.config/openbox/noscreenlock
 fonts/.uuid
 home/.config/alacritty/theme.toml
 home/.config/lazygit/tokyonight_night.yml
+home/.npmrc
 
 # Claude Code
 /.claude/
