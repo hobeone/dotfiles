@@ -11,6 +11,10 @@ Supports Debian/Ubuntu, Arch Linux, Fedora, and macOS.
 ./install.sh -c        # Also install Claude Code configuration
 ./install.sh -n        # Dry-run (preview changes without applying)
 ./install.sh -v        # Verbose output
+
+./uninstall.sh         # Remove all symlinks (preserves local overrides)
+./uninstall.sh -c      # Also remove Claude Code symlinks
+./uninstall.sh -n      # Dry-run
 ```
 
 ## Architecture
