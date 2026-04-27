@@ -21,9 +21,8 @@ background = "#000000"
 cursor = { text = "0x000000", cursor = "0xffffff" }
 
 [[hints.enabled]]
-command = "xdg-open" # On Linux/BSD
-# command = "open" # On macOS
-# command = { program = "cmd", args = [ "/c", "start", "" ] } # On Windows
+# Cross-platform URL opener: prefers xdg-open (Linux), falls back to open (macOS)
+command = { program = "sh", args = ["-c", "xdg-open \"$0\" 2>/dev/null || open \"$0\""] }
 hyperlinks = true
 post_processing = true
 persist = false
