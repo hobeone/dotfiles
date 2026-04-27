@@ -154,14 +154,18 @@ detect_os() {
     log_info "OS: $OS, Package Manager: $PKG_MGR"
 }
 
-# 3. Install Packages
-install_packages() {
+# Shared helper: read a package file and install via the detected package manager.
+# Usage: _install_packages_from "apt.txt" "baseline packages"
+_apt_updated=false
+_install_packages_from() {
+    local pkg_file="$DOTFILES_DIR/packages/$1"
+    local label="${2:-packages}"
+
     if [[ "$PKG_MGR" == "unknown" ]]; then
-        log_warn "Unknown package manager. Please install baseline packages manually."
+        log_warn "Unknown package manager. Please install $label manually."
         return 0
     fi
 
-    local pkg_file="$DOTFILES_DIR/packages/$PKG_MGR.txt"
     if [[ ! -f "$pkg_file" ]]; then
         log_warn "Package list not found: $pkg_file"
         return 0
@@ -171,69 +175,38 @@ install_packages() {
     mapfile -t packages < <(grep -Ev '^\s*(#|$)' "$pkg_file")
 
     if [[ ${#packages[@]} -eq 0 ]]; then
-        log_info "No packages to install for $PKG_MGR."
+        log_info "No $label to install."
         return 0
     fi
 
+    log_info "Installing $label via $PKG_MGR..."
     case "$PKG_MGR" in
         apt)
-            log_info "Installing packages via apt..."
-            execute sudo apt update
+            if ! $_apt_updated; then
+                execute sudo apt update
+                _apt_updated=true
+            fi
             execute sudo apt install -y "${packages[@]}"
             ;;
-        pacman)
-            log_info "Installing packages via pacman..."
-            execute sudo pacman -Sy --needed "${packages[@]}"
-            ;;
-        dnf)
-            log_info "Installing packages via dnf..."
-            execute sudo dnf install -y "${packages[@]}"
-            ;;
-        brew)
-            log_info "Installing packages via Homebrew..."
-            execute brew install "${packages[@]}"
-            ;;
+        pacman) execute sudo pacman -Sy --needed "${packages[@]}" ;;
+        dnf)    execute sudo dnf install -y "${packages[@]}" ;;
+        brew)   execute brew install "${packages[@]}" ;;
     esac
+}
+
+# 3. Install Packages
+install_packages() {
+    _install_packages_from "$PKG_MGR.txt" "baseline packages"
 }
 
 # 4. Install Desktop Packages
 install_desktop_packages() {
-    if ! $INSTALL_DESKTOP; then
+    $INSTALL_DESKTOP || return 0
+    if [[ "$PKG_MGR" == "brew" ]]; then
+        log_warn "Desktop packages are Linux-only. Skipping on macOS."
         return 0
     fi
-
-    local pkg_file="$DOTFILES_DIR/packages/$PKG_MGR-desktop.txt"
-    if [[ ! -f "$pkg_file" ]]; then
-        log_warn "No desktop package list for $PKG_MGR (looked for $pkg_file). Skipping."
-        return 0
-    fi
-
-    local packages=()
-    mapfile -t packages < <(grep -Ev '^\s*(#|$)' "$pkg_file")
-
-    if [[ ${#packages[@]} -eq 0 ]]; then
-        log_info "No desktop packages to install."
-        return 0
-    fi
-
-    case "$PKG_MGR" in
-        apt)
-            log_info "Installing desktop packages via apt..."
-            execute sudo apt update
-            execute sudo apt install -y "${packages[@]}"
-            ;;
-        pacman)
-            log_info "Installing desktop packages via pacman..."
-            execute sudo pacman -Sy --needed "${packages[@]}"
-            ;;
-        dnf)
-            log_info "Installing desktop packages via dnf..."
-            execute sudo dnf install -y "${packages[@]}"
-            ;;
-        brew)
-            log_warn "Desktop packages are Linux-only. Skipping on macOS."
-            ;;
-    esac
+    _install_packages_from "$PKG_MGR-desktop.txt" "desktop packages"
 }
 
 # 2. Initialize Submodules
