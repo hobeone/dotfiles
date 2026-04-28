@@ -77,7 +77,6 @@ let g:ale_fix_on_save = 1
 syntax on                     " Enable syntax highlighting
 set termguicolors             " Enable 24-bit RGB colors
 set background=dark           " Use dark background
-let g:rehash256 = 1           " Improved 256 color support
 
 " --- Custom Highlight Groups ---
 " We define these early and add an autocmd to re-apply them on colorscheme change.
@@ -137,15 +136,15 @@ set formatoptions+=ctrq        " Control formatting behavior
 set ignorecase                " Ignore case in search patterns
 set incsearch                 " Show search results as you type
 set hlsearch                  " Highlight all search matches
-set omnifunc=syntaxcomplete#Complete " Default omnicomplete
+
 
 " -----------------------------------------------------------------------------
 " 6. Backups, Undo, & Sessions
 " -----------------------------------------------------------------------------
 set nobackup                  " Don't keep backup files
-set nowb                      " Don't write backup before overwriting
-set nobk                      " Don't keep backup after overwriting
+set nowritebackup             " Don't write backup before overwriting
 set undodir=~/.vim/undodir     " Centralize undo files
+set undofile                   " Enable persistent undo
 set sessionoptions-=options   " Don't save runtimepath in sessions
 
 " -----------------------------------------------------------------------------
@@ -163,7 +162,7 @@ inoremap <F1> <ESC>
 
 " Spell Checking
 if has("spell")
-  setlocal spell spelllang=en_us
+  set spelllang=en_us
   set nospell                 " Off by default
   set sps=best,10             " Max 10 suggestions
   " Toggle spelling with F4
@@ -201,7 +200,7 @@ let g:lightline = {
 
 
 " UltiSnips & Snippets
-let g:UltiSnipsSnippetDirectories=["UltiSnips", "vim-snippets/UltiSnips", "snippets/angular/UltiSnips", "plugged/vim-go/gosnippets/UltiSnips"]
+let g:UltiSnipsSnippetDirectories=["UltiSnips", "vim-snippets/UltiSnips", "plugged/vim-go/gosnippets/UltiSnips"]
 let g:UltiSnipsExpandTrigger="<c-j>"
 let g:UltiSnipsJumpForwardTrigger="<c-j>"
 let g:UltiSnipsJumpBackwardTrigger="<c-k>"
@@ -221,7 +220,7 @@ let g:go_diagnostics_enabled = 0    " ALE shows diagnostics
 let g:go_metalinter_autosave = 0    " ALE handles golangci-lint
 
 let g:go_highlight_functions = 1
-let g:go_highlight_methods = 1
+
 let g:go_highlight_structs = 1
 let g:go_highlight_interfaces = 1
 let g:go_highlight_operators = 1
@@ -242,7 +241,7 @@ augroup GeneralAutoCmds
 
   " Aesthetics: Highlight extra whitespace and tabs
   autocmd Syntax,BufWinEnter * match ExtraWhitespace /\s\+$/
-  autocmd Syntax,BufWinEnter * match Tabs "\t"
+  autocmd Syntax,BufWinEnter * 2match Tabs "\t"
 augroup END
 
 augroup FileTypeLogic
@@ -278,7 +277,10 @@ augroup FileTypeLogic
 augroup END
 
 " Update Lightline on ALE events
-autocmd User ALELint call s:MaybeUpdateLightline()
+augroup ALELintUpdate
+  autocmd!
+  autocmd User ALELint call s:MaybeUpdateLightline()
+augroup END
 
 " -----------------------------------------------------------------------------
 " 10. Helper Functions
