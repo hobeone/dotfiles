@@ -21,7 +21,7 @@ if empty(glob(data_dir . '/autoload/plug.vim'))
   autocmd VimEnter * PlugInstall --sync | source ~/.vimrc
 endif
 
-let g:ale_completion_enabled = 1
+
 
 " -----------------------------------------------------------------------------
 " 2. Plugin Management (vim-plug)
@@ -44,21 +44,30 @@ Plug 'godlygeek/tabular'
 Plug 'sirver/ultisnips'
 Plug 'honza/vim-snippets'
 Plug 'dense-analysis/ale'
+Plug 'https://codeberg.org/lifepillar/vim-mucomplete.git'
 
 " Language Support
 Plug 'fatih/vim-go', { 'for': 'go' }
-Plug 'rust-lang/rust.vim'
-Plug 'vim-ruby/vim-ruby'
-Plug 'tpope/vim-rails'
+"Plug 'rust-lang/rust.vim'
+"Plug 'vim-ruby/vim-ruby'
+"Plug 'tpope/vim-rails'
 Plug 'pangloss/vim-javascript'
 Plug 'chr4/nginx.vim'
-Plug 'hashivim/vim-terraform'
+"Plug 'hashivim/vim-terraform'
 " Additional plugins found in filesystem
 Plug 'tpope/vim-sensible'
 "Plug 'ycm-core/YouCompleteMe'
 
 call plug#end()
 filetype plugin indent on    " Required: Enable filetype detection, plugins, and indent
+
+" mucomplete — auto-triggered completion chaining (path → omni/ALE → snippets)
+set completeopt+=menuone,noselect
+let g:mucomplete#enable_auto_at_startup = 1
+let g:mucomplete#chains = {
+\   'default': ['path', 'omni', 'ulti'],
+\   'go':      ['path', 'omni', 'ulti'],
+\ }
 
 
 let g:ale_linters = {
