@@ -9,6 +9,7 @@
     "allow": [],
     "defaultMode": "bypassPermissions"
   },
+  "model": "opus",
   "hooks": {
     "UserPromptSubmit": [
       {
@@ -95,5 +96,7 @@
     "pyright-lsp@claude-plugins-official": true,
     "typescript-lsp@claude-plugins-official": true
   },
+  "effortLevel": "medium",
+  "advisorModel": "opus",
   "skipDangerousModePermissionPrompt": true
 }
