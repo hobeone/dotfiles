@@ -1,0 +1,26 @@
+{
+  "security": {
+    "auth": {
+      "selectedType": "oauth-personal"
+    }
+  },
+  "ui": {
+    "dynamicWindowTitle": true,
+    "inlineThinkingMode": "full",
+    "showShortcutsHint": false,
+    "footer": {
+      "hideContextPercentage": false
+    },
+    "showModelInfoInChat": true,
+    "useAlternateBuffer": false,
+    "terminalBuffer": true,
+    "theme": "Tokyo Night"
+  },
+  "experimental": {
+    "modelSteering": true
+  },
+  "general": {
+    "defaultApprovalMode": "auto_edit",
+    "enableNotifications": true
+  }
+}
