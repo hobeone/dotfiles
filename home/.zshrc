@@ -39,7 +39,7 @@ zstyle :omz:plugins:ssh-agent lazy yes
 zstyle :omz:plugins:ssh-agent quiet yes
 
 # Suggestion styling
-ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE="fg=#ff00ff,bg=cyan,bold,underline"
+ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE="fg=#ff00ff,bold,underline"
 ZSH_AUTOSUGGEST_STRATEGY=(history completion)
 
 # Which plugins would you like to load?
@@ -113,7 +113,6 @@ setopt CHASE_LINKS         # Resolve symlinks
 setopt NOBEEP              # No system beeps
 setopt NO_CHECK_JOBS       # Don't warn about bg processes when exiting
 setopt NO_HUP              # Don't kill bg processes on exit
-setopt SH_WORD_SPLIT       # Bourne shell word splitting behavior
 setopt INTERACTIVE_COMMENTS # Allow comments in interactive shell
 setopt PRINT_EXIT_VALUE    # Alert if something fails
 
@@ -138,15 +137,14 @@ zstyle ':completion:*' cache-path ~/.zsh/cache
 # 6. History Configuration
 # ------------------------------------------------------------------------------
 export HISTFILE=~/.zsh_history
-HISTSIZE=32768
-SAVEHIST=32768
+HISTSIZE=100000
+SAVEHIST=100000
 
-setopt APPEND_HISTORY      # Append to history file rather than replace
-setopt SHARE_HISTORY       # Share history between sessions
+setopt SHARE_HISTORY       # Share history between sessions (implies INC_APPEND)
 setopt HIST_IGNORE_ALL_DUPS # Don't record duplicates
+setopt HIST_IGNORE_SPACE   # Don't record commands starting with a space
 setopt HIST_REDUCE_BLANKS  # Remove extra blanks from commands
 setopt EXTENDED_HISTORY    # Record timestamp and duration
-setopt INC_APPEND_HISTORY  # Write to history file immediately
 
 
 # ------------------------------------------------------------------------------
@@ -160,64 +158,25 @@ bindkey "^[[A" up-line-or-beginning-search
 bindkey "^[[B" down-line-or-beginning-search
 
 # Make / - . act as word delimiters (for Ctrl+W, Alt+B, Alt+F, etc.)
-WORDCHARS=${WORDCHARS/\//}
-WORDCHARS=${WORDCHARS/\-/}
-WORDCHARS=${WORDCHARS/\./}
+WORDCHARS=${WORDCHARS//[\/\-\.]/}
 
 
 # ------------------------------------------------------------------------------
 # 8. Helper Functions
 # ------------------------------------------------------------------------------
-# Search for a process by name
-psgrep() {
-  ps aux | \grep -i "$1" | \grep -vi "grep $1"
-}
-
-# Search history for a pattern
-hgrep() {
-  history | grep -i "$1" | grep -vi "grep $1"
-}
-
-# Kill processes matching a search term
-pskill() {
-    local signal="TERM"
-    if [[ $1 == "" || $3 != "" ]]; then
-        print "Usage: pskill search_term [signal]" && return 1
-    fi
-    [[ $2 != "" ]] && signal=$2
-    set -A pids $(command ps -elf | \grep "$1" | \grep -v "grep $1" | awk '{ print $4 }')
-
-    if [[ ${#pids} -lt 1 ]]; then
-        print "No matching processes for $1" && return 1
-    fi
-    if [[ ${#pids} -gt 1 ]]; then
-        print "${#pids} processes matched: $pids"
-        read -q "?Kill all? [y/n] " || return 0
-    fi
-    if kill -$signal $pids; then
-        echo "Killed $1 pid $pids with SIG$signal"
-    fi
-}
-
-# Refresh environment variables within TMUX
-if [ -n "$TMUX" ]; then
-  function refresh {
-    new_auth=$(tmux show-environment | grep "^SSH_AUTH_SOCK")
-    new_display=$(tmux show-environment | grep "^DISPLAY")
-    if [ -n "$new_auth" ]; then
-      export "$new_auth"
-    fi
-    if [ -n "$new_display" ]; then
-      export "$new_display"
-    fi
+# Refresh environment variables within TMUX (keeps SSH_AUTH_SOCK/DISPLAY
+# in sync after re-attaching).
+if [[ -n "$TMUX" ]]; then
+  refresh() {
+    local v val
+    for v in SSH_AUTH_SOCK DISPLAY; do
+      val=$(tmux show-environment "$v" 2>/dev/null)
+      [[ -n "$val" && "$val" != -* ]] && export "$val"
+    done
   }
-else
-  function refresh { }
+  autoload -Uz add-zsh-hook
+  add-zsh-hook preexec refresh
 fi
-
-# Run refresh before each command
-autoload -Uz add-zsh-hook
-add-zsh-hook preexec refresh
 
 
 # ------------------------------------------------------------------------------
@@ -225,24 +184,21 @@ add-zsh-hook preexec refresh
 # ------------------------------------------------------------------------------
 # Basic Aliases
 alias loadhistory="fc -RI"
-alias irb='irb -r irb/completion'
-alias ri='ri --format ansi'
-alias vim='vim -X -o -u $HOME/.vimrc "$@"'
-alias gvim='gvim -o -u $HOME/.vimrc -geom 80x24 "$@"'
+alias vim='vim -X -o -u $HOME/.vimrc'
+alias gvim='gvim -o -u $HOME/.vimrc -geom 80x24'
 alias tmux='tmux -2'
-alias par="parchive"
 
 # Completion for specific tools
 compdef '_files -g "*.(par|PAR)2"' par2
 compdef '_files -g "*.rar"' rar
 compdef _files -g "*" scp
 
-# Colorized output
-if [ "$PS1" ]; then
-  alias ls='ls --color=auto'
-  eval `dircolors`
+# Colorized output (dircolors)
+if [[ -r ~/.dircolors ]]; then
+  eval "$(dircolors ~/.dircolors)"
+else
+  eval "$(dircolors)"
 fi
-[[ -r ~/.dircolors ]] && eval "$(dircolors ~/.dircolors)"
 
 # Terminal Title Management
 # precmd: set title to "user@host: ~/dir" when idle at prompt
@@ -297,10 +253,19 @@ export LESSCHARDEF=8bcccbcc13b.4b95.33b.
 # ------------------------------------------------------------------------------
 # 10. External Tools & Local Overrides
 # ------------------------------------------------------------------------------
-# NVM (Node Version Manager)
+# NVM (Node Version Manager) — lazy-loaded for faster shell startup
 export NVM_DIR="$HOME/.nvm"
-[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"
+if [ -s "$NVM_DIR/nvm.sh" ]; then
+  _lazy_load_nvm() {
+    unset -f nvm node npm npx 2>/dev/null
+    \. "$NVM_DIR/nvm.sh"
+    [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"
+  }
+  function nvm  { _lazy_load_nvm; nvm  "$@"; }
+  function node { _lazy_load_nvm; node "$@"; }
+  function npm  { _lazy_load_nvm; npm  "$@"; }
+  function npx  { _lazy_load_nvm; npx  "$@"; }
+fi
 
 # Local .zshrc if it exists
 [[ -e ~/.zshrc.local ]] && source ~/.zshrc.local
