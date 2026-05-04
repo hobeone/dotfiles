@@ -249,6 +249,8 @@ export LESS='-R'
 export LESSEDIT="%E ?lt+%lt. %f"
 export LESSCHARDEF=8bcccbcc13b.4b95.33b.
 
+alias pgrep="pgrep -l -a"
+
 
 # ------------------------------------------------------------------------------
 # 10. External Tools & Local Overrides
