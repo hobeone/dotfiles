@@ -1,0 +1,6 @@
+# lazygit configuration
+# Docs: https://github.com/jesseduffield/lazygit/blob/master/docs/Config.md
+
+git:
+  pagers:
+    - pager: delta --dark --paging=never

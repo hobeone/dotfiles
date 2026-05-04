@@ -250,7 +250,7 @@ augroup GeneralAutoCmds
 
   " Aesthetics: Highlight extra whitespace and tabs
   autocmd Syntax,BufWinEnter * match ExtraWhitespace /\s\+$/
-  autocmd Syntax,BufWinEnter * 2match Tabs "\t"
+  autocmd Syntax,BufWinEnter * if &filetype !=# 'go' | 2match Tabs "\t" | else | 2match none | endif
 augroup END
 
 augroup FileTypeLogic
@@ -267,7 +267,7 @@ augroup FileTypeLogic
 
   " Go — use real tabs (goimports expects them); don't highlight them
   autocmd FileType go setlocal noexpandtab tabstop=2 shiftwidth=2
-  autocmd BufWinEnter *.go match none
+
   autocmd FileType go nnoremap <buffer> <leader>v :sp<CR>:GoDef<CR>
   autocmd FileType go nnoremap <buffer> <leader>t :GoTest<CR>
   autocmd FileType go nnoremap <buffer> <leader>b :GoBuild<CR>
