@@ -108,5 +108,7 @@
       }
     }
   },
+  "effortLevel": "medium",
+  "advisorModel": "opus",
   "skipDangerousModePermissionPrompt": true
 }
