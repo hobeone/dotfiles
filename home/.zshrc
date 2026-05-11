@@ -251,23 +251,9 @@ export LESSCHARDEF=8bcccbcc13b.4b95.33b.
 
 alias pgrep="pgrep -l -a"
 
-
-# ------------------------------------------------------------------------------
-# 10. External Tools & Local Overrides
-# ------------------------------------------------------------------------------
-# NVM (Node Version Manager) — lazy-loaded for faster shell startup
 export NVM_DIR="$HOME/.nvm"
-if [ -s "$NVM_DIR/nvm.sh" ]; then
-  _lazy_load_nvm() {
-    unset -f nvm node npm npx 2>/dev/null
-    \. "$NVM_DIR/nvm.sh"
-    [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"
-  }
-  function nvm  { _lazy_load_nvm; nvm  "$@"; }
-  function node { _lazy_load_nvm; node "$@"; }
-  function npm  { _lazy_load_nvm; npm  "$@"; }
-  function npx  { _lazy_load_nvm; npx  "$@"; }
-fi
+[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # This loads nvm
+[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"  # This loads nvm bash_completion
 
 # Local .zshrc if it exists
 [[ -e ~/.zshrc.local ]] && source ~/.zshrc.local
