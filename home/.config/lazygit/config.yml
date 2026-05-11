@@ -3,4 +3,4 @@
 
 git:
   pagers:
-    - pager: delta --dark --paging=never
+    - pager: delta --dark --paging=never --tabs=2
