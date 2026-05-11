@@ -140,7 +140,8 @@ export HISTFILE=~/.zsh_history
 HISTSIZE=100000
 SAVEHIST=100000
 
-setopt SHARE_HISTORY       # Share history between sessions (implies INC_APPEND)
+# This turned out to be annoying.  Off for now
+# setopt SHARE_HISTORY       # Share history between sessions (implies INC_APPEND)
 setopt HIST_IGNORE_ALL_DUPS # Don't record duplicates
 setopt HIST_IGNORE_SPACE   # Don't record commands starting with a space
 setopt HIST_REDUCE_BLANKS  # Remove extra blanks from commands
