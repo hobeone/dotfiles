@@ -9,4 +9,4 @@ done
 sudo intel_gpu_frequency -m
 
 # Set's power limit to max (on Lenovo X1 Gen 9)
-echo 64000000 | sudo tee /sys/devices/virtual/powercap/intel-rapl-mmio/intel-rapl-mmio\:0/constraint_0_power_limit_u
+echo 64000000 | sudo tee /sys/devices/virtual/powercap/intel-rapl-mmio/intel-rapl-mmio\:0/constraint_0_power_limit_uw
