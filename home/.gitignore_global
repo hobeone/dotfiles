@@ -35,6 +35,10 @@ Desktop.ini
 # Claude Code
 .claude/settings.local.json
 
+# antigravity
+/.antigravity
+/.antigravitycli
+
 # ==============================================================================
 # Environment & Secrets
 # ==============================================================================
