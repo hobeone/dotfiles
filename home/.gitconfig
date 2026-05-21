@@ -95,4 +95,7 @@
 	helper = !gh auth git-credential
 
 [include]
-	path = ~/.gitconfig.tokyonight
+  path = ~/.gitconfig.tokyonight
+
+[url "https://:@github.com"]
+	insteadOf = /
