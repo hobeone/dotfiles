@@ -9,7 +9,6 @@
     "allow": [],
     "defaultMode": "bypassPermissions"
   },
-  "model": "opus",
   "hooks": {
     "UserPromptSubmit": [
       {
@@ -96,9 +95,9 @@
     "pyright-lsp@claude-plugins-official": true,
     "typescript-lsp@claude-plugins-official": true,
     "python-development@claude-code-workflows": true,
-    "discord@claude-plugins-official": true,
     "frontend-design@claude-plugins-official": true,
-    "clangd-lsp@claude-plugins-official": true
+    "clangd-lsp@claude-plugins-official": true,
+    "github@claude-plugins-official": true
   },
   "extraKnownMarketplaces": {
     "claude-code-workflows": {
