@@ -39,6 +39,59 @@ Non-obvious autonomy:
 - Run quality gates (linter, formatter, tests) before pushing.
 - New code needs tests. User-facing features need examples. Flag gaps.
 
+## Execution Standards
+
+**Verify, don't assume.** After every state-changing command (file write, migration, rename, install), perform a secondary read-only check to confirm the outcome. Exit codes lie; observed state doesn't.
+
+**Read fully before acting.** When working in a component or feature area, read all relevant files top-to-bottom. Grep and partial reads miss context and cause incorrect changes.
+
+**Halt on repeated failure.** If an implementation fails, do not guess fixes recursively. Stop, diagnose the root cause, and present a structured resolution to the user.
+
+## Commit Messages (Conventional Commits 1.0.0)
+
+Every commit message MUST follow this structure:
+
+```
+<type>[optional scope]: <description>
+
+[optional body]
+
+[optional footer(s)]
+```
+
+**Type** — pick exactly one:
+
+| Type | When to use |
+|---|---|
+| `feat` | Adds a new user-visible feature (bumps MINOR in semver) |
+| `fix` | Corrects a bug (bumps PATCH) |
+| `refactor` | Code restructuring with no behaviour change |
+| `perf` | Performance improvement with no behaviour change |
+| `test` | Adds or fixes tests only |
+| `docs` | Documentation only |
+| `build` | Build system, dependency updates |
+| `ci` | CI/CD pipeline changes |
+| `chore` | Housekeeping that fits none of the above |
+
+**Scope** (optional) — a noun in parentheses naming the subsystem, e.g. `fix(auth)`, `refactor(queue)`. Use the package or module name. Omit when the change is cross-cutting.
+
+**Description** — imperative mood, lowercase, no trailing period, ≤ 72 characters. Says *what* the commit does, not *how*.
+
+**Body** (optional) — one blank line after description. Explains *why*. Does not restate the diff. Wrap at 72 characters.
+
+**Footers** (optional) — `Token: value` per line after a blank line. Token uses hyphens not spaces. Always include `Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>` on AI-assisted commits.
+
+**Breaking changes** — use `!` before the colon and/or a `BREAKING CHANGE:` footer (token MUST be uppercase):
+```
+feat(api)!: remove legacy v1 endpoints
+
+BREAKING CHANGE: All callers must migrate to /api/v2.
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+```
+
+**Never** use ad-hoc prefixes like `Step X.Y:`, `Fix:`, or `Refactor:`. The description MUST be lowercase (except proper nouns and acronyms).
+
 ## Reflection
 
 After significant work: share what caused friction, where you were redirected (indicates missing guidance), and what's missing. Publish insights to event bus (`gotcha_discovered`, `pattern_found`, `improvement_suggested`). When an Insight (★) is a reusable gotcha or cross-session pattern — not just a local code explanation — publish it too.
