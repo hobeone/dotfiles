@@ -25,5 +25,9 @@
     "command": "~/.gemini/antigravity-cli/window_title.sh",
     "enabled": true
   },
-  "toolPermission": "always-proceed"
+  "toolPermission": "always-proceed",
+  "trustedWorkspaces": [
+    "/home/hobe/dotfiles",
+    "/home/hobe/software/gonzbd"
+  ]
 }
