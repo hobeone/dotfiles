@@ -207,15 +207,29 @@ fi
 case $TERM in
   xterm*|rxvt|Eterm|tmux*|screen*)
     if [[ -n "$TMUX" ]]; then
-      precmd () { print -Pn "\e]0;%~\a" }
-      preexec () { print -Pn "\e]0;%~ | ${1}\a" }
+      # precmd now includes the last run command instead of wiping it out
+      precmd () {
+        print -Pn "\e]0;%~${LAST_CMD:+ | $LAST_CMD}\a"
+      }
+      preexec () {
+        local clean_cmd="${(V)1}"
+        clean_cmd="${clean_cmd//G*==/[Image]}"
+        LAST_CMD="$clean_cmd" # Save it for precmd
+        print -Pn "\e]0;%~ | $clean_cmd\a"
+      }
     else
-      precmd () { print -Pn "\e]0;%n@%M: %~\a" }
-      preexec () { print -Pn "\e]0;%n@%M: %~ | ${1}\a" }
+      precmd () {
+        print -Pn "\e]0;%n@%M: %~${LAST_CMD:+ | $LAST_CMD}\a"
+      }
+      preexec () {
+        local clean_cmd="${(V)1}"
+        clean_cmd="${clean_cmd//G*==/[Image]}"
+        LAST_CMD="$clean_cmd" # Save it for precmd
+        print -Pn "\e]0;%n@%M: %~ | $clean_cmd\a"
+      }
     fi
   ;;
 esac
-
 # bat (cat replacement; Debian installs as batcat)
 if ! command -v bat &>/dev/null && command -v batcat &>/dev/null; then
     alias bat='batcat'
