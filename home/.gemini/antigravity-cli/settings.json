@@ -1,0 +1,29 @@
+{
+  "allowNonWorkspaceAccess": true,
+  "altScreenMode": "always",
+  "colorScheme": "tokyo night",
+  "model": "Gemini 3.5 Flash (High)",
+  "permissions": {
+    "allow": [
+      "command(git status)",
+      "command(git add)",
+      "command(git commit)",
+      "command(git pull)",
+      "command(git rebase)",
+      "command(cat)",
+      "command(sed)",
+      "command(tail)"
+    ]
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "~/.gemini/antigravity-cli/statusline.sh",
+    "enabled": true
+  },
+  "title": {
+    "type": "command",
+    "command": "~/.gemini/antigravity-cli/window_title.sh",
+    "enabled": true
+  },
+  "toolPermission": "always-proceed"
+}
