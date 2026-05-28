@@ -131,6 +131,33 @@ All five must pass. Do not commit with failing tests, vet errors, or lint warnin
 - **Every `select` must watch `ctx.Done()`.** Goroutines blocked without a context escape route leak forever.
 - **Use `sync.Once` or `CompareAndSwap` for idempotent shutdown.** Prevents double-close panics.
 
+### Benchmarking & Profiling
+
+All performance-sensitive packages **must** maintain benchmark suites using modern Go 1.24+ `b.Loop()` to guarantee statistical correctness and prevent dead code elimination.
+
+```bash
+# Run all benchmarks in a package
+go test -bench=. -benchmem ./pkg/...
+
+# Run benchmarks with statistical rigor (10 runs)
+go test -bench=. -benchmem -count=10 ./pkg/...
+
+# Statistically compare baseline vs optimized runs (go install golang.org/x/perf/cmd/benchstat@latest)
+benchstat baseline.txt optimized.txt
+```
+
+To analyze CPU bottlenecks and heap memory allocations, generate and inspect profiling data directly from your benchmarks:
+
+```bash
+# Generate profiles from benchmarks
+go test -bench=BenchmarkMyFunc -cpuprofile=cpu.prof ./pkg/mypackage
+go test -bench=BenchmarkMyFunc -memprofile=mem.prof ./pkg/mypackage
+
+# Audit profiles
+go tool pprof cpu.prof
+go tool pprof -alloc_objects mem.prof
+```
+
 ### Commit Convention
 
 All commits must follow [Conventional Commits 1.0.0](https://www.conventionalcommits.org/):
@@ -177,19 +204,15 @@ Minimal recommended config:
 
 ```yaml
 # .golangci.yml
+version: "2"
+
 linters:
   enable:
-    - goimports
     - govet
     - staticcheck
     - errcheck
-    - gosimple
     - ineffassign
     - unused
-
-linters-settings:
-  goimports:
-    local-prefixes: <module-path>
 
 issues:
   max-issues-per-linter: 0
