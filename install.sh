@@ -231,7 +231,7 @@ init_submodules() {
 # 5. Ensure Local Override Files Exist
 ensure_local_files() {
     log_info "Ensuring local override files exist..."
-    
+
     local zsh_local="$HOME/.zshrc.local"
     local vim_user="$HOME/.vim/user.vim"
 
@@ -239,7 +239,7 @@ ensure_local_files() {
         execute touch "$zsh_local"
         log_info "Created empty $zsh_local"
     fi
-    
+
     if [[ ! -f "$vim_user" ]]; then
         execute touch "$vim_user"
         log_info "Created empty $vim_user"
@@ -305,7 +305,7 @@ install_fonts() {
             execute curl -fsSL -o "$tmp_dir/JetBrainsMono.zip" "https://github.com/ryanoasis/nerd-fonts/releases/latest/download/JetBrainsMono.zip"
             execute unzip -o "$tmp_dir/JetBrainsMono.zip" -d "$HOME/.local/share/fonts/"
             rm -rf "$tmp_dir"
-            
+
             if command -v fc-cache &>/dev/null; then
                 execute fc-cache -fv
             else
@@ -342,13 +342,13 @@ install_tokyonight_themes() {
     for entry in "${themes[@]}"; do
         local src="${entry%%|*}"
         local dst="${entry##*|}"
-        
+
 
         execute mkdir -p "$(dirname "$dst")"
         execute ln -sf "$vendor_dir/$src" "$dst"
         log_info "Symlinked theme: $dst"
     done
-    
+
     # Update btop config specifically
     local btop_conf="$HOME/.config/btop/btop.conf"
     if [[ -f "$btop_conf" ]]; then
@@ -472,12 +472,16 @@ install_glow() {
     # Copy glow.yml
     execute cp "$glow_src_dir/glow.yml" "$glow_dst_dir/glow.yml"
 
-    # Link tokyo_night.json (since it's not being modified, linking is fine)
+    # Link themes (since it's not being modified, linking is fine)
     execute ln -sf "$glow_src_dir/tokyo_night.json" "$glow_dst_dir/tokyo_night.json"
+    execute ln -sf "$glow_src_dir/catppuccin-mocha.json" "$glow_dst_dir/catppuccin-mocha.json"
 
-    # Rewrite style path in the COPIED file to use the absolute $HOME path
-    # Pattern matches any path (~/..., /home/..., etc.) before the filename
-    sed_inplace "s|style: \".*tokyo_night.json\"|style: \"$HOME/.config/glow/tokyo_night.json\"|g" "$glow_dst_dir/glow.yml"
+    # Rewrite style path in the COPIED file to use the absolute $HOME path if a custom JSON theme is selected
+    local theme_file
+    theme_file=$(grep -oE 'style: "[^"]*\.json"' "$glow_src_dir/glow.yml" | sed -E 's|style: "(.*/)?([^/]+)"|\2|' || true)
+    if [[ -n "$theme_file" ]]; then
+        sed_inplace "s|style: \".*\"|style: \"$glow_dst_dir/$theme_file\"|g" "$glow_dst_dir/glow.yml"
+    fi
     log_info "Copied and updated glow.yml in $glow_dst_dir"
 }
 
