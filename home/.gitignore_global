@@ -38,6 +38,8 @@ Desktop.ini
 # antigravity
 /.antigravity
 /.antigravitycli
+# jet
+/.jet*
 
 # ==============================================================================
 # Environment & Secrets

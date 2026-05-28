@@ -98,4 +98,4 @@
   path = ~/.gitconfig.tokyonight
 
 [url "https://:@github.com"]
-	insteadOf = /
+  insteadOf = /
