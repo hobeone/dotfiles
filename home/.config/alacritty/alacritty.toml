@@ -1,6 +1,6 @@
 [general]
 import = [
-  "base.toml",
   "theme.toml",
+  "base.toml",
   "local.toml"
 ]
