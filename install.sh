@@ -244,6 +244,30 @@ ensure_local_files() {
         execute touch "$vim_user"
         log_info "Created empty $vim_user"
     fi
+
+    # Gemini settings.json: merge defaults with live file to preserve local changes
+    local defaults="$DOTFILES_DIR/home/.gemini/antigravity-cli/settings.defaults.json"
+    local live="$HOME/.gemini/antigravity-cli/settings.json"
+
+    if [[ ! -f "$live" ]]; then
+        execute mkdir -p "$(dirname "$live")"
+        execute cp "$defaults" "$live"
+        log_info "Created $live from defaults"
+    else
+        if $DRY_RUN; then
+            log_info "[Dry-Run] Would merge settings defaults into $live"
+        else
+            local tmp
+            tmp=$(mktemp)
+            if jq -s '.[0] * .[1]' "$live" "$defaults" > "$tmp" 2>/dev/null; then
+                execute mv "$tmp" "$live"
+                log_info "Merged settings defaults into $live"
+            else
+                log_warn "Failed to merge settings defaults into $live using jq"
+                rm -f "$tmp"
+            fi
+        fi
+    fi
 }
 
 # 6. Install JetBrains Mono Font
@@ -489,7 +513,7 @@ main() {
 
     # Stow everything in home/, ignoring glow and .claude (handled separately)
     # --restow (-R) prunes stale symlinks, making re-runs idempotent
-    local stow_opts=("-R" "--ignore=glow" "--ignore=\.claude" "-t" "$HOME" "home")
+    local stow_opts=("-R" "--ignore=glow" "--ignore=\.claude" "--ignore=settings\\.json" "-t" "$HOME" "home")
     if $VERBOSE; then
         stow_opts=("--verbose=2" "${stow_opts[@]}")
     fi
