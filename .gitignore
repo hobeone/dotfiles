@@ -12,6 +12,7 @@ home/.config/openbox/autostart.local.sh
 home/.config/openbox/noscreenlock
 fonts/.uuid
 home/.config/alacritty/theme.toml
+home/.config/alacritty/local.toml
 home/.config/lazygit/tokyonight_night.yml
 home/.npmrc
 
@@ -22,3 +23,4 @@ home/.npmrc
 home/.claude/contrib/agent-event-bus/
 home/.claude/contrib/agent-session-analytics/
 home/.claude/contrib/agent-memory-store/
+home/.gemini/antigravity-cli/settings.json

@@ -140,7 +140,8 @@ export HISTFILE=~/.zsh_history
 HISTSIZE=100000
 SAVEHIST=100000
 
-setopt SHARE_HISTORY       # Share history between sessions (implies INC_APPEND)
+# This turned out to be annoying.  Off for now
+# setopt SHARE_HISTORY       # Share history between sessions (implies INC_APPEND)
 setopt HIST_IGNORE_ALL_DUPS # Don't record duplicates
 setopt HIST_IGNORE_SPACE   # Don't record commands starting with a space
 setopt HIST_REDUCE_BLANKS  # Remove extra blanks from commands
@@ -206,15 +207,29 @@ fi
 case $TERM in
   xterm*|rxvt|Eterm|tmux*|screen*)
     if [[ -n "$TMUX" ]]; then
-      precmd () { print -Pn "\e]0;%~\a" }
-      preexec () { print -Pn "\e]0;%~ | ${1}\a" }
+      # precmd now includes the last run command instead of wiping it out
+      precmd () {
+        print -Pn "\e]0;%~${LAST_CMD:+ | $LAST_CMD}\a"
+      }
+      preexec () {
+        local clean_cmd="${(V)1}"
+        clean_cmd="${clean_cmd//G*==/[Image]}"
+        LAST_CMD="$clean_cmd" # Save it for precmd
+        print -Pn "\e]0;%~ | $clean_cmd\a"
+      }
     else
-      precmd () { print -Pn "\e]0;%n@%M: %~\a" }
-      preexec () { print -Pn "\e]0;%n@%M: %~ | ${1}\a" }
+      precmd () {
+        print -Pn "\e]0;%n@%M: %~${LAST_CMD:+ | $LAST_CMD}\a"
+      }
+      preexec () {
+        local clean_cmd="${(V)1}"
+        clean_cmd="${clean_cmd//G*==/[Image]}"
+        LAST_CMD="$clean_cmd" # Save it for precmd
+        print -Pn "\e]0;%n@%M: %~ | $clean_cmd\a"
+      }
     fi
   ;;
 esac
-
 # bat (cat replacement; Debian installs as batcat)
 if ! command -v bat &>/dev/null && command -v batcat &>/dev/null; then
     alias bat='batcat'
@@ -251,23 +266,9 @@ export LESSCHARDEF=8bcccbcc13b.4b95.33b.
 
 alias pgrep="pgrep -l -a"
 
-
-# ------------------------------------------------------------------------------
-# 10. External Tools & Local Overrides
-# ------------------------------------------------------------------------------
-# NVM (Node Version Manager) — lazy-loaded for faster shell startup
 export NVM_DIR="$HOME/.nvm"
-if [ -s "$NVM_DIR/nvm.sh" ]; then
-  _lazy_load_nvm() {
-    unset -f nvm node npm npx 2>/dev/null
-    \. "$NVM_DIR/nvm.sh"
-    [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"
-  }
-  function nvm  { _lazy_load_nvm; nvm  "$@"; }
-  function node { _lazy_load_nvm; node "$@"; }
-  function npm  { _lazy_load_nvm; npm  "$@"; }
-  function npx  { _lazy_load_nvm; npx  "$@"; }
-fi
+[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # This loads nvm
+[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"  # This loads nvm bash_completion
 
 # Local .zshrc if it exists
 [[ -e ~/.zshrc.local ]] && source ~/.zshrc.local
