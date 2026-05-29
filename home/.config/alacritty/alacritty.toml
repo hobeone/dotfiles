@@ -1,40 +1,6 @@
-
-[env]
-TERM = "xterm-256color"
-
-[window]
-dimensions = { columns = 80, lines = 24}
-dynamic_title = true
-
-[scrolling]
-history = 10000
-
-[font]
-normal = {family = "JetBrainsMonoNLNFM", style = "Regular"}
-size = 12
-
-[colors.primary]
-background = "#000000"
-
-[colors]
-# Use a highly visible color that won't blend with your background.
-cursor = { text = "0x000000", cursor = "0xffffff" }
-
-[[hints.enabled]]
-# Cross-platform URL opener: prefers xdg-open (Linux), falls back to open (macOS)
-command = { program = "sh", args = ["-c", "xdg-open \"$0\" 2>/dev/null || open \"$0\""] }
-hyperlinks = true
-post_processing = true
-persist = false
-mouse.enabled = true
-mouse.mods = "Control"
-binding = { key = "O", mods = "Control|Shift" }
-regex = "(ipfs:|ipns:|magnet:|mailto:|gemini://|gopher://|https://|http://|news:|file:|git://|ssh:|ftp://)[^\u0000-\u001F\u007F-\u009F<>\"\\s{-}\\^⟨⟩`\\\\]+"
-
-[selection]
-semantic_escape_chars = ",│`|\"' ()[]{}<>\t"
-
 [general]
-import = ["theme.toml"]
-
-
+import = [
+  "theme.toml",
+  "base.toml",
+  "local.toml"
+]

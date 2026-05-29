@@ -11,7 +11,7 @@ jobs:
     name: Shellcheck
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           submodules: false  # Don't need submodules for linting our scripts
 
@@ -44,7 +44,7 @@ jobs:
     name: Syntax check
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install zsh
         run: sudo apt-get install -y zsh
@@ -59,7 +59,7 @@ jobs:
     name: Verify structure
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Required config files exist
         run: |
