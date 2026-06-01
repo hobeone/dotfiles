@@ -39,6 +39,13 @@ done
 DOTFILES_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 HOME_DIR="$DOTFILES_DIR/home"
 
+# Central source of truth for Stow ignore patterns
+STOW_IGNORES=(
+    "glow"
+    "\.claude"
+    "settings\.json"
+)
+
 log_info() {
     echo -e "\033[0;34m[INFO]\033[0m $*"
 }
@@ -234,6 +241,7 @@ ensure_local_files() {
 
     local zsh_local="$HOME/.zshrc.local"
     local vim_user="$HOME/.vim/user.vim"
+    local bash_local="$HOME/.bashrc.local"
 
     if [[ ! -f "$zsh_local" ]]; then
         execute touch "$zsh_local"
@@ -243,6 +251,11 @@ ensure_local_files() {
     if [[ ! -f "$vim_user" ]]; then
         execute touch "$vim_user"
         log_info "Created empty $vim_user"
+    fi
+
+    if [[ ! -f "$bash_local" ]]; then
+        execute touch "$bash_local"
+        log_info "Created empty $bash_local"
     fi
 
     # Gemini settings.json: merge defaults with live file to preserve local changes
@@ -268,6 +281,58 @@ ensure_local_files() {
             fi
         fi
     fi
+}
+
+# 5.1 Scan and Backup Pre-existing Stow Conflicts
+backup_existing_conflicts() {
+    log_info "Scanning for pre-existing files to back up..."
+    find_stow_conflicts "$HOME_DIR" "$HOME"
+}
+
+find_stow_conflicts() {
+    local src_dir="$1"
+    local dst_dir="$2"
+    
+    [[ -d "$src_dir" ]] || return 0
+    
+    local entry
+    for entry in "$src_dir"/* "$src_dir"/.*; do
+        [[ -e "$entry" ]] || continue
+        
+        local name
+        name=$(basename "$entry")
+        [[ "$name" == "." || "$name" == ".." ]] && continue
+        
+        # Check against central ignores
+        local ignored=false
+        local rel_path="${entry#$HOME_DIR/}"
+        for pattern in "${STOW_IGNORES[@]}"; do
+            if [[ "$rel_path" =~ $pattern ]]; then
+                ignored=true
+                break
+            fi
+        done
+        if $ignored; then
+            continue
+        fi
+        
+        local target="$dst_dir/$name"
+        
+        if [[ -e "$target" ]]; then
+            if [[ -L "$target" ]]; then
+                # Already a symlink, safe to skip
+                continue
+            elif [[ -d "$target" && -d "$entry" ]]; then
+                # Both are directories: Stow will descend, so we do too
+                find_stow_conflicts "$entry" "$target"
+            else
+                # Regular file conflict!
+                log_info "Found existing non-symlink target conflict: $target. Backing up to $target.bak..."
+                execute mkdir -p "$(dirname "$target.bak")"
+                execute mv "$target" "$target.bak"
+            fi
+        fi
+    done
 }
 
 # 6. Install JetBrains Mono Font
@@ -515,13 +580,16 @@ main() {
     # 8. Create Links via GNU Stow
     log_info "Creating symlinks with GNU Stow..."
 
-    # Stow everything in home/, ignoring glow and .claude (handled separately)
-    # --restow (-R) prunes stale symlinks, making re-runs idempotent
-    local stow_opts=("-R" "--ignore=glow" "--ignore=\.claude" "--ignore=settings\\.json" "-t" "$HOME" "home")
+    local stow_opts=("-R" "-t" "$HOME")
+    for ignore in "${STOW_IGNORES[@]}"; do
+        stow_opts+=("--ignore=$ignore")
+    done
     if $VERBOSE; then
         stow_opts=("--verbose=2" "${stow_opts[@]}")
     fi
+    stow_opts+=("home")
 
+    backup_existing_conflicts
     execute stow "${stow_opts[@]}"
 
     # Handle glow separately (copied instead of linked)
