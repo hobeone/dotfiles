@@ -47,3 +47,8 @@ All commits and changelists MUST follow:
 
 ### 3.3 Deep Codebase Comprehension
 - **Complete Reading**: When reviewing a component, library, or feature area, read *all* relevant files fully from top-to-bottom. Avoid blind search-and-replace or relying solely on partial regex/grep matches.
+
+### 3.4 Code Complexity & Hotspot Refactoring
+- **Simplify Multi-Strategy Fallbacks**: When a single method implements multiple complex validation, routing, or fallback strategies, extract each individual strategy into its own focused helper function (e.g., extracting distinct cross-origin Referer validation checks from a main CSRF guard). This reduces parent method cyclomatic complexity, simplifies logical auditing, and enables targeted unit testing of each sub-path.
+- **Consolidate Subsystem Boilerplates**: Avoid duplicating decoder initializations, background goroutine spawns, panic recovery blocks, and progress channel synchronization setups across adjacent methods or services. Consolidate these structures into unified shared builder or monitor helper methods to keep main orchestrations concise.
+- **Isolate Parsing & Struct Normalization**: Keep primary decoding and file parsing handlers focused on high-level orchestration. Extract complex error-type partitioning loops (e.g., sorting warnings from fatal compiler/parser errors) and final struct normalizations (e.g., filling in default values or converting nil slices) into dedicated single-responsibility helper functions.
