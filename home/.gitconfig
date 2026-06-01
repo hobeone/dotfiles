@@ -43,6 +43,7 @@
 
 [diff]
 	algorithm = histogram
+	tool = meld
 
 [merge]
 	conflictstyle = zdiff3
@@ -99,3 +100,5 @@
 
 [url "https://:@github.com"]
   insteadOf = /
+[difftool]
+	prompt = false
