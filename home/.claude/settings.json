@@ -9,21 +9,14 @@
     "allow": [],
     "defaultMode": "bypassPermissions"
   },
+  "model": "claude-fable-5[1m]",
   "hooks": {
     "UserPromptSubmit": [
       {
         "hooks": [
           {
             "type": "command",
-            "command": "~/.claude/hooks/prompt-events.sh"
-          },
-          {
-            "type": "command",
             "command": "~/.claude/hooks/tmux-status.sh working"
-          },
-          {
-            "type": "command",
-            "command": "~/.claude/hooks/zj-status.sh working"
           }
         ]
       }
@@ -33,41 +26,20 @@
         "hooks": [
           {
             "type": "command",
-            "command": "~/.claude/hooks/zj-status.sh waiting"
-          },
-          {
-            "type": "command",
             "command": "~/.claude/hooks/tmux-status.sh waiting"
           }
         ]
       }
     ],
-    "SessionStart": [
+    "PostToolUse": [
       {
+        "matcher": "Bash|Grep|Glob",
         "hooks": [
           {
             "type": "command",
-            "command": "~/.claude/hooks/session-start.sh"
-          }
-        ]
-      }
-    ],
-    "SessionEnd": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "~/.claude/hooks/session-end.sh"
-          }
-        ]
-      }
-    ],
-    "PreCompact": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "~/.claude/hooks/pre-compact.sh"
+            "command": "repowise-augment",
+            "timeout": 10,
+            "statusMessage": "Checking codebase context..."
           }
         ]
       }
@@ -80,24 +52,25 @@
   },
   "enabledPlugins": {
     "feature-dev@claude-plugins-official": true,
-    "pr-review-toolkit@claude-plugins-official": true,
+    "pr-review-toolkit@claude-plugins-official": false,
     "commit-commands@claude-plugins-official": true,
-    "rust-analyzer-lsp@claude-plugins-official": true,
+    "rust-analyzer-lsp@claude-plugins-official": false,
     "code-simplifier@claude-plugins-official": true,
     "superpowers@claude-plugins-official": true,
-    "ralph-loop@claude-plugins-official": true,
+    "ralph-loop@claude-plugins-official": false,
     "claude-md-management@claude-plugins-official": true,
-    "skill-creator@claude-plugins-official": true,
+    "skill-creator@claude-plugins-official": false,
     "claude-code-setup@claude-plugins-official": true,
     "agent-sdk-dev@claude-plugins-official": true,
     "explanatory-output-style@claude-plugins-official": true,
     "gopls-lsp@claude-plugins-official": true,
-    "pyright-lsp@claude-plugins-official": true,
+    "pyright-lsp@claude-plugins-official": false,
     "typescript-lsp@claude-plugins-official": true,
-    "python-development@claude-code-workflows": true,
+    "python-development@claude-code-workflows": false,
     "frontend-design@claude-plugins-official": true,
     "clangd-lsp@claude-plugins-official": true,
-    "github@claude-plugins-official": true
+    "github@claude-plugins-official": true,
+    "github.com-google-labs-code-stitch-skills@google-labs-code-stitch-skills": true
   },
   "extraKnownMarketplaces": {
     "claude-code-workflows": {
@@ -108,6 +81,19 @@
     }
   },
   "effortLevel": "medium",
-  "advisorModel": "opus",
-  "skipDangerousModePermissionPrompt": true
+  "skipDangerousModePermissionPrompt": true,
+  "verbose": false,
+  "autoCompactEnabled": true,
+  "mcpServers": {
+    "repowise": {
+      "command": "repowise",
+      "args": [
+        "mcp",
+        "/home/hobe/software/gonzbd",
+        "--transport",
+        "stdio"
+      ],
+      "description": "repowise: codebase intelligence — docs, graph, git signals, dead code, decisions"
+    }
+  }
 }
