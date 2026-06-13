@@ -550,6 +550,58 @@ install_glow() {
     log_info "Copied and updated glow.yml in $glow_dst_dir"
 }
 
+migrate_gemini_dir() {
+    local gemini_dir="$HOME/.gemini"
+    local cli_dir="$gemini_dir/antigravity-cli"
+    local skills_dir="$gemini_dir/skills"
+    local migrated=false
+    
+    local files=()
+    if command -v git >/dev/null 2>&1; then
+        mapfile -t files < <(git -C "$DOTFILES_DIR" ls-files -o "home/.gemini")
+    fi
+
+    if [[ -L "$gemini_dir" ]]; then
+        log_info "Removing folded .gemini symlink..."
+        execute rm "$gemini_dir"
+        migrated=true
+    else
+        if [[ -L "$cli_dir" ]]; then
+            log_info "Removing folded .gemini/antigravity-cli symlink..."
+            execute rm "$cli_dir"
+            migrated=true
+        fi
+        if [[ -L "$skills_dir" ]]; then
+            log_info "Removing folded .gemini/skills symlink..."
+            execute rm "$skills_dir"
+            migrated=true
+        fi
+    fi
+    
+    if $migrated; then
+        # Re-create correct directory structure
+        execute mkdir -p "$cli_dir"
+        execute mkdir -p "$skills_dir"
+        
+        # Move untracked files
+        for f in "${files[@]}"; do
+            local rel="${f#home/.gemini/}"
+            local dest="$gemini_dir/$rel"
+            local src="$DOTFILES_DIR/$f"
+            if [[ -e "$src" ]]; then
+                execute mkdir -p "$(dirname "$dest")"
+                execute mv "$src" "$dest"
+                log_info "Migrated local file: $rel"
+            fi
+        done
+        
+        # Clean up remaining untracked/ignored files/dirs in repo
+        if command -v git >/dev/null 2>&1; then
+            execute git -C "$DOTFILES_DIR" clean -fdx home/.gemini
+        fi
+    fi
+}
+
 main() {
     log_info "Installing dotfiles from $DOTFILES_DIR to $HOME"
 
@@ -576,6 +628,10 @@ main() {
 
     # 7. Install Tokyo Night Themes
     install_tokyonight_themes
+
+    # Migrate and pre-create Gemini directories to prevent folding
+    migrate_gemini_dir
+    execute mkdir -p "$HOME/.gemini/antigravity-cli" "$HOME/.gemini/skills"
 
     # 8. Create Links via GNU Stow
     log_info "Creating symlinks with GNU Stow..."
