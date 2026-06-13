@@ -32,6 +32,9 @@ NUM_COLOR="${FG_BRIGHT_WHITE}${B}"
 # ─── Parse JSON from stdin (Single jq pass for performance) ──────────────────
 # Extract all fields in one pass to prevent spawning jq 8 times.
 STDIN_CONTENT=$(cat)
+
+# Save input to a tmp file for examination, not everything is fully documented
+# so looking at the actual file helps set up the parsing.
 (umask 077; printf "%s" "$STDIN_CONTENT" > /tmp/statusline_input.json) 2>/dev/null || true
 
 {
@@ -56,7 +59,7 @@ STDIN_CONTENT=$(cat)
       (.vcs.dirty // false),
       (.sandbox.enabled // false),
       (.artifact_count // 0),
-      (if .subagents | type == "array" then ([.subagents[] | select(.status == "active")] | length) else 0 end),
+      (if .subagents | type == "array" then ([.subagents[] | select(.status == "running")] | length) else 0 end),
       (.task_count // 0),
       (.model.display_name // ""),
       (.terminal_width // 80)
