@@ -110,6 +110,9 @@ let g:tokyonight_style = 'night'
 let g:tokyonight_enable_italic = 1
 colorscheme tokyonight
 
+:highlight Comment ctermfg=grey
+:highlight Comment guifg=grey
+
 " UI Toggles & Indicators
 set number                    " Show line numbers
 set ruler                     " Show cursor position
