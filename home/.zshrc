@@ -179,6 +179,16 @@ if [[ -n "$TMUX" ]]; then
   add-zsh-hook preexec refresh
 fi
 
+# Search for processes using a pattern, preserving the header and excluding this search process
+psgrep() {
+  if [[ -z "$1" ]]; then
+    echo "Usage: psgrep <pattern>"
+    return 1
+  fi
+  ps guaxww | awk -v query="$1" 'NR==1 || ($0 ~ query && $0 !~ /awk -v query=/ && $0 !~ /psgrep/)'
+}
+
+
 
 # ------------------------------------------------------------------------------
 # 9. Aliases & Command Wrappers
