@@ -9,7 +9,7 @@
     "allow": [],
     "defaultMode": "bypassPermissions"
   },
-  "model": "claude-fable-5[1m]",
+  "model": "opus",
   "hooks": {
     "UserPromptSubmit": [
       {
