@@ -31,6 +31,9 @@ NUM_COLOR="${FG_BRIGHT_WHITE}${B}"
 
 # ─── Parse JSON from stdin (Single jq pass for performance) ──────────────────
 # Extract all fields in one pass to prevent spawning jq 8 times.
+STDIN_CONTENT=$(cat)
+(umask 077; printf "%s" "$STDIN_CONTENT" > /tmp/statusline_input.json) 2>/dev/null || true
+
 {
   read -r STATE
   read -r USED_PCT
@@ -43,18 +46,22 @@ NUM_COLOR="${FG_BRIGHT_WHITE}${B}"
   read -r MODEL
   read -r COLS
 } <<< "$(
-  jq -r '
-    (.agent_state // "idle"),
-    (.context_window.used_percentage // 0),
-    (.vcs.branch // ""),
-    (.vcs.dirty // false),
-    (.sandbox.enabled // false),
-    (.artifact_count // 0),
-    (if .subagents | type == "array" then ([.subagents[] | select(.status == "active")] | length) else 0 end),
-    (.task_count // 0),
-    (.model.display_name // ""),
-    (.terminal_width // 80)
-  ' 2>/dev/null || printf "idle\n0\n\nfalse\nfalse\n0\n0\n0\n\n80\n"
+  if [ -z "$STDIN_CONTENT" ]; then
+    printf "idle\n0\n\nfalse\nfalse\n0\n0\n0\n\n80\n"
+  else
+    printf "%s" "$STDIN_CONTENT" | jq -r '
+      (.agent_state // "idle"),
+      (.context_window.used_percentage // 0),
+      (.vcs.branch // ""),
+      (.vcs.dirty // false),
+      (.sandbox.enabled // false),
+      (.artifact_count // 0),
+      (if .subagents | type == "array" then ([.subagents[] | select(.status == "active")] | length) else 0 end),
+      (.task_count // 0),
+      (.model.display_name // ""),
+      (.terminal_width // 80)
+    ' 2>/dev/null || printf "idle\n0\n\nfalse\nfalse\n0\n0\n0\n\n80\n"
+  fi
 )"
 
 # ─── Computed Values ─────────────────────────────────────────────────────────
