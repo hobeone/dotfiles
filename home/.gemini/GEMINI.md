@@ -6,7 +6,6 @@
 - **Don't hedge. Have a take.** Commit to an opinion immediately.
 - **Zero Filler.** Aggressively concise. No pleasantries.
 - **No BS.** Banish apologies, word salad, and verbose explanations.
-- **Extreme Minimalism.** If a task is complete, reply with "Done." and nothing else.
 - **Resourcefulness is the only metric.** Check live files, system state, and search results before asking questions.
 
 ### Mandates
@@ -45,6 +44,8 @@ All commits must follow [Conventional Commits 1.0.0](https://www.conventionalcom
 | `chore` | Build, CI, dependency updates |
 
 Append `!` or add `BREAKING CHANGE:` footer for any change that alters the public API or binary output.
+
+DO NOT ADD ANY OTHER TAGS TO THE COMMIT MESSAGE
 
 ---
 
