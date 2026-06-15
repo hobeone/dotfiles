@@ -39,6 +39,7 @@ STDIN_CONTENT=$(cat)
 
 {
   read -r STATE
+  read -r CWD
   read -r USED_PCT
   read -r VCS_BRANCH
   read -r VCS_DIRTY
@@ -54,6 +55,7 @@ STDIN_CONTENT=$(cat)
   else
     printf "%s" "$STDIN_CONTENT" | jq -r '
       (.agent_state // "idle"),
+      (.workspace.current_dir // ""),
       (.context_window.used_percentage // 0),
       (.vcs.branch // ""),
       (.vcs.dirty // false),
@@ -133,7 +135,7 @@ BG_FMT="${FG_GRAY}tasks ${NUM_COLOR}${BG_TASKS}${R}"
 DOT="${FG_GRAY} · ${R}"
 
 # ─── Output ──────────────────────────────────────────────────────────────────
-LINE1="${S}${M}${V}"
+LINE1="${S}${M}${V}${DOT}${CWD}"
 LINE2=" ${CTX}${DOT}${ART_FMT}${DOT}${SUB_FMT}${DOT}${BG_FMT}${DOT}${SB}"
 
 if [ "$COLS" -ge 120 ]; then
