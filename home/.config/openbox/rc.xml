@@ -256,6 +256,9 @@
     <keybind key="A-S-f">
       <action name="ToggleMaximizeVert"/>
     </keybind>
+    <keybind key="S-C-f">
+      <action name="ToggleMaximizeFull"/>
+    </keybind>
     <!-- Keybindings for window switching -->
     <keybind key="A-Tab">
       <action name="NextWindow">
