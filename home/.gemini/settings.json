@@ -14,7 +14,7 @@
     "showModelInfoInChat": true,
     "useAlternateBuffer": false,
     "terminalBuffer": true,
-    "theme": "Tokyo Night"
+    "theme": "/usr/local/google/home/hobe/dotfiles/vendor/tokyonight-themes/extras/gemini_cli/tokyonight_night.json"
   },
   "experimental": {
     "modelSteering": true

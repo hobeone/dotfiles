@@ -83,17 +83,5 @@
   "effortLevel": "medium",
   "skipDangerousModePermissionPrompt": true,
   "verbose": false,
-  "autoCompactEnabled": true,
-  "mcpServers": {
-    "repowise": {
-      "command": "repowise",
-      "args": [
-        "mcp",
-        "/home/hobe/software/gonzbd",
-        "--transport",
-        "stdio"
-      ],
-      "description": "repowise: codebase intelligence — docs, graph, git signals, dead code, decisions"
-    }
-  }
+  "autoCompactEnabled": true
 }
