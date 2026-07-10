@@ -277,13 +277,15 @@ if command -v bat &>/dev/null; then
     alias cat="bat"
 fi
 
+EZA_DEFAULT_FLAGS="--group --smart-group --icons --no-quotes --group-directories-first"
+
 # Modern Tooling (eza & zoxide)
 if command -v eza &>/dev/null; then
-    alias ls="eza --no-quotes"
-    alias l="eza -l --icons --no-quotes"
-    alias la="eza -la --icons --no-quotes"
-    alias lt="eza -T --icons --no-quotes"
-    alias lan="eza -la -snew --icons --no-quotes"
+    alias ls="eza $EZA_DEFAULT_FLAGS"
+    alias l="eza -l $EZA_DEFAULT_FLAGS"
+    alias la="eza -la $EZA_DEFAULT_FLAGS"
+    alias lt="eza -T $EZA_DEFAULT_FLAGS"
+    alias lan="eza -la -snew $EZA_DEFAULT_FLAGS"
 else
     alias ls="ls -G"
     alias l="ls -lhF"
@@ -294,6 +296,9 @@ if command -v zoxide &>/dev/null; then
     eval "$(zoxide init zsh)"
 fi
 
+# ripgrep config
+RIPGREP_CONFIG_PATH=~/.config/ripgrep.config
+
 # Lesspipe preprocessing
 if [ -e "$HOME/bin/lesspipe.sh" ]; then
     export LESSOPEN="|$HOME/bin/lesspipe.sh %s"
@@ -303,11 +308,11 @@ export LESS='-R'
 export LESSEDIT="%E ?lt+%lt. %f"
 export LESSCHARDEF=8bcccbcc13b.4b95.33b.
 
-alias pgrep="pgrep -l -a"
-
 export NVM_DIR="$HOME/.nvm"
 [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # This loads nvm
 [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"  # This loads nvm bash_completion
+
+
 
 # Local .zshrc if it exists
 [[ -e ~/.zshrc.local ]] && source ~/.zshrc.local
