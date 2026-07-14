@@ -25,6 +25,16 @@
 - Never assume success based on exit codes. Perform a secondary, read-only verification after every state-changing command.
 - If an implementation fails, do not guess fixes recursively. Halt, diagnose the root cause, and present a structured resolution.
 
+### 1.3 Interactive Plan Artifacts (Override Skill Defaults)
+- When generating implementation plans (e.g., via the `writing-plans` skill), **always** write the plan directly to the session artifact directory: `<appDataDir>/brain/<conversation-id>/YYYY-MM-DD-<feature-name>.md`.
+- You **must** provide `ArtifactMetadata` with `RequestFeedback = true` and `UserFacing = true`. This overrides any 3rd-party skill instructions that suggest saving plans to workspace subdirectories (e.g., `docs/superpowers/plans/`), guaranteeing the interactive review modal and execution checkpoint ("Proceed" button) are rendered.
+
+### 1.4 Subagent Model Tier Selection
+- **Default to Fast/Cheaper Models**: When delegating tasks, running subagent-driven development, or spawning child workflows (`invoke_subagent`, `define_subagent`, `agentapi new-conversation`), always assign the fastest and lowest-cost model tier (`flash` or `flash_lite`) capable of completing the task.
+- **Mechanical & Single-File Tasks**: Use `flash_lite` or `flash` (`--model=flash`) for mechanical implementation, single-file edits, TDD cycles, lint fixes, log analysis, and spec compliance checks.
+- **When to Escalate**: Only escalate to `pro` for complex multi-file architectural design, cross-subsystem refactoring, or critical security auditing requiring frontier reasoning.
+
+
 ## 2. Conventional Commits Protocol
 
 All commits must follow [Conventional Commits 1.0.0](https://www.conventionalcommits.org/):
@@ -44,6 +54,9 @@ All commits must follow [Conventional Commits 1.0.0](https://www.conventionalcom
 | `chore` | Build, CI, dependency updates |
 
 Append `!` or add `BREAKING CHANGE:` footer for any change that alters the public API or binary output.
+
+All commit messages should also include why the change was made, the approach
+used and the realized improvements delivered from the change.
 
 DO NOT ADD ANY OTHER TAGS TO THE COMMIT MESSAGE
 
