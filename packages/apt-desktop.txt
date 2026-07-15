@@ -1,3 +1,4 @@
+alacritty
 brightnessctl
 foot
 inotify-tools
@@ -5,6 +6,8 @@ input-remapper
 kanshi
 kitty
 labwc
+obconfig
+openbox
 pamixer
 playerctl
 sway
@@ -20,5 +23,6 @@ x11-xserver-utils
 xautolock
 xclip
 xfce4
+xinput
 xsecurelock
 xss-lock
