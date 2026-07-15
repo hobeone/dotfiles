@@ -9,7 +9,6 @@
     "allow": [],
     "defaultMode": "bypassPermissions"
   },
-  "model": "opus",
   "hooks": {
     "UserPromptSubmit": [
       {
@@ -27,19 +26,6 @@
           {
             "type": "command",
             "command": "~/.claude/hooks/tmux-status.sh waiting"
-          }
-        ]
-      }
-    ],
-    "PostToolUse": [
-      {
-        "matcher": "Bash|Grep|Glob",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "repowise-augment",
-            "timeout": 10,
-            "statusMessage": "Checking codebase context..."
           }
         ]
       }
@@ -81,6 +67,7 @@
     }
   },
   "effortLevel": "medium",
+  "tui": "fullscreen",
   "skipDangerousModePermissionPrompt": true,
   "verbose": false,
   "autoCompactEnabled": true
