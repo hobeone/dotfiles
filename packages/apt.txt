@@ -8,6 +8,7 @@ glow
 jq
 lazygit
 ripgrep
+shellcheck
 stow
 tmux
 unzip
