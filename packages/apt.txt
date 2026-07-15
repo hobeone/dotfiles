@@ -4,6 +4,7 @@ curl
 eza
 gh
 git-delta
+glow
 jq
 lazygit
 ripgrep
