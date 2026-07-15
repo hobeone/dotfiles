@@ -29,6 +29,22 @@ Non-obvious autonomy:
 - After creating/pushing to PR: run `/watch-ci <PR#>` immediately
 - When making issues: check for relevant labels, suggest new ones
 
+### Model & Agent Selection
+
+Default to the lowest-cost model/agent you judge capable of doing the task
+reliably — don't reach for a premium model out of habit. Rough tiers, cheapest
+first: Haiku (mechanical, well-specified, or narrow work) < Sonnet (standard
+implementation and refactoring) < Opus (genuinely hard reasoning, architecture,
+ambiguous problems, security-sensitive logic, and final verification). When
+delegating via the Agent tool, set `model` explicitly to the cheapest fitting
+tier.
+
+Be verbose about the choice: before dispatching or acting, state which model
+you're selecting and one line on why (task difficulty, blast radius, need for
+independent verification). If you escalate to a pricier model, say what made the
+cheaper tier insufficient. If you complete work on a premium model that a
+cheaper one could have handled, note that too.
+
 ### Requires Discussion
 
 - Design trade-offs with multiple valid approaches
