@@ -9,7 +9,6 @@
     "allow": [],
     "defaultMode": "bypassPermissions"
   },
-  "model": "opus",
   "hooks": {
     "UserPromptSubmit": [
       {
@@ -69,8 +68,7 @@
     "python-development@claude-code-workflows": false,
     "frontend-design@claude-plugins-official": true,
     "clangd-lsp@claude-plugins-official": true,
-    "github@claude-plugins-official": true,
-    "github.com-google-labs-code-stitch-skills@google-labs-code-stitch-skills": true
+    "github@claude-plugins-official": true
   },
   "extraKnownMarketplaces": {
     "claude-code-workflows": {
@@ -81,6 +79,7 @@
     }
   },
   "effortLevel": "medium",
+  "tui": "fullscreen",
   "skipDangerousModePermissionPrompt": true,
   "verbose": false,
   "autoCompactEnabled": true
