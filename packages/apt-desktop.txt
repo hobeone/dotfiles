@@ -6,7 +6,7 @@ input-remapper
 kanshi
 kitty
 labwc
-obconfig
+obconf
 openbox
 pamixer
 playerctl
