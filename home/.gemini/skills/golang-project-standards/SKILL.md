@@ -192,7 +192,7 @@ which goimports && goimports --help 2>&1 | head -1
 go version
 ```
 
-If `goimports` is missing, propose the install command but do not run it automatically — ask the user to confirm.
+If `goimports` is missing, propose the install command but do not run it automatically — ask the user to confirm via ask_question.
 
 ---
 
@@ -243,5 +243,5 @@ git commit -m "chore: add golangci-lint configuration"
 
 - Does not modify existing Go source files.
 - Does not enforce project-specific architecture rules (add those manually to GEMINI.md after this skill runs).
-- Does not install binaries without user confirmation.
+- Does not install binaries without user confirmation via ask_question.
 - Does not create CI workflow files (see the `golang-continuous-integration` skill for that).
