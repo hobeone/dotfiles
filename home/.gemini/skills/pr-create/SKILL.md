@@ -34,7 +34,7 @@ git log HEAD..origin/main --oneline
 
 If main has advanced:
 - Inform user: "Main has advanced by N commits since your branch diverged."
-- Ask user whether to rebase onto main.
+- Ask user whether to rebase onto main using `ask_question`.
 - If rebase: `git rebase origin/main`, resolve conflicts if needed.
 
 ### 3. Verify Before Pushing
@@ -45,7 +45,7 @@ Run `Skill(verification-before-completion)` to confirm quality gates pass (linte
 
 Instead of relying on commit-commands plugins:
 1. Stage all changes: `git add -A`
-2. Form a Conventional Commit message based on changes and ask the user to verify.
+2. Form a Conventional Commit message based on changes and ask the user to verify (using `ask_question` or text).
 3. Commit: `git commit -m "<message>"`
 4. Push: `git push -u origin <branch>`
 5. Create PR:
