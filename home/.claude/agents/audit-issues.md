@@ -94,7 +94,7 @@ Examples:
 
 ## Final Steps
 
-Present triage for user review. After approval: add labels, close stale issues, update bodies.
+Present findings in batches (1-4) via `AskUserQuestion`, starting with Critical. Options for each: **Implement (Recommended)** - add label/close/update now, **Skip** - note and move on, **Defer** - leave open for later triage.
 
 ## Tool Gaps (if any)
 

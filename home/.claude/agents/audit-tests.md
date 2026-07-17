@@ -91,6 +91,10 @@ For each: **[Category]** - Location, Problem, Recommendation, Effort
 Example:
 **[Staleness]** - `tests/auth.py::test_old` - Always passes, no assertions - Delete or rewrite - Low
 
+## Final Steps
+
+Present findings in batches (1-4) via `AskUserQuestion`, starting with Critical. Options for each: **Implement (Recommended)** - fix now, **Skip** - note and move on, **Defer** - create a GitHub issue.
+
 ## Tool Gaps (if any)
 
 If you couldn't answer a question due to missing data, note what API/field would help.
