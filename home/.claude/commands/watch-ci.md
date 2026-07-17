@@ -42,15 +42,6 @@ If PR_NUMBER is omitted, uses the current branch's PR.
 5. When you receive a task notification about the background command completing, read the output to check results.
 
 6. When CI completes:
-   - Notify and broadcast:
-     ```
-     mcp__agent-event-bus__notify(title="CI", message="CI passed/failed on PR #<PR_NUMBER>")
-     mcp__agent-event-bus__publish_event(
-       event_type: "ci_completed",
-       payload: "CI <passed/failed> on PR #<PR_NUMBER> - <PR_TITLE>",
-       session_id: "<your-session-id>",
-       channel: "repo:<repo_name>"
-     )
-     ```
+   - Notify: `PushNotification(message="CI passed/failed on PR #<PR_NUMBER>", status="proactive")`
    - **Always** spawn `/pr-review remote` — CI status and code review are independent concerns. Do not gate review on CI pass.
    - If CI **failed**: Also investigate the failure and fix. Review and CI fixes can happen in parallel or any order.

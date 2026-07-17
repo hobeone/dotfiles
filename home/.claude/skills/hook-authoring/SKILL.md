@@ -81,12 +81,6 @@ if ! command -v jq &>/dev/null; then
     exit 0  # Silent exit, don't break Claude
 fi
 
-# Check for agent-event-bus-cli
-if ! command -v agent-event-bus-cli &>/dev/null; then
-    cli_path="$HOME/.local/bin/agent-event-bus-cli"
-    [[ -x "$cli_path" ]] || exit 0
-fi
-
 # Check for zellij
 if [[ -z "${ZELLIJ:-}" ]]; then
     exit 0  # Not in zellij, skip zellij operations
@@ -173,30 +167,6 @@ if [[ "$cwd" == */.worktrees/* ]]; then
 fi
 ```
 
-## Event Bus Integration
-
-For hooks that interact with the event bus:
-
-```bash
-# Find CLI
-if command -v agent-event-bus-cli &>/dev/null; then
-    cli="agent-event-bus-cli"
-elif [[ -x "$HOME/.local/bin/agent-event-bus-cli" ]]; then
-    cli="$HOME/.local/bin/agent-event-bus-cli"
-else
-    exit 0
-fi
-
-# Register session
-"$cli" register --name "$session_name" --client-id "$session_id"
-
-# Publish events
-"$cli" publish --type "event_type" --payload "message" --session-id "$session_id"
-
-# Get events with resume (incremental)
-"$cli" events --resume --session-id "$session_id"
-```
-
 ## Testing
 
 Run `make test-hooks` to test all hooks. Tests verify:
@@ -228,8 +198,4 @@ Available triggers:
 ## Reference
 
 See existing hooks in `home/.claude/hooks/` for examples:
-- `session-start.sh` - Event bus registration, zellij tab rename
-- `session-end.sh` - Cleanup
-- `prompt-events.sh` - Incremental event polling
-- `zj-status.sh` - Visual state indicator (zjstatus notification)
-- `pre-compact.sh` - WIP checkpointing
+- `tmux-status.sh` - Visual state indicator (tmux status line)

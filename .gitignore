@@ -20,7 +20,4 @@ home/.npmrc
 /.claude/
 .worktrees/
 .parallel-context.md
-home/.claude/contrib/agent-event-bus/
-home/.claude/contrib/agent-session-analytics/
-home/.claude/contrib/agent-memory-store/
 home/.gemini/antigravity-cli/settings.json

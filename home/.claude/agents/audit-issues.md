@@ -99,15 +99,3 @@ Present triage for user review. After approval: add labels, close stale issues, 
 ## Tool Gaps (if any)
 
 If you couldn't answer a question due to missing data, note what API/field would help.
-
-## Broadcast
-
-Share significant findings:
-```
-mcp__agent-event-bus__publish_event(
-  event_type: "improvement_suggested",
-  payload: "[triage summary]",
-  session_id: "<your-session-id>",
-  channel: "repo:<current-repo>"
-)
-```

@@ -38,8 +38,7 @@ Join existing PR on current branch, restoring WIP context if available.
 2. Get PR info: `gh pr view --json number,title,state`
    - If no PR: "No PR found. Use `/work <issue-number>` to start new work, or `/pr-create` first."
 3. Determine identifier from PR body (`Fixes #N` → `issue-N`, otherwise `pr-N`)
-4. Fetch recent `wip_progress` events for this session: `mcp__agent-event-bus__get_events(channel: "session:<session-id>", limit: 5)`
-5. Determine position (from WIP events, or fall back to PR/CI state):
+4. Determine position from PR/CI state:
 
 | State | Already Completed |
 |-------|-------------------|
@@ -65,9 +64,8 @@ If incomplete `[work:*]` todos exist, block new work.
 
 ### 2. Parse Input
 
-- Number → check if it's a GitHub issue first (`gh issue view <N>`). If not found, try event bus (`mcp__agent-event-bus__get_events(cursor: "<N>", limit: 1)`). If event found, use its payload as context for ad-hoc work.
+- Number → check if it's a GitHub issue first (`gh issue view <N>`). If not found, treat as `adhoc`.
 - GitHub URL → extract issue number
-- `event:<ID>` → fetch event bus event by ID, use payload as work context
 - Other → `adhoc`
 
 ### 3. Check for Parallel Context
@@ -203,23 +201,12 @@ Based on the architecture plan, derive final implementation tasks. These replace
 [work:${ID}] Reflect with improve-workflow agent
 ```
 
-### 9. Broadcast & Begin
+### 9. Begin
 
 Rename the zellij tab to reflect the work ID (if in zellij):
 
 ```bash
 zellij action rename-tab "${ID}: <short title>" 2>/dev/null || true
-```
-
-Publish `task_started` with your session_id (from startup: "Registered on event bus as: <session_id>"):
-
-```
-mcp__agent-event-bus__publish_event(
-  event_type: "task_started",
-  payload: "Starting work on #<issue> - <title>",
-  session_id: "<your-session-id>",
-  channel: "repo:<repo_name>"
-)
 ```
 
 Mark first task `in_progress`.
@@ -253,26 +240,7 @@ Spawn summarize-work agent to show what's being merged:
 
 When showing the output from summarize-work, always highlight the key files to look at, and the PR URL. Include any other relevant data as well.
 
-**Always** ask user via AskUserQuestion (Merge now / Wait). Never auto-merge. After merge:
-
-```
-mcp__agent-event-bus__publish_event(
-  event_type: "task_completed",
-  payload: "Merged PR #<N> - <title>",
-  session_id: "<your-session-id>",
-  channel: "repo:<repo_name>"
-)
-```
-
-**Cleanup WIP state** (optional, prevents stale checkpoints):
-```
-mcp__agent-event-bus__publish_event(
-  event_type: "wip_cleared",
-  payload: "[work:<ID>] Work completed - merged PR #<N>",
-  session_id: "<your-session-id>",
-  channel: "session:<your-session-id>"
-)
-```
+**Always** ask user via AskUserQuestion (Merge now / Wait). Never auto-merge.
 
 Suggest `/commit-commands:clean_gone`.
 
@@ -282,9 +250,7 @@ Suggest `/commit-commands:clean_gone`.
 - **User steering**: Where did the user redirect you?
 - **Improvements**: What would make this easier?
 
-Publish insights to event bus with session_id (`gotcha_discovered`, `pattern_found`).
-
-Spawn improve-workflow agent — it handles memory persistence, session analytics, and workflow improvement suggestions:
+Spawn improve-workflow agent — it handles memory persistence and workflow improvement suggestions:
 
 `Task(subagent_type="improve-workflow", prompt="Analyze this session for workflow improvements")`
 
