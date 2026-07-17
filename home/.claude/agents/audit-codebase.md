@@ -123,15 +123,3 @@ If a focus area was specified in the prompt, prioritize analysis there but don't
 ## Tool Gaps (if any)
 
 If you couldn't answer a question due to missing data, note what API/field would help.
-
-## Broadcast
-
-Share significant findings to event bus:
-```
-mcp__agent-event-bus__publish_event(
-  event_type: "pattern_found",  // or "gotcha_discovered"
-  payload: "[finding]",
-  session_id: "<your-session-id>",
-  channel: "repo:<current-repo>"
-)
-```

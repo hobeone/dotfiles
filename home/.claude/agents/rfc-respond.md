@@ -84,17 +84,6 @@ Incorporate decisions into the response, updating blocking/requirements sections
 
 **Otherwise**: Display final response and ask "Post this response?" via AskUserQuestion.
 
-### 6. Broadcast
-
-```
-mcp__agent-event-bus__publish_event(
-  event_type: "rfc_responded",
-  payload: "Responded to RFC #N in <repo>",
-  session_id: "<your-session-id>",
-  channel: "repo:<name>"
-)
-```
-
 ## Output
 
 Return a summary containing:

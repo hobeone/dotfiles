@@ -131,15 +131,3 @@ After approval: delete redundant sections, compress verbose ones, add missing gu
 ## Tool Gaps (if any)
 
 If you couldn't answer a question due to missing data, note what API/field would help.
-
-## Broadcast
-
-Share significant findings:
-```
-mcp__agent-event-bus__publish_event(
-  event_type: "gotcha_discovered",
-  payload: "[finding]",
-  session_id: "<your-session-id>",
-  channel: "repo:<current-repo>"
-)
-```
