@@ -25,5 +25,5 @@ Execute tasks with checkpoints: [guided development] → develop → `/pr-review
    - **Architect**: Propose minimal/clean/pragmatic architectural options.
    - **Document**: Run `Skill(writing-plans)` to write plans to session artifact.
 5. Create checklist tasks with `[work:ID]` prefixes.
-6. Verify and merge after `/pr-review remote` has completed. Run `summarize` subagent and request confirmation before merging via GitHub API.
+6. Verify and merge after `/pr-review remote` has completed. Run `summarize` subagent and request confirmation before merging via GitHub API using `ask_question`.
 7. Perform reflection step and spawn `improve-workflow` agent when done.
