@@ -62,7 +62,7 @@ gh api repos/${REPO}/issues/${PR_NUM}/comments
 
 Check for previous "Feedback Addressed" comments. Filter resolved ones.
 
-### 3. Present via ask_question
+### 3. Present via `ask_question`
 
 Present findings and ask user for decision per item:
 - Implement (Recommended) - if you agree, then run `Skill(receiving-code-review)` before applying changes
