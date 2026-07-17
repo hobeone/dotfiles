@@ -112,9 +112,13 @@ Examples:
 - **[Error Handling]** - `src/api.rs:42` - Empty catch block swallows errors - Add logging and re-throw - Low
 - **[Complexity]** - `src/handler.rs` - 800-line file doing too much - Split into focused modules - High
 
+## Final Steps
+
+Present findings in batches (1-4) via `AskUserQuestion`, starting with Critical, before fixing anything directly. Options for each: **Implement (Recommended)** - fix now, **Skip** - note and move on, **Defer** - create a GitHub issue.
+
 ## Verification Before Reporting Fixes
 
-If you fix any issues during the audit (rather than just reporting them), use `superpowers:verification-before-completion` to verify each fix actually works before reporting it as resolved. Evidence before assertions.
+If you fix any issues during the audit, use `superpowers:verification-before-completion` to verify each fix actually works before reporting it as resolved. Evidence before assertions.
 
 ## Focus Area
 

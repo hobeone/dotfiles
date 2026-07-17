@@ -126,7 +126,7 @@ Examples:
 
 ## Final Steps
 
-After approval: delete redundant sections, compress verbose ones, add missing guidance, fix accuracy.
+Present findings in batches (1-4) via `AskUserQuestion`, starting with Critical. Options for each: **Implement (Recommended)** - delete/compress/fix now, **Skip** - note and move on, **Defer** - leave documented for later.
 
 ## Tool Gaps (if any)
 

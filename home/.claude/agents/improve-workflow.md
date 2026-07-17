@@ -105,39 +105,13 @@ Read the conversation flow directly from the transcript: places where the user c
 
 ## Phase 4: Save to Memory
 
-Save novel, cross-session insights to the project memory system. Only save things useful in **future conversations**.
+Save novel, cross-session insights using the built-in auto-memory system (see your system prompt for the write format and rules). These findings are almost always `feedback` type — a gotcha that caused wasted time, or a validated pattern/convention confirmed during this session. Examples:
 
-| Finding type | Memory type | Example |
-|---|---|---|
-| Gotcha that caused wasted time | `feedback` | "Proptest roundtrip: use Value comparison, not string, when HashMap fields present" |
-| Validated pattern/convention | `feedback` | "Config structs + From<Config> for Tool is the preferred builder pattern" |
-| Tool/workflow friction | `feedback` | "CI clippy version is stricter than local — run with latest stable before pushing" |
+- "Proptest roundtrip: use Value comparison, not string, when HashMap fields present"
+- "Config structs + From<Config> for Tool is the preferred builder pattern"
+- "CI clippy version is stricter than local — run with latest stable before pushing"
 
-**Skip if:** already in CLAUDE.md, ephemeral, or no concrete takeaway.
-
-### How to save
-
-1. Determine memory path: `~/.claude/projects/-<sanitized-cwd>/memory/`
-   - Find it by running: `ls ~/.claude/projects/*/memory/MEMORY.md 2>/dev/null` and matching the current working directory
-   - If no memory directory exists, skip this phase
-
-2. For each memory-worthy finding, write a file:
-   ```markdown
-   ---
-   name: <short name>
-   description: <one-line description for relevance matching>
-   type: feedback
-   ---
-
-   <rule/insight>
-
-   **Why:** <what happened that surfaced this>
-   **How to apply:** <when/where this guidance kicks in>
-   ```
-
-3. Add a pointer to `MEMORY.md` (one line, under 150 chars)
-
-4. Check for existing memories on the same topic — update instead of duplicating.
+**Skip if:** already in CLAUDE.md, ephemeral, or no concrete takeaway. Check for an existing memory on the same topic first — update it instead of duplicating.
 
 ## Phase 5: Implement
 
