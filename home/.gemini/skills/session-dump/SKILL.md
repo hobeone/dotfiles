@@ -15,15 +15,15 @@ Export recent conversation to a temporary file for reference.
 
 ### 1. Locate Transcript
 
-Identify the active conversation ID from metadata or locate the most recently modified subdirectory in `~/.gemini/antigravity-cli/brain/`.
+Identify the active conversation ID from metadata or locate the most recently modified subdirectory in `<appDataDir>/brain/`.
 Inside it, read the JSONL log file:
-`~/.gemini/antigravity-cli/brain/<conversation-id>/.system_generated/logs/transcript.jsonl`
+`<appDataDir>/brain/<conversation-id>/.system_generated/logs/transcript.jsonl`
 
 ### 2. Extract and Format Messages
 
 Parse the last N JSON objects where `"type": "user"` or `"type": "assistant"`.
-Format them into a Markdown file at `/tmp/session-dump-{timestamp}.md`.
+Format them into a Markdown file in the session's artifact directory:
+`<appDataDir>/brain/<conversation-id>/session_dump_{timestamp}.md`
 
-### 3. Open File
+Write the file using `write_to_file` and provide `ArtifactMetadata` with `UserFacing: true` and a suitable summary.
 
-Open `/tmp/session-dump-{timestamp}.md` using the user's default editor (e.g. `less`).
