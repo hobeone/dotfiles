@@ -34,6 +34,8 @@
 - **Mechanical & Single-File Tasks**: Use `flash_lite` or `flash` (`--model=flash`) for mechanical implementation, single-file edits, TDD cycles, lint fixes, log analysis, and spec compliance checks.
 - **When to Escalate**: Only escalate to `pro` for complex multi-file architectural design, cross-subsystem refactoring, or critical security auditing requiring frontier reasoning.
 
+### 1.5 User Interaction & Clarifications
+- **Interactive Questions (`ask_question`)**: Always use the `ask_question` tool when asking the user a question or requesting a selection from a list of options. Avoid asking questions in plain text or prompting for free-form input if they can be formatted as multiple-choice questions.
 
 ## 2. Conventional Commits Protocol
 
