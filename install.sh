@@ -186,6 +186,41 @@ _install_packages_from() {
         return 0
     fi
 
+    local needed_packages=()
+    for pkg in "${packages[@]}"; do
+        local installed=false
+        case "$PKG_MGR" in
+            apt)
+                if dpkg -s "$pkg" &>/dev/null || ([[ "$pkg" == "watch" ]] && command -v watch &>/dev/null); then
+                    installed=true
+                fi
+                ;;
+            pacman)
+                if pacman -Qi "$pkg" &>/dev/null; then
+                    installed=true
+                fi
+                ;;
+            dnf)
+                if rpm -q "$pkg" &>/dev/null; then
+                    installed=true
+                fi
+                ;;
+            brew)
+                if brew list "$pkg" &>/dev/null; then
+                    installed=true
+                fi
+                ;;
+        esac
+        if ! $installed; then
+            needed_packages+=("$pkg")
+        fi
+    done
+
+    if [[ ${#needed_packages[@]} -eq 0 ]]; then
+        log_info "All $label are already installed."
+        return 0
+    fi
+
     log_info "Installing $label via $PKG_MGR..."
     case "$PKG_MGR" in
         apt)
@@ -193,11 +228,11 @@ _install_packages_from() {
                 execute sudo apt update
                 _apt_updated=true
             fi
-            execute sudo apt install -y "${packages[@]}"
+            execute sudo apt install -y "${needed_packages[@]}"
             ;;
-        pacman) execute sudo pacman -Sy --needed "${packages[@]}" ;;
-        dnf)    execute sudo dnf install -y "${packages[@]}" ;;
-        brew)   execute brew install "${packages[@]}" ;;
+        pacman) execute sudo pacman -Sy --needed "${needed_packages[@]}" ;;
+        dnf)    execute sudo dnf install -y "${needed_packages[@]}" ;;
+        brew)   execute brew install "${needed_packages[@]}" ;;
     esac
 }
 
