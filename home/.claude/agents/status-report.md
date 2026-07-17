@@ -1,6 +1,6 @@
 ---
 name: status-report
-description: Generates comprehensive repo status with recent work, open issues, parallel sessions, and actionable recommendations. Use for orientation at session start, status checks, when the user asks "what's going on", "where did we leave off", "what needs attention", or when starting a new session on a repo with existing work.
+description: Generates comprehensive repo status with recent work, open issues, active worktrees, and actionable recommendations. Use for orientation at session start, status checks, when the user asks "what's going on", "where did we leave off", "what needs attention", or when starting a new session on a repo with existing work.
 model: haiku
 ---
 
@@ -28,14 +28,6 @@ gh pr list --state open --limit 20 --json number,title,headRefName,statusCheckRo
 gh issue list --state open --limit 20 --json number,title,labels
 ```
 
-```
-# Lightweight analytics - avoid heavy per-session data
-mcp__agent-session-analytics__analyze_trends(days=1)        # Aggregate stats, not per-session
-mcp__agent-session-analytics__get_permission_gaps(days=1, min_count=3)
-mcp__agent-event-bus__list_sessions()
-mcp__agent-event-bus__get_events(limit=10)
-```
-
 ## Output Format
 
 ### Summary
@@ -45,7 +37,6 @@ mcp__agent-event-bus__get_events(limit=10)
 | Open PRs | N |
 | Open issues | N |
 | Active worktrees | N |
-| Parallel sessions | N |
 
 ### Recently Completed
 
@@ -61,12 +52,6 @@ mcp__agent-event-bus__get_events(limit=10)
 - #N - Summary (CI passing/failing/pending)
 
 **Issues by Priority**: high (N), medium (N), low (N), unlabeled (N)
-
-### Session Analytics (24h)
-
-- Sessions: N, Events: N, Errors: N%
-- Top tools: Bash (N), Read (N), Edit (N)
-- Permission gaps: `command` (N uses)
 
 ### Recommendations
 
@@ -85,21 +70,3 @@ mcp__agent-event-bus__get_events(limit=10)
 **Clean up stale worktree**
 - Evidence: `.worktrees/old-feature` has merged PR #38
 - Action: `/parallel-work cleanup`
-
-#### Suggestions
-
-**Review permission gaps**
-- Evidence: `some-command` used N times without approval
-- Action: `/improve-workflow`
-
-## Broadcast
-
-If critical blockers found, broadcast to event bus:
-```
-mcp__agent-event-bus__publish_event(
-  event_type: "help_needed",
-  payload: "[blocker description]",
-  session_id: "<your-session-id>",
-  channel: "repo:<current-repo>"
-)
-```
