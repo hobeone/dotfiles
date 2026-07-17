@@ -30,7 +30,7 @@ REPO_ROOT=$(git rev-parse --show-toplevel)
 WORKTREE_DIR="$REPO_ROOT/.worktrees"
 ```
 
-Check if worktree or branch already exists. If branch exists without worktree, ask user preference.
+Check if worktree or branch already exists. If branch exists without worktree, ask user preference via `ask_question`.
 
 ### 2. Create Worktree
 
@@ -57,7 +57,7 @@ Summarize into "Context from Parent Session".
 DETECTED_ISSUE=$(echo "$BRANCH_NAME" | grep -oE '(issue|fix|feat|feature|bug|refactor|ci)-([0-9]+)' | grep -oE '[0-9]+' | head -1)
 ```
 
-Ask user via ask_question:
+Ask user via `ask_question`:
 - What task will the new session work on?
 - Issue number to track? (if detected: show as default, else "None")
 - Special instructions?
@@ -89,7 +89,7 @@ Write `.parallel-context.md` to the new worktree:
 
 ### 6. Launch Session
 
-Check if zellij is available. Ask user:
+Check if zellij is available. Ask user via `ask_question`:
 - New zellij tab (Recommended)
 - New zellij pane
 - Manual
@@ -181,7 +181,7 @@ Same table format as `list`, with Category column.
 
 ### 3. Confirm Removal
 
-Ask user which categories/worktrees to remove.
+Ask user via `ask_question` which categories/worktrees to remove.
 
 ### 4. Execute
 
