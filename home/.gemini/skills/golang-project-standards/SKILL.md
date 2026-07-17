@@ -19,21 +19,13 @@ Use this skill to establish or audit development standards for a Go project. It 
 
 ## Step 1: Assess the Project
 
-Before writing anything, run these read-only commands to understand the project:
+Before writing anything, assess the project using structured tools where possible:
 
-```bash
-# Confirm it is a Go module and read the module name and Go version
-cat go.mod | head -10
+1. **Read go.mod**: Use `view_file` on `go.mod` (StartLine: 1, EndLine: 10) to confirm it is a Go module and read the module name and Go version.
+2. **List packages**: Run `go list ./...` using `run_command`.
+3. **Check GEMINI.md**: Try to read `GEMINI.md` using `view_file`. If it exists, proceed to Step 2. If it fails with a "file not found" error, it is missing.
+4. **Check lint config**: Use `find_by_name` with `Pattern: ".golangci.y*ml"` in the project root to check if a linter config exists.
 
-# List top-level packages
-go list ./...
-
-# Check if GEMINI.md already exists
-ls GEMINI.md 2>/dev/null && echo "EXISTS" || echo "MISSING"
-
-# Check if golangci-lint config exists
-ls .golangci.yml 2>/dev/null || ls .golangci.yaml 2>/dev/null || echo "NO LINT CONFIG"
-```
 
 Use the findings to fill in the project-specific fields in the template below (module path, binary name, description).
 

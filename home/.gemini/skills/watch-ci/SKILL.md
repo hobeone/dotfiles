@@ -24,9 +24,18 @@ Monitor CI status for a PR in the background.
      sleep 5
    done
    ```
-3. Start the background check task:
-   ```bash
-   gh pr checks <PR_NUMBER> --watch --interval 10
-   ```
-   Run this in the background. The Antigravity CLI will automatically log when this completes.
-4. Once completed, notify the user and trigger `/pr-review remote`.
+3. Schedule a recurring check using the `schedule` tool:
+   - Use `schedule` with a cron expression (e.g., `CronExpression="*/2 * * * *"` for every 2 minutes) to run a check command.
+   - The scheduled command should check the status of the PR checks using `gh pr checks <PR_NUMBER>`.
+   - Set `IsDaemon=false` since this task is part of finishing the current workflow.
+   - Provide a prompt like: "Check CI status for PR <PR_NUMBER>".
+4. When the schedule triggers:
+   - Check if all checks have completed.
+   - If completed:
+     - Cancel the schedule using `manage_task` with the task ID.
+     - Notify the user of the result.
+     - Trigger `/pr-review remote` if checks passed, or report failures.
+     - End the turn.
+   - If not completed:
+     - Do nothing and wait for the next schedule trigger.
+

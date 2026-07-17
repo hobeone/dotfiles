@@ -28,7 +28,7 @@ Output 2-3 sentence summary of changes.
 
 ### 2. Run Analysis
 
-Run `Skill(auditing-pull-requests)` or perform custom linting, testing, and static analysis on the modified files.
+Run `Skill(verification-before-completion)` or perform custom linting, testing, and static analysis on the modified files.
 
 ### 3. Check Coverage Gaps
 
