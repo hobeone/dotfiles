@@ -49,9 +49,19 @@ Instead of relying on commit-commands plugins:
 3. Commit: `git commit -m "<message>"`
 4. Push: `git push -u origin <branch>`
 5. Create PR:
-   ```bash
-   gh pr create --fill || gh pr edit --title "<title>" --body "<body>"
-   ```
+   - Check if `.github/pull_request_template.md` (or similar template in `.github/` or root) exists.
+   - If it exists:
+     1. Read the template.
+     2. Populate the **Description**, **Checklist** (marking run/passed verifications), and **Related Issues** sections based on the actual changes and verification results.
+     3. Save the populated content to a temporary file.
+     4. Create the PR using:
+        ```bash
+        gh pr create --title "<title>" --body-file <temp-file-path>
+        ```
+   - If the template does not exist, fall back to:
+     ```bash
+     gh pr create --fill
+     ```
 
 Report errors and suggest manual steps if creation fails.
 
