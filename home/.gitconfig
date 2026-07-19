@@ -98,7 +98,5 @@
 [include]
   path = ~/.gitconfig.tokyonight
 
-[url "https://:@github.com"]
-  insteadOf = /
 [difftool]
 	prompt = false

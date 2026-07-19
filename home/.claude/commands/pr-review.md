@@ -97,12 +97,12 @@ REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner)
 ### 2. Fetch Comments
 
 ```
-mcp__github__get_pull_request_comments(owner, repo, pull_number)  # inline code comments
-mcp__github__get_pull_request_reviews(owner, repo, pull_number)   # review summaries
-gh api "repos/${REPO}/issues/${PR_NUM}/comments"                  # general PR conversation
+mcp__plugin_github_github__pull_request_read(method="get_review_comments", owner, repo, pullNumber)  # inline code comments (grouped threads)
+mcp__plugin_github_github__pull_request_read(method="get_reviews", owner, repo, pullNumber)          # review summaries
+gh api "repos/${REPO}/issues/${PR_NUM}/comments"                                                     # general PR conversation
 ```
 
-**Important:** An APPROVED review can still have inline suggestions. Always check `get_pull_request_comments` for inline comments even when the review verdict is APPROVE. Present any suggestions found — they're non-blocking but the user should see them before merging.
+**Important:** An APPROVED review can still have inline suggestions. Always check `get_review_comments` for inline comments even when the review verdict is APPROVE. Present any suggestions found — they're non-blocking but the user should see them before merging.
 
 **If no feedback found (no reviews, no inline comments, no PR comments):** "No reviewer feedback found. PR is ready for merge or awaiting review." Exit early.
 
