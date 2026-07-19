@@ -39,7 +39,10 @@ From here on, every reviewer finding is by construction a penetration of this ga
 1. Run `stage-commit-push` to stage, commit, and push local changes.
 2. Run `file-pullreq` in **gate mode** — drafts the PR title + body following `gh-body-conventions` and the standard body skeleton, runs the laundering pass, and gets the user's approval. The skill stops at approval and emits the approved title + body for the next step. It does NOT create the PR itself.
 3. Run `coderabbit-review`, passing the approved title + body — this creates the PR (the CodeRabbit app starts its review on PR open by itself; no reviewer-request step) and polls CodeRabbit's completion signal on the head commit until the review resolves. When the script exits `0` — a completed review with no review object and no skip signature — that is a genuine zero-finding pass; record it and skip steps 4–6. **Exception — non-review skip (auto-pause / rate-limit / file-count):** when the review script exits `2`, the review did not run (the terminal `success` reflects a skipped, unreviewed push, not a clean pass). Do NOT record it as zero-finding — read the script's printed cause and per-cause remedy and follow it (auto-pause / rate-limit resume with `gh pr comment <PR> --repo <owner>/<repo> --body "@coderabbitai review"` then re-poll; file-count needs the diff reduced (the push re-reviews) or the limit raised plus a manual `@coderabbitai review` before re-polling), re-poll via `~/.gemini/skills/coderabbit-review/scripts/pr-with-coderabbit-review.sh --poll <PR_URL>`, and only then read the result.
-4. Triage the review — filter to the latest review's comments only (by `pull_request_review_id`), and expand the collapsed nitpick sections of the review body into the same triage.
+4. Triage the review:
+   - Filter to the latest review's comments only (by `pull_request_review_id`).
+   - Unfold and extract ALL collapsed `<details>` sections (nitpicks, outside-diff comments, coverage warnings).
+   - Decompose compound findings containing multiple sub-requirements into distinct 1:1 sub-items in the triage list. Every sub-item must be independently verified.
 5. Reply to each inline comment individually via `gh-post reply-inline <owner>/<repo> <PR> < /tmp/replies.jsonl`. Build the JSONL with one `{"id": <comment-id>, "body": "<reply>"}` per line. (If `gh-post` is unavailable, loop line-by-line using `jq` and `gh api "repos/<owner>/<repo>/pulls/comments/<id>/replies" -f body="$body"`).
 6. If actionable findings exist, apply the **fix-loop substeps** (see Rules), replacing the re-review step with `~/.gemini/skills/coderabbit-review/scripts/pr-with-coderabbit-review.sh --re-review <PR_URL>` — the push from `stage-commit-push` already triggered the incremental review; this waits for it. The `--re-review` call can also exit `2` (non-review skip) — apply the same cause-and-remedy branch as step 3 before triaging. Triage only new comments. Repeat until no actionable findings remain.
 
@@ -98,12 +101,13 @@ Runs only after the user has merged.
 - **Fix-loop substeps** (Phase 1 step 6):
 
   1. **Oscillation check (iteration N ≥ 2).** Compare current actionable topics against the previous iteration's preserved topics. If any conceptual topic recurs, halt and follow the escalation order below — do NOT fix or done-check.
-  2. Fix the code.
-  3. Run `done-check` in delta mode.
-  4. Run `stage-commit-push`.
-  5. Re-run the review (fresh, full review — no bias from previous iteration), using `--re-review`.
-  6. Preserve actionable topic classifications for the next iteration's oscillation check.
-  7. Re-triage — only new comments.
+  2. **Red-Green Mutation Proof.** Before applying the fix, write a test asserting the expected behavior and run it against the unpatched code to confirm failure (RED). For new logic paths, temporarily break/invert the condition to verify the test suite FAILS under mutation before finalizing code (GREEN).
+  3. Fix the code.
+  4. Run `done-check` in delta mode.
+  5. Run `stage-commit-push`.
+  6. Re-run the review (fresh, full review — no bias from previous iteration), using `--re-review`.
+  7. Preserve actionable topic classifications for the next iteration's oscillation check.
+  8. Re-triage — only new comments.
 
 - **Never skip done-check, including in fix loops.** Every fix commit is itself a diff that can introduce new drift — especially `completion-hygiene` and `paired-artifact-drift`.
 
@@ -134,6 +138,7 @@ Runs only after the user has merged.
 
   - **Surface** (typo, stale comment, wrong API name): fix is self-evident. Commit immediately.
   - **Invariant** — the `invariant-premise-check` disposition from `finding-triage` (claims about mathematical properties, semantic validity, precondition necessity): the finding's *conclusion* may be correct, but its *premise* may be wrong. Before committing a fix, verify the premise — check whether the invariant the finding assumes actually holds, by reading code, tests, and running a targeted experiment (a small script, a REPL check, or a temporary probe test) before trusting the finding's stated assumption.
+  - **Boundary & Buffer Invariants**: for findings involving bit readers, counters, or streaming cursors, explicitly audit and test edge cases (`len == 0`, `err == io.EOF`, `produced >= limit`, `remaining < len(p)`, state resets on stream table transitions).
   - **Non-local** — the `opens-a-question` disposition from `finding-triage`: the finding is real but its resolution needs investigation, a design choice, or a scope judgment beyond a local edit. Re-enter `research` with the finding as the task, then escalate only the genuinely user-owned residue. Do not spot-patch and do not escalate a probe-able question straight to the user.
 
 - **Oscillation detection.** Run at the start of each fix-loop iteration (Phase 1 step 6), BEFORE fix and done-check. If the same conceptual topic (not the same literal comment, but the same underlying question — e.g., "is this input valid?", "does this property hold?", "should this parameter accept both values?") appears across 2+ consecutive review iterations, stop fixing and escalate to the user via `ask_question`. Repeated findings on one topic signal that the underlying invariant is not understood well enough for a confident fix.
