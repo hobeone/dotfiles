@@ -36,14 +36,14 @@
   },
   "enabledPlugins": {
     "feature-dev@claude-plugins-official": true,
-    "pr-review-toolkit@claude-plugins-official": false,
+    "pr-review-toolkit@claude-plugins-official": true,
     "commit-commands@claude-plugins-official": true,
     "rust-analyzer-lsp@claude-plugins-official": false,
     "code-simplifier@claude-plugins-official": true,
     "superpowers@claude-plugins-official": true,
     "ralph-loop@claude-plugins-official": false,
     "claude-md-management@claude-plugins-official": true,
-    "skill-creator@claude-plugins-official": false,
+    "skill-creator@claude-plugins-official": true,
     "claude-code-setup@claude-plugins-official": true,
     "agent-sdk-dev@claude-plugins-official": true,
     "explanatory-output-style@claude-plugins-official": true,
@@ -53,13 +53,28 @@
     "python-development@claude-code-workflows": false,
     "frontend-design@claude-plugins-official": true,
     "clangd-lsp@claude-plugins-official": true,
-    "github@claude-plugins-official": true
+    "development-skills@development-skills": true,
+    "code-review@claude-plugins-official": true,
+    "github@claude-plugins-official": true,
+    "antigravity@antigravity-for-claude-code": true
   },
   "extraKnownMarketplaces": {
     "claude-code-workflows": {
       "source": {
         "source": "github",
         "repo": "wshobson/agents"
+      }
+    },
+    "development-skills": {
+      "source": {
+        "source": "github",
+        "repo": "ultimatile/development-skills"
+      }
+    },
+    "antigravity-for-claude-code": {
+      "source": {
+        "source": "github",
+        "repo": "yuting0624/antigravity-for-claude-code"
       }
     }
   },
