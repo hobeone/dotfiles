@@ -9,18 +9,18 @@ End-to-end wrapper. Runs `research` (Phase 1) and `implement` (Phase 2) in seque
 
 **Issue:** #$ARGUMENTS
 
-## PHASE 0 — BRANCH BASELINE
+## PHASE 0 — WORKTREE BASELINE
 
-Before research begins, settle the working branch.
+Before research begins, settle the workspace and branch:
 
-1. Check current branch: `git branch --show-current`
+1. Check current branch and worktree path: `git branch --show-current` and `git worktree list`.
 2. Determine default branch: `git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null | sed 's@^origin/@@'`
 3. **Decision gate**:
-   - On default branch → pick a conventional `<type>/<issue#>-<slug>` (`feat/195-dmrg-envs`, `fix/187-arpack-info`, `chore/<slug>`), create it, and proceed. Do not poll the user for the name — branch names are throwaway closed-PR metadata. Announce the chosen name in one line so the user can intervene if they object, then continue without waiting.
-   - On a non-default branch → treat it as the intended branch and proceed. Only stop if the branch name plainly contradicts the issue (e.g., on `feat/100-foo` while working #200) — in that case announce the mismatch and ask.
-4. Once the branch is settled, record it (and any switch / creation action) so Phase 2 can pick it up unambiguously.
+   - On default branch in primary checkout → pick a conventional `<type>/<issue#>-<slug>` (`feat/195-dmrg-envs`, `fix/187-arpack-info`, `chore/<slug>`). Do NOT branch in place. Create an isolated git worktree: `mkdir -p .worktrees && git worktree add -b <branch> .worktrees/<branch> origin/<default-branch>`, then `cd .worktrees/<branch>` for all subsequent phases. Do not poll the user for the name — announce the chosen branch and worktree path in one line so the user can intervene if they object, then continue without waiting.
+   - Already in a worktree or on a non-default branch → treat it as the intended workspace and proceed. Only stop if the branch name plainly contradicts the issue (e.g., on `feat/100-foo` while working #200) — in that case announce the mismatch and ask.
+4. Once the worktree and branch are settled, record the directory path and branch so Phase 2 can pick them up unambiguously.
 
-This phase exists to keep direct pushes off the default branch by making the question deterministic at the start. Default → branch automatically; do not block on the user for naming.
+This phase exists to keep direct pushes off the default branch and prevent workspace lock contention by isolating development in a dedicated worktree. Default → create worktree automatically; do not block on the user for naming.
 
 ## PHASE 1 — RESEARCH
 

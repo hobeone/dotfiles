@@ -55,7 +55,7 @@ If incomplete `[work:*]` tasks exist, block new work.
 - GitHub URL → extract issue number
 - Other → `adhoc`
 
-### 3. Check for Parallel Context
+### 3. Check for Parallel Context & Worktree Isolation
 
 If `.parallel-context.md` exists in cwd, read it with `view_file`. This file is created by `/parallel-work start` and contains:
 - Task description from parent session
@@ -64,6 +64,8 @@ If `.parallel-context.md` exists in cwd, read it with `view_file`. This file is 
 - Whether exploration was already done
 
 Store this as `PARALLEL_CONTEXT` for use in scope presentation and guided development.
+
+**Worktree Enforcement:** If `.parallel-context.md` is not present and the current working directory is the primary checkout on the default branch (e.g., `main`), do NOT start implementation or mutate files directly in the primary workspace. Ensure development is isolated in a dedicated git worktree (using `/parallel-work start <branch>` or `git worktree add -b <branch> .worktrees/<branch> origin/main`) before modifying any code.
 
 ### 4. Fetch Context
 
