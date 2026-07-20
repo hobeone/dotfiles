@@ -77,13 +77,33 @@ esac
 VCS_DETECTED=""
 if [ -n "$CWD" ] && [ -d "$CWD" ]; then
   if command -v git &>/dev/null && git -C "$CWD" rev-parse --is-inside-work-tree &>/dev/null 2>&1; then
-    VCS_DETECTED=$(git -C "$CWD" branch --show-current 2>/dev/null || true)
-    if [ -z "$VCS_DETECTED" ]; then
-      VCS_DETECTED=$(git -C "$CWD" rev-parse --abbrev-ref HEAD 2>/dev/null || true)
-      if [ "$VCS_DETECTED" = "HEAD" ] || [ -z "$VCS_DETECTED" ]; then
+    GIT_DIR=$(git -C "$CWD" rev-parse --git-dir 2>/dev/null || true)
+    GIT_COMMON_DIR=$(git -C "$CWD" rev-parse --git-common-dir 2>/dev/null || true)
+    BRANCH=$(git -C "$CWD" branch --show-current 2>/dev/null || true)
+    if [ -z "$BRANCH" ]; then
+      BRANCH=$(git -C "$CWD" rev-parse --abbrev-ref HEAD 2>/dev/null || true)
+    fi
+    if [ "$BRANCH" = "HEAD" ]; then
+      BRANCH=""
+    fi
+
+    if [ -n "$GIT_DIR" ] && [ -n "$GIT_COMMON_DIR" ] && [ "$GIT_DIR" != "$GIT_COMMON_DIR" ]; then
+      # Inside a linked git worktree
+      WT_NAME=$(basename "$(git -C "$CWD" rev-parse --show-toplevel 2>/dev/null || echo "$GIT_DIR")")
+      if [ -n "$BRANCH" ] && [ "$BRANCH" != "$WT_NAME" ]; then
+        VCS_DETECTED="${WT_NAME} (${BRANCH})"
+      else
+        VCS_DETECTED="${WT_NAME}"
+      fi
+    else
+      # Main git working tree
+      if [ -n "$BRANCH" ]; then
+        VCS_DETECTED="$BRANCH"
+      else
         VCS_DETECTED=$(git -C "$CWD" rev-parse --show-toplevel 2>/dev/null | xargs basename 2>/dev/null || true)
       fi
     fi
+
     if [ "$VCS_DIRTY" = "false" ] || [ -z "$VCS_DIRTY" ]; then
       if [ -n "$(git -C "$CWD" status --porcelain 2>/dev/null | head -n 1)" ]; then
         VCS_DIRTY="true"
