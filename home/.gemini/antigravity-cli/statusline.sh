@@ -74,13 +74,14 @@ case "$STATE" in
 esac
 
 # ─── VCS Branch / Worktree ───────────────────────────────────────────────────
-if [ -z "$VCS_BRANCH" ] && [ -n "$CWD" ] && [ -d "$CWD" ]; then
+VCS_DETECTED=""
+if [ -n "$CWD" ] && [ -d "$CWD" ]; then
   if command -v git &>/dev/null && git -C "$CWD" rev-parse --is-inside-work-tree &>/dev/null 2>&1; then
-    VCS_BRANCH=$(git -C "$CWD" branch --show-current 2>/dev/null || true)
-    if [ -z "$VCS_BRANCH" ]; then
-      VCS_BRANCH=$(git -C "$CWD" rev-parse --abbrev-ref HEAD 2>/dev/null || true)
-      if [ "$VCS_BRANCH" = "HEAD" ] || [ -z "$VCS_BRANCH" ]; then
-        VCS_BRANCH=$(git -C "$CWD" rev-parse --show-toplevel 2>/dev/null | xargs basename 2>/dev/null || true)
+    VCS_DETECTED=$(git -C "$CWD" branch --show-current 2>/dev/null || true)
+    if [ -z "$VCS_DETECTED" ]; then
+      VCS_DETECTED=$(git -C "$CWD" rev-parse --abbrev-ref HEAD 2>/dev/null || true)
+      if [ "$VCS_DETECTED" = "HEAD" ] || [ -z "$VCS_DETECTED" ]; then
+        VCS_DETECTED=$(git -C "$CWD" rev-parse --show-toplevel 2>/dev/null | xargs basename 2>/dev/null || true)
       fi
     fi
     if [ "$VCS_DIRTY" = "false" ] || [ -z "$VCS_DIRTY" ]; then
@@ -89,12 +90,16 @@ if [ -z "$VCS_BRANCH" ] && [ -n "$CWD" ] && [ -d "$CWD" ]; then
       fi
     fi
   elif command -v hg &>/dev/null && hg -R "$CWD" root &>/dev/null 2>&1; then
-    VCS_BRANCH=$(hg -R "$CWD" branch 2>/dev/null || true)
+    VCS_DETECTED=$(hg -R "$CWD" branch 2>/dev/null || true)
   elif command -v jj &>/dev/null && jj -R "$CWD" root &>/dev/null 2>&1; then
-    VCS_BRANCH=$(jj -R "$CWD" log --no-graph -r @ -T 'bookmarks' 2>/dev/null || true)
+    VCS_DETECTED=$(jj -R "$CWD" log --no-graph -r @ -T 'bookmarks' 2>/dev/null || true)
   elif [[ "$CWD" =~ ^/google/src/cloud/[^/]+/([^/]+) ]]; then
-    VCS_BRANCH="${BASH_REMATCH[1]}"
+    VCS_DETECTED="${BASH_REMATCH[1]}"
   fi
+fi
+
+if [ -n "$VCS_DETECTED" ]; then
+  VCS_BRANCH="$VCS_DETECTED"
 fi
 
 V=""
