@@ -5,18 +5,20 @@ description: |
   .sh files, shell functions, aliases, scripts in bin/, or any bash/zsh code
   including heredocs, pipes, and one-liners in other contexts. Use whenever
   writing shell code, even inline in Makefiles, hooks, or CI configs.
-allowed-tools:
-  - Read
-  - Edit
-  - Write
-  - Bash
-  - Grep
-  - Glob
 ---
 
 # Shell Scripting Patterns
 
 This skill auto-applies when writing shell scripts. Follow these conventions.
+
+## Antigravity Tool Equivalents
+When applying this skill in Jetski / Antigravity 2.0:
+- **Read files**: Use `view_file`
+- **Create files**: Use `write_to_file`
+- **Edit files**: Use `replace_file_content` (contiguous blocks) or `multi_replace_file_content`
+- **Run commands**: Use `run_command`
+- **Search content**: Use `code_search` (source code) or `grep_search`
+- **Find files**: Use `find_by_name`
 
 ## Script Header
 
