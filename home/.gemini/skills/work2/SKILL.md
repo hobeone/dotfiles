@@ -88,7 +88,7 @@ Track work using `[work2:${ID}]` prefix.
 
 Run `/research-and-implement ${ARG}`.
 
-- Phase 0 (branch baseline): picks/creates the working branch automatically.
+- Phase 0 (worktree baseline): creates/uses an isolated git worktree automatically instead of switching branches in place.
 - Phase 1 (research): posts a plan to the issue with an `Inconclusive / Deferred items` section. Its Step 3.5 plan-review gate offers a fresh-context subagent review pass before approval (`ask_question`).
 - Phase 2 (implement): executes unit-by-unit, halts on any discovery not covered by the plan's discovery contract, ends with `/done-check`.
 
