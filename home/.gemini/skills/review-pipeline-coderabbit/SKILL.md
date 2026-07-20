@@ -77,6 +77,8 @@ Skip when the work is not tied to an umbrella tracking issue. Trigger only when 
 
 ## ← user merges PR ←
 
+Before stopping, check `gh pr view <PR> --json mergeable,mergeStateStatus` via `run_command`. A `mergeable: CONFLICTING` (or `UNKNOWN` after a fresh push — re-check after a few seconds) is a hard `ask_question` trigger, not something to resolve by guessing: surface the specific conflicting commits (`git log --oneline <merge-base>..origin/<base-branch>` filtered to files touched by both sides) and ask how to proceed. Do not attempt a rebase, `--auto`, or force-push on your own initiative — repo state can diverge from what the pipeline last saw (another process pushing to the base branch mid-session is exactly this case), and an automated resolution risks silently dropping work. Once the user directs a resolution, verify it (build, vet, and the relevant test suite) before pushing.
+
 Stop here. The user merges the PR via the GitHub UI or `gh pr merge`. Do not attempt the merge from Gemini unless the user explicitly asks or approves via `ask_question`.
 
 After the user confirms the merge has landed, continue to Phase 2b.

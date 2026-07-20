@@ -89,6 +89,14 @@ If, while executing a unit, an unexpected fact is observed (a behavior, type, ca
 
 The plan's Inconclusive section is the only sanctioned channel for mid-implementation surprises.
 
+**Fast-path for in-scope sibling discoveries.** Skip the `ask_question` halt (but still note the discovery inline in the plan-vs-actual diff) when the discovery satisfies all three:
+
+- It stays inside a file already in the plan's checklist (no new file touched).
+- Resolving it requires no new research — the fix is self-evident from what's already in front of you.
+- It is a direct extension of a finding/unit the plan already approved (e.g., the same category of fix applied to a sibling instance the plan's own reasoning already covers), not a new class of change.
+
+Reserve the full halt-and-ask for discoveries that touch a new file, change the risk profile, or fall outside the plan's already-approved reasoning. This keeps trivial, obviously-benign extensions from triggering ceremony disproportionate to their stakes.
+
 ### 3.2.1 Specific-example derivation gate
 
 The Step 3.2 rule above covers behavioral / structural surprises. A parallel gate covers **the introduction of a new specific example** during implementation, review, or test addition — even when no "unexpected fact" has surfaced. This includes:
