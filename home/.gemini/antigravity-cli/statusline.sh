@@ -4,19 +4,9 @@ set -euo pipefail
 # ─── ANSI Helpers (Standard 16-color palette only) ───────────────────────────
 R="\033[0m"         # Reset
 B="\033[1m"         # Bold
-D="\033[2m"         # Dim
 I="\033[3m"         # Italic
 
-# Foreground accents (Standard 16 colors)
-FG_BLACK="\033[30m"
-FG_RED="\033[31m"
-FG_GREEN="\033[32m"
-FG_YELLOW="\033[33m"
-FG_BLUE="\033[34m"
-FG_MAGENTA="\033[35m"
-FG_CYAN="\033[36m"
 FG_WHITE="\033[37m"
-
 FG_GRAY="\033[90m"
 FG_BRIGHT_RED="\033[91m"
 FG_BRIGHT_GREEN="\033[92m"
@@ -57,7 +47,7 @@ STDIN_CONTENT=$(cat)
       (.agent_state // "idle"),
       (.workspace.current_dir // ""),
       (.context_window.used_percentage // 0),
-      (.vcs.branch // ""),
+      (.vcs.branch // .vcs.worktree // .vcs.client // ""),
       (.vcs.dirty // false),
       (.sandbox.enabled // false),
       (.artifact_count // 0),
@@ -83,7 +73,35 @@ case "$STATE" in
   *)        S="${FG_WHITE}${B}⏳ $(echo "$STATE" | tr '[:lower:]' '[:upper:]')${R}" ;;
 esac
 
-# ─── VCS Branch ──────────────────────────────────────────────────────────────
+# ─── VCS Branch / Worktree ───────────────────────────────────────────────────
+VCS_DETECTED=""
+if [ -n "$CWD" ] && [ -d "$CWD" ]; then
+  if command -v git &>/dev/null && git -C "$CWD" rev-parse --is-inside-work-tree &>/dev/null 2>&1; then
+    VCS_DETECTED=$(git -C "$CWD" branch --show-current 2>/dev/null || true)
+    if [ -z "$VCS_DETECTED" ]; then
+      VCS_DETECTED=$(git -C "$CWD" rev-parse --abbrev-ref HEAD 2>/dev/null || true)
+      if [ "$VCS_DETECTED" = "HEAD" ] || [ -z "$VCS_DETECTED" ]; then
+        VCS_DETECTED=$(git -C "$CWD" rev-parse --show-toplevel 2>/dev/null | xargs basename 2>/dev/null || true)
+      fi
+    fi
+    if [ "$VCS_DIRTY" = "false" ] || [ -z "$VCS_DIRTY" ]; then
+      if [ -n "$(git -C "$CWD" status --porcelain 2>/dev/null | head -n 1)" ]; then
+        VCS_DIRTY="true"
+      fi
+    fi
+  elif command -v hg &>/dev/null && hg -R "$CWD" root &>/dev/null 2>&1; then
+    VCS_DETECTED=$(hg -R "$CWD" branch 2>/dev/null || true)
+  elif command -v jj &>/dev/null && jj -R "$CWD" root &>/dev/null 2>&1; then
+    VCS_DETECTED=$(jj -R "$CWD" log --no-graph -r @ -T 'bookmarks' 2>/dev/null || true)
+  elif [[ "$CWD" =~ ^/google/src/cloud/[^/]+/([^/]+) ]]; then
+    VCS_DETECTED="${BASH_REMATCH[1]}"
+  fi
+fi
+
+if [ -n "$VCS_DETECTED" ]; then
+  VCS_BRANCH="$VCS_DETECTED"
+fi
+
 V=""
 if [ -n "$VCS_BRANCH" ]; then
   if [ "$VCS_DIRTY" = "true" ]; then
@@ -107,8 +125,6 @@ else
 fi
 
 # Format Context usage bar
-
-USED_PCT_FMT=$(printf "%.2f" "$USED_PCT")
 USED_PCT_INT=${USED_PCT%.*}
 USED_PCT_INT=${USED_PCT_INT:-0}
 
@@ -138,15 +154,12 @@ DOT="${FG_GRAY} · ${R}"
 LINE1="${S}${M}${V}${DOT}${CWD}"
 LINE2=" ${CTX}${DOT}${ART_FMT}${DOT}${SUB_FMT}${DOT}${BG_FMT}${DOT}${SB}"
 
-if [ "$COLS" -ge 120 ]; then
-  # Wide: single line
-  echo -e "${LINE1}${FG_GRAY}  │  ${R}${LINE2}"
-elif [ "$COLS" -ge 80 ]; then
-  # Medium: two-line layout with border
+if [ "$COLS" -ge 80 ]; then
+  # Standard: two-line layout with border (ensures worktree/branch + CWD never overflow)
   echo -e "${FG_GRAY}╭─${R} ${LINE1}"
   echo -e "${FG_GRAY}╰─${R}${LINE2}"
 else
-  # Narrow: compact two-line, minimal chrome
-  echo -e "${S}${M}"
-  echo -e "${CTX}${DOT}${BG_FMT}"
+  # Narrow: compact two-line layout (ensures branch/worktree is always displayed)
+  echo -e "${S}${M}${V}"
+  echo -e "${CTX}${DOT}${ART_FMT}${DOT}${BG_FMT}"
 fi
