@@ -30,6 +30,9 @@ STDIN_CONTENT=$(cat)
 {
   read -r STATE
   read -r CWD
+  read -r RAW_CWD
+  read -r VCS_ROOT
+  read -r PROJECT_DIR
   read -r USED_PCT
   read -r VCS_BRANCH
   read -r VCS_DIRTY
@@ -41,11 +44,14 @@ STDIN_CONTENT=$(cat)
   read -r COLS
 } <<< "$(
   if [ -z "$STDIN_CONTENT" ]; then
-    printf "idle\n0\n\nfalse\nfalse\n0\n0\n0\n\n80\n"
+    printf "idle\n\n\n\n\n0\n\nfalse\nfalse\n0\n0\n0\n\n80\n"
   else
     printf "%s" "$STDIN_CONTENT" | jq -r '
       (.agent_state // "idle"),
       (.workspace.current_dir // ""),
+      (.cwd // ""),
+      (.vcs.root // ""),
+      (.workspace.project_dir // ""),
       (.context_window.used_percentage // 0),
       (.vcs.branch // .vcs.worktree // .vcs.client // ""),
       (.vcs.dirty // false),
@@ -55,7 +61,7 @@ STDIN_CONTENT=$(cat)
       (.task_count // 0),
       (.model.display_name // ""),
       (.terminal_width // 80)
-    ' 2>/dev/null || printf "idle\n0\n\nfalse\nfalse\n0\n0\n0\n\n80\n"
+    ' 2>/dev/null || printf "idle\n\n\n\n\n0\n\nfalse\nfalse\n0\n0\n0\n\n80\n"
   fi
 )"
 
@@ -74,29 +80,62 @@ case "$STATE" in
 esac
 
 # ─── VCS Branch / Worktree ───────────────────────────────────────────────────
+# Prioritize candidate directories (like agy-hud): current_dir > cwd > vcs.root > project_dir
 VCS_DETECTED=""
-if [ -n "$CWD" ] && [ -d "$CWD" ]; then
-  if command -v git &>/dev/null && git -C "$CWD" rev-parse --is-inside-work-tree &>/dev/null 2>&1; then
-    VCS_DETECTED=$(git -C "$CWD" branch --show-current 2>/dev/null || true)
-    if [ -z "$VCS_DETECTED" ]; then
-      VCS_DETECTED=$(git -C "$CWD" rev-parse --abbrev-ref HEAD 2>/dev/null || true)
-      if [ "$VCS_DETECTED" = "HEAD" ] || [ -z "$VCS_DETECTED" ]; then
-        VCS_DETECTED=$(git -C "$CWD" rev-parse --show-toplevel 2>/dev/null | xargs basename 2>/dev/null || true)
+if [ -z "$CWD" ]; then
+  CWD="${RAW_CWD:-$PROJECT_DIR}"
+fi
+
+for cand_dir in "$CWD" "$RAW_CWD" "$VCS_ROOT" "$PROJECT_DIR" "${PWD:-}"; do
+  if [ -z "$cand_dir" ] || [ ! -d "$cand_dir" ]; then
+    continue
+  fi
+
+  if command -v git &>/dev/null && git -C "$cand_dir" rev-parse --is-inside-work-tree &>/dev/null 2>&1; then
+    GIT_DIR=$(git -C "$cand_dir" rev-parse --git-dir 2>/dev/null || true)
+    GIT_COMMON_DIR=$(git -C "$cand_dir" rev-parse --git-common-dir 2>/dev/null || true)
+    BRANCH=$(git -C "$cand_dir" branch --show-current 2>/dev/null || true)
+    if [ -z "$BRANCH" ]; then
+      BRANCH=$(git -C "$cand_dir" rev-parse --abbrev-ref HEAD 2>/dev/null || true)
+    fi
+    if [ "$BRANCH" = "HEAD" ]; then
+      BRANCH=""
+    fi
+
+    if [ -n "$GIT_DIR" ] && [ -n "$GIT_COMMON_DIR" ] && [ "$GIT_DIR" != "$GIT_COMMON_DIR" ]; then
+      # Inside a linked git worktree
+      WT_NAME=$(basename "$(git -C "$cand_dir" rev-parse --show-toplevel 2>/dev/null || echo "$GIT_DIR")")
+      if [ -n "$BRANCH" ] && [ "$BRANCH" != "$WT_NAME" ]; then
+        VCS_DETECTED="${WT_NAME} (${BRANCH})"
+      else
+        VCS_DETECTED="${WT_NAME}"
+      fi
+    else
+      # Main git working tree
+      if [ -n "$BRANCH" ]; then
+        VCS_DETECTED="$BRANCH"
+      else
+        VCS_DETECTED=$(git -C "$cand_dir" rev-parse --show-toplevel 2>/dev/null | xargs basename 2>/dev/null || true)
       fi
     fi
+
     if [ "$VCS_DIRTY" = "false" ] || [ -z "$VCS_DIRTY" ]; then
-      if [ -n "$(git -C "$CWD" status --porcelain 2>/dev/null | head -n 1)" ]; then
+      if [ -n "$(git -C "$cand_dir" status --porcelain 2>/dev/null | head -n 1)" ]; then
         VCS_DIRTY="true"
       fi
     fi
-  elif command -v hg &>/dev/null && hg -R "$CWD" root &>/dev/null 2>&1; then
-    VCS_DETECTED=$(hg -R "$CWD" branch 2>/dev/null || true)
-  elif command -v jj &>/dev/null && jj -R "$CWD" root &>/dev/null 2>&1; then
-    VCS_DETECTED=$(jj -R "$CWD" log --no-graph -r @ -T 'bookmarks' 2>/dev/null || true)
-  elif [[ "$CWD" =~ ^/google/src/cloud/[^/]+/([^/]+) ]]; then
+    break
+  elif command -v hg &>/dev/null && hg -R "$cand_dir" root &>/dev/null 2>&1; then
+    VCS_DETECTED=$(hg -R "$cand_dir" branch 2>/dev/null || true)
+    break
+  elif command -v jj &>/dev/null && jj -R "$cand_dir" root &>/dev/null 2>&1; then
+    VCS_DETECTED=$(jj -R "$cand_dir" log --no-graph -r @ -T 'bookmarks' 2>/dev/null || true)
+    break
+  elif [[ "$cand_dir" =~ ^/google/src/cloud/[^/]+/([^/]+) ]]; then
     VCS_DETECTED="${BASH_REMATCH[1]}"
+    break
   fi
-fi
+done
 
 if [ -n "$VCS_DETECTED" ]; then
   VCS_BRANCH="$VCS_DETECTED"
