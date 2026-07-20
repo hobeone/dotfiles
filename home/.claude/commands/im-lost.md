@@ -12,6 +12,7 @@ Show current workflow position and context when you've lost track.
 
 ```bash
 git branch --show-current
+git worktree list 2>/dev/null
 git status --short
 git log main..HEAD --oneline 2>/dev/null || git log -3 --oneline
 gh pr view --json number,title,state,statusCheckRollup,reviewDecision,comments,body 2>/dev/null
@@ -23,8 +24,8 @@ If PR body references an issue (`Fixes #N`), fetch it: `gh issue view <N> --json
 
 | State | Step |
 |-------|------|
-| On main, no changes | Orient/Pick work |
-| On branch, uncommitted | Develop |
+| On main in primary checkout, no changes | Orient/Pick work (use `/work` or `/parallel-work start` to create worktree) |
+| On branch or in worktree, uncommitted | Develop |
 | Committed, no PR | Self-review → Create PR |
 | PR open, CI running, no comments | Monitor CI |
 | PR open, has comments | Process feedback (independent of CI status) |
@@ -37,6 +38,7 @@ If PR body references an issue (`Fixes #N`), fetch it: `gh issue view <N> --json
 ```markdown
 ## Where You Are
 
+**Workspace:** [primary checkout or worktree at <path>]
 **Branch:** [name]
 **Status:** [changes or "clean"]
 **Context:** [low/moderate/high if available, otherwise omit]

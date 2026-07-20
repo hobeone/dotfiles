@@ -126,7 +126,7 @@ Run `/research-and-implement ${ARG}`.
 This single skill covers what `/work`'s guided-development phases (Explore/Clarify/Architect/Document) did,
 but via hypothesis-driven investigation (`quaere-evidence`) rather than parallel architecture proposals:
 
-- Phase 0 (branch baseline): picks/creates the working branch automatically, announces it, doesn't poll.
+- Phase 0 (worktree baseline): creates/uses an isolated git worktree automatically instead of switching branches in place, announces the branch and worktree path, doesn't poll.
 - Phase 1 (research): posts a plan to the issue with an `Inconclusive / Deferred items` section. Its Step 3.5
   plan-review gate offers a fresh-context subagent review pass before approval — accept or skip it as
   offered. **You approve the plan before Phase 2 starts** — this is the plan-approval checkpoint, equivalent
