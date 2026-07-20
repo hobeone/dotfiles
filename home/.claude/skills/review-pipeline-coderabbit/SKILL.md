@@ -27,7 +27,7 @@ Done-check runs **before** any commit.
 
 Runs after the done-check loop and **before anything is committed**.
 
-1. Run `/code-review medium` against the current diff (raise to `high` for large or risky diffs; keep the chosen effort fixed across this PR's iterations).
+1. `/code-review` cannot be invoked programmatically from within a pipeline skill (`disable-model-invocation` — the Skill tool always rejects it). Use the `pr-review-toolkit:code-reviewer` agent instead, at an effort matching `medium` (raise to a more thorough pass for large or risky diffs; keep the chosen effort fixed across this PR's iterations). Do not attempt `Skill: code-review` first — it will always fail and the failure carries no new information.
 2. Triage the output — classify each finding under the `finding-triage` SSOT dispositions.
 3. If actionable findings exist: fix, run `/done-check` in delta mode, then re-run `/code-review` at the same effort (fresh, full review — no bias from the previous iteration). If the same conceptual topic recurs across 2+ iterations, stop and follow the escalation order in Rules.
 4. Repeat until no actionable findings remain.
@@ -73,6 +73,8 @@ Skip when the work is not tied to an umbrella tracking issue. Trigger only when 
    Write the final body to a temp file and invoke `gh-post pr edit <N> --repo <owner>/<repo> --body-file /tmp/<descriptive-name>.md`. Do not run `gh pr edit ... --body*` directly; route the body through `gh-post`.
 
 ## ← user merges PR ←
+
+Before stopping, check `gh pr view <PR> --json mergeable,mergeStateStatus`. A `mergeable: CONFLICTING` (or `UNKNOWN` after a fresh push — re-check after a few seconds) is a hard `AskUserQuestion` trigger, not something to resolve by guessing: surface the specific conflicting commits (`git log --oneline <merge-base>..origin/<base-branch>` filtered to files touched by both sides) and ask how to proceed. Do not attempt a rebase, `--auto`, or force-push on your own initiative — repo state can diverge from what the pipeline last saw (another process pushing to the base branch mid-session is exactly this case), and an automated resolution risks silently dropping work. Once the user directs a resolution, verify it (build, vet, and the relevant test suite) before pushing.
 
 Stop here. The user merges the PR via the GitHub UI or `gh pr merge`. Do not attempt the merge from Claude unless the user explicitly asks.
 
