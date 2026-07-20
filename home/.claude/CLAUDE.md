@@ -63,6 +63,8 @@ cheaper one could have handled, note that too.
 
 **Halt on repeated failure.** If an implementation fails, do not guess fixes recursively. Stop, diagnose the root cause, and present a structured resolution to the user.
 
+**Don't poll for background work.** Background Agent/Task calls notify automatically on completion — never call `ScheduleWakeup` to wait on them; just end the turn. `ScheduleWakeup` is scoped to `/loop`'s dynamic-mode self-pacing only.
+
 ## Commit Messages (Conventional Commits 1.0.0)
 
 Every commit message MUST follow this structure:
