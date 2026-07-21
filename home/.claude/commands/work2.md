@@ -159,7 +159,11 @@ Stop at the pipeline's own `## ← user merges PR ←` gate. Do not continue int
 you'll look at the PR when you're ready. Since the ask was to also wait on your review before summarizing:
 
 1. Run `gh pr view <PR#> --json reviews,comments` and check for a review from you (or unresolved review
-   comments) posted after the latest push.
+   comments) posted after the latest push. A native GitHub review is not the only shape this takes — a
+   top-level PR comment (e.g. the output of a locally-run `/pr-review local`) is also a valid review signal
+   and will show up under `comments`, not `reviews`; read any new top-level comment in full rather than only
+   checking `reviews` for a verdict. Likewise, the user invoking `/superpowers:receiving-code-review`
+   directly (instead of `/work2 --attach`) is an expected way to resume this phase, not a deviation from it.
 2. If none yet, tell the user the PR is open and ready, and stop turn — do not poll in a loop. Resume this
    check next time you're invoked (e.g. via `/work2 --attach` or the user pinging back).
 3. If your review requests changes or leaves comments, treat that as fix-loop input: apply the same
@@ -175,6 +179,9 @@ Spawn `summarize-work` agent: `Task(subagent_type="summarize-work", prompt="Summ
 Present its output highlighting key files and the PR URL, same as `/work`.
 
 Ask via AskUserQuestion: **Merge now** / **Wait**. Never auto-merge.
+
+If the user approves merge before CI/CodeRabbit has completed, wait for a green terminal state before
+executing the merge — do not merge on the verbal instruction alone, and do not re-prompt once it's green.
 
 If merged, continue into the pipeline's post-merge umbrella-drift-join phase only if the PR description
 delta step determined this PR is umbrella-tracked; otherwise nothing further to do post-merge.
