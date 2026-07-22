@@ -43,9 +43,11 @@ STDIN_CONTENT=$(cat)
   read -r MODEL
   read -r COLS
   read -r PAYLOAD_QUOTA_REMAINING
+  read -r PAYLOAD_QUOTA_LABEL
+  read -r PAYLOAD_QUOTA_RESET_SECS || true  # last read hits EOF without trailing newline
 } <<< "$(
   if [ -z "$STDIN_CONTENT" ]; then
-    printf "idle\n\n\n\n\n0\n\nfalse\nfalse\n0\n0\n0\n\n80\n\n"
+    printf "idle\n\n\n\n\n0\n\nfalse\nfalse\n0\n0\n0\n\n80\n\n\n"
   else
     printf "%s" "$STDIN_CONTENT" | jq -r '
       (.agent_state // "idle"),
@@ -62,8 +64,19 @@ STDIN_CONTENT=$(cat)
       (.task_count // 0),
       (.model.display_name // ""),
       (.terminal_width // 80),
-      (.quota["gemini-5h"].remaining_fraction // .quota["3p-5h"].remaining_fraction // "")
-    ' 2>/dev/null || printf "idle\n\n\n\n\n0\n\nfalse\nfalse\n0\n0\n0\n\n80\n\n"
+      # Find the most-constrained quota bucket (lowest remaining_fraction).
+      # Use "-" sentinel instead of "" for trailing fields because bash
+      # herestrings strip trailing empty lines.
+      (if .quota | type == "object" and length > 0
+       then [.quota | to_entries[] | select(.value.remaining_fraction != null)] | min_by(.value.remaining_fraction) | .value.remaining_fraction
+       else "-" end),
+      (if .quota | type == "object" and length > 0
+       then [.quota | to_entries[] | select(.value.remaining_fraction != null)] | min_by(.value.remaining_fraction) | .key
+       else "-" end),
+      (if .quota | type == "object" and length > 0
+       then [.quota | to_entries[] | select(.value.remaining_fraction != null)] | min_by(.value.remaining_fraction) | .value.reset_in_seconds // "-"
+       else "-" end)
+    ' 2>/dev/null || printf "idle\n\n\n\n\n0\n\nfalse\nfalse\n0\n0\n0\n\n80\n-\n-\n-"
   fi
 )"
 
@@ -72,47 +85,53 @@ STDIN_CONTENT=$(cat)
 PCT_FMT=$(LC_NUMERIC=C printf "%.1f" "$USED_PCT")
 PCT_INT=${USED_PCT%.*}; PCT_INT=${PCT_INT:-0}
 
-# ─── Quota & Cache Age Handling ──────────────────────────────────────────────
+# ─── Quota Handling ──────────────────────────────────────────────────────────
+# Jetski provides per-model quota in the payload directly (no RPC needed).
+# Legacy Antigravity CLI used a background cache-refresh script; if the payload
+# has quota data we use it directly. Fall back to cache file only if the payload
+# has nothing (e.g. older Antigravity CLI environments).
 CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/antigravity"
 CACHE_FILE="${CACHE_DIR}/quota_cache.json"
 
-NOW=$(date +%s 2>/dev/null || echo 0)
-LAST_MOD=$(stat -c %Y "$CACHE_FILE" 2>/dev/null || stat -f %m "$CACHE_FILE" 2>/dev/null || echo 0)
-
-if [ "$LAST_MOD" -gt 0 ]; then
-  CACHE_AGE_SEC=$((NOW - LAST_MOD))
-  if [ "$CACHE_AGE_SEC" -ge 3600 ]; then
-    AGE_STR="$((CACHE_AGE_SEC / 3600))h"
-  elif [ "$CACHE_AGE_SEC" -ge 60 ]; then
-    AGE_STR="$((CACHE_AGE_SEC / 60))m"
-  else
-    AGE_STR="${CACHE_AGE_SEC}s"
-  fi
-else
-  CACHE_AGE_SEC=99999
-  AGE_STR="no-cache"
-fi
-
-# Background Trigger: Spawn quota-refresh.sh if cache is older than 30s
-REFRESH_SCRIPT="$(dirname "${BASH_SOURCE[0]}")/quota-refresh.sh"
-if [ "$CACHE_AGE_SEC" -ge 30 ] && [ -x "$REFRESH_SCRIPT" ]; then
-  (
-    exec 0</dev/null
-    exec 1>/dev/null
-    exec 2>/dev/null
-    "$REFRESH_SCRIPT"
-  ) &
-  disown $! 2>/dev/null || true
-fi
-
-# Determine Quota Remaining Fraction
 QUOTA_REMAINING=""
-if [ -n "$PAYLOAD_QUOTA_REMAINING" ] && [ "$PAYLOAD_QUOTA_REMAINING" != "null" ]; then
+QUOTA_LABEL=""
+QUOTA_RESET_STR=""
+
+if [ -n "$PAYLOAD_QUOTA_REMAINING" ] && [ "$PAYLOAD_QUOTA_REMAINING" != "null" ] && [ "$PAYLOAD_QUOTA_REMAINING" != "-" ]; then
+  # Payload has quota (Jetski or newer Antigravity CLI)
   QUOTA_REMAINING="$PAYLOAD_QUOTA_REMAINING"
+  [ "$PAYLOAD_QUOTA_LABEL" != "-" ] && QUOTA_LABEL="${PAYLOAD_QUOTA_LABEL:-}"
+
+  # Format reset countdown
+  if [ -n "$PAYLOAD_QUOTA_RESET_SECS" ] && [ "$PAYLOAD_QUOTA_RESET_SECS" != "null" ] && [ "$PAYLOAD_QUOTA_RESET_SECS" != "-" ]; then
+    RESET_SECS=${PAYLOAD_QUOTA_RESET_SECS%.*}  # truncate any decimal
+    RESET_SECS=${RESET_SECS:-0}
+    if [ "$RESET_SECS" -ge 3600 ]; then
+      QUOTA_RESET_STR="$((RESET_SECS / 3600))h$((RESET_SECS % 3600 / 60))m"
+    elif [ "$RESET_SECS" -ge 60 ]; then
+      QUOTA_RESET_STR="$((RESET_SECS / 60))m"
+    elif [ "$RESET_SECS" -gt 0 ]; then
+      QUOTA_RESET_STR="${RESET_SECS}s"
+    fi
+  fi
 elif [ -f "$CACHE_FILE" ]; then
+  # Legacy fallback: background quota-refresh.sh wrote a cache file
   QUOTA_REMAINING=$(jq -r '
     .models | to_entries | map(.value.remainingFraction) | min // 1.0
   ' "$CACHE_FILE" 2>/dev/null || echo "1.0")
+
+  # Spawn background refresh if cache is stale
+  NOW=$(date +%s 2>/dev/null || echo 0)
+  LAST_MOD=$(stat -c %Y "$CACHE_FILE" 2>/dev/null || stat -f %m "$CACHE_FILE" 2>/dev/null || echo 0)
+  CACHE_AGE_SEC=99999
+  if [ "$LAST_MOD" -gt 0 ]; then
+    CACHE_AGE_SEC=$((NOW - LAST_MOD))
+  fi
+  REFRESH_SCRIPT="$(dirname "${BASH_SOURCE[0]}")/quota-refresh.sh"
+  if [ "$CACHE_AGE_SEC" -ge 30 ] && [ -x "$REFRESH_SCRIPT" ]; then
+    ( exec 0</dev/null; exec 1>/dev/null; exec 2>/dev/null; "$REFRESH_SCRIPT" ) &
+    disown $! 2>/dev/null || true
+  fi
 fi
 
 # Format Quota Output
@@ -132,14 +151,14 @@ if [ -n "$QUOTA_REMAINING" ] && [ "$QUOTA_REMAINING" != "null" ]; then
   for ((i=0; i<Q_FILLED; i++)); do Q_BAR="${Q_BAR}▰"; done
   for ((i=Q_FILLED; i<10; i++)); do Q_BAR="${Q_BAR}▱"; done
 
-  AGE_COLOR="${FG_GRAY}"
-  if [ "$CACHE_AGE_SEC" -ge 300 ]; then
-    AGE_COLOR="${FG_BRIGHT_RED}"
-  elif [ "$CACHE_AGE_SEC" -ge 60 ]; then
-    AGE_COLOR="${FG_BRIGHT_YELLOW}"
+  # Build label: "quota ▰▰▱▱▱ 19% claude-gpt (resets 15m)"
+  QUOTA_SUFFIX=""
+  [ -n "$QUOTA_LABEL" ] && QUOTA_SUFFIX=" ${FG_GRAY}${QUOTA_LABEL}"
+  if [ -n "$QUOTA_RESET_STR" ]; then
+    QUOTA_SUFFIX="${QUOTA_SUFFIX} ${FG_GRAY}(resets ${QUOTA_RESET_STR})${R}"
   fi
 
-  QUOTA_FMT="${FG_GRAY}quota ${Q_BAR_COLOR}${Q_BAR} ${NUM_COLOR}${QUOTA_USED_PCT}%${R} ${AGE_COLOR}(${AGE_STR})${R}"
+  QUOTA_FMT="${FG_GRAY}quota ${Q_BAR_COLOR}${Q_BAR} ${NUM_COLOR}${QUOTA_USED_PCT}%${R}${QUOTA_SUFFIX}"
 fi
 
 # ─── State Indicator (No background colors) ──────────────────────────────────
