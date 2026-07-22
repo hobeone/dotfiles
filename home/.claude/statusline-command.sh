@@ -44,6 +44,21 @@ fmt_time_hm() {
   if date -r 0 +%s >/dev/null 2>&1; then date -r "$epoch" +"%H:%M"; else date -d "@$epoch" +"%H:%M"; fi
 }
 
+fmt_reset_countdown() {
+  reset_epoch="$1"
+  [[ "$reset_epoch" =~ ^[0-9]+$ ]] || return
+  now=$(date +%s)
+  remaining=$(( reset_epoch - now ))
+  (( remaining < 0 )) && remaining=0
+  if (( remaining >= 86400 )); then
+    printf '%dd %dh' $(( remaining / 86400 )) $(( (remaining % 86400) / 3600 ))
+  elif (( remaining >= 3600 )); then
+    printf '%dh %dm' $(( remaining / 3600 )) $(( (remaining % 3600) / 60 ))
+  else
+    printf '%dm' $(( remaining / 60 ))
+  fi
+}
+
 progress_bar() {
   pct="${1:-0}"; width="${2:-10}"
   [[ "$pct" =~ ^[0-9]+$ ]] || pct=0; ((pct<0))&&pct=0; ((pct>100))&&pct=100
@@ -171,12 +186,22 @@ fi
 usage_color() { if [ "$use_color" -eq 1 ]; then printf '\033[38;5;189m'; fi; }  # lavender
 cost_color() { if [ "$use_color" -eq 1 ]; then printf '\033[38;5;222m'; fi; }   # light gold
 burn_color() { if [ "$use_color" -eq 1 ]; then printf '\033[38;5;220m'; fi; }   # bright gold
-session_color() { 
+session_color() {
   rem_pct=$(( 100 - session_pct ))
   if   (( rem_pct <= 10 )); then SCLR='38;5;210'  # light pink
-  elif (( rem_pct <= 25 )); then SCLR='38;5;228'  # light yellow  
+  elif (( rem_pct <= 25 )); then SCLR='38;5;228'  # light yellow
   else                          SCLR='38;5;194'; fi  # light green
   if [ "$use_color" -eq 1 ]; then printf '\033[%sm' "$SCLR"; fi
+}
+
+# ---- quota (rate limit) colors ----
+quota_color() {
+  used_pct="$1"
+  if [ "$use_color" -eq 1 ]; then
+    if   (( used_pct >= 90 )); then printf '\033[38;5;203m'  # coral red
+    elif (( used_pct >= 70 )); then printf '\033[38;5;215m'  # peach
+    else                            printf '\033[38;5;158m'; fi  # mint green
+  fi
 }
 
 # ---- cost and usage extraction ----
@@ -231,6 +256,25 @@ else
   if [ -n "$tot_tokens" ] && [ -n "$total_duration_ms" ] && [ "$total_duration_ms" -gt 0 ]; then
     tpm=$(echo "$tot_tokens $total_duration_ms" | awk '{if ($2 > 0) printf "%.0f", $1 * 60000 / $2; else print ""}')
   fi
+fi
+
+# ---- rate limit (quota) extraction ----
+# Native since Claude Code 2.1.x on Pro/Max plans: `.rate_limits.five_hour` and
+# `.rate_limits.seven_day`, each with `used_percentage` and `resets_at` (epoch
+# seconds). No external API call needed - Claude Code puts this in the payload.
+five_hour_pct=""; five_hour_reset=""
+seven_day_pct=""; seven_day_reset=""
+
+if [ "$HAS_JQ" -eq 1 ]; then
+  five_hour_pct=$(echo "$input" | jq -r '.rate_limits.five_hour.used_percentage // empty' 2>/dev/null)
+  five_hour_reset=$(echo "$input" | jq -r '.rate_limits.five_hour.resets_at // empty' 2>/dev/null)
+  seven_day_pct=$(echo "$input" | jq -r '.rate_limits.seven_day.used_percentage // empty' 2>/dev/null)
+  seven_day_reset=$(echo "$input" | jq -r '.rate_limits.seven_day.resets_at // empty' 2>/dev/null)
+else
+  five_hour_pct=$(echo "$input" | grep -o '"five_hour"[[:space:]]*:[[:space:]]*{[^}]*"used_percentage"[[:space:]]*:[[:space:]]*[0-9.]*' | sed 's/.*"used_percentage"[[:space:]]*:[[:space:]]*\([0-9.]*\).*/\1/')
+  five_hour_reset=$(echo "$input" | grep -o '"five_hour"[[:space:]]*:[[:space:]]*{[^}]*"resets_at"[[:space:]]*:[[:space:]]*[0-9]*' | sed 's/.*"resets_at"[[:space:]]*:[[:space:]]*\([0-9]*\).*/\1/')
+  seven_day_pct=$(echo "$input" | grep -o '"seven_day"[[:space:]]*:[[:space:]]*{[^}]*"used_percentage"[[:space:]]*:[[:space:]]*[0-9.]*' | sed 's/.*"used_percentage"[[:space:]]*:[[:space:]]*\([0-9.]*\).*/\1/')
+  seven_day_reset=$(echo "$input" | grep -o '"seven_day"[[:space:]]*:[[:space:]]*{[^}]*"resets_at"[[:space:]]*:[[:space:]]*[0-9]*' | sed 's/.*"resets_at"[[:space:]]*:[[:space:]]*\([0-9]*\).*/\1/')
 fi
 
 # Session reset time requires ccusage (only feature that needs external tool)
@@ -329,11 +373,32 @@ if [ -n "$tot_tokens" ] && [[ "$tot_tokens" =~ ^[0-9]+$ ]]; then
   fi
 fi
 
+# Line 4: Rate limit (quota) usage
+line4=""
+if [ -n "$five_hour_pct" ]; then
+  five_hour_int=${five_hour_pct%.*}; five_hour_int=${five_hour_int:-0}
+  five_hour_bar=$(progress_bar "$five_hour_int" 10)
+  reset_str=$(fmt_reset_countdown "$five_hour_reset")
+  line4="⏱️  $(quota_color "$five_hour_int")5h: ${five_hour_int}% [${five_hour_bar}]$(rst)"
+  [ -n "$reset_str" ] && line4="$line4 $(style_color)(resets ${reset_str})$(rst)"
+fi
+if [ -n "$seven_day_pct" ]; then
+  seven_day_int=${seven_day_pct%.*}; seven_day_int=${seven_day_int:-0}
+  seven_day_bar=$(progress_bar "$seven_day_int" 10)
+  reset_str=$(fmt_reset_countdown "$seven_day_reset")
+  seg="📅 $(quota_color "$seven_day_int")7d: ${seven_day_int}% [${seven_day_bar}]$(rst)"
+  [ -n "$reset_str" ] && seg="$seg $(style_color)(resets ${reset_str})$(rst)"
+  if [ -n "$line4" ]; then line4="$line4  $seg"; else line4="$seg"; fi
+fi
+
 # Print lines
 if [ -n "$line2" ]; then
   printf '\n%s' "$line2"
 fi
 if [ -n "$line3" ]; then
   printf '\n%s' "$line3"
+fi
+if [ -n "$line4" ]; then
+  printf '\n%s' "$line4"
 fi
 printf '\n'
