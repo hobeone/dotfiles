@@ -42,9 +42,10 @@ STDIN_CONTENT=$(cat)
   read -r BG_TASKS
   read -r MODEL
   read -r COLS
+  read -r PAYLOAD_QUOTA_REMAINING
 } <<< "$(
   if [ -z "$STDIN_CONTENT" ]; then
-    printf "idle\n\n\n\n\n0\n\nfalse\nfalse\n0\n0\n0\n\n80\n"
+    printf "idle\n\n\n\n\n0\n\nfalse\nfalse\n0\n0\n0\n\n80\n\n"
   else
     printf "%s" "$STDIN_CONTENT" | jq -r '
       (.agent_state // "idle"),
@@ -60,8 +61,9 @@ STDIN_CONTENT=$(cat)
       (if .subagents | type == "array" then ([.subagents[] | select(.status == "running")] | length) else 0 end),
       (.task_count // 0),
       (.model.display_name // ""),
-      (.terminal_width // 80)
-    ' 2>/dev/null || printf "idle\n\n\n\n\n0\n\nfalse\nfalse\n0\n0\n0\n\n80\n"
+      (.terminal_width // 80),
+      (.quota["gemini-5h"].remaining_fraction // .quota["3p-5h"].remaining_fraction // "")
+    ' 2>/dev/null || printf "idle\n\n\n\n\n0\n\nfalse\nfalse\n0\n0\n0\n\n80\n\n"
   fi
 )"
 
@@ -69,6 +71,76 @@ STDIN_CONTENT=$(cat)
 # Use LC_NUMERIC=C to prevent bash printf errors in locales that use commas for decimals
 PCT_FMT=$(LC_NUMERIC=C printf "%.1f" "$USED_PCT")
 PCT_INT=${USED_PCT%.*}; PCT_INT=${PCT_INT:-0}
+
+# ─── Quota & Cache Age Handling ──────────────────────────────────────────────
+CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/antigravity"
+CACHE_FILE="${CACHE_DIR}/quota_cache.json"
+
+NOW=$(date +%s 2>/dev/null || echo 0)
+LAST_MOD=$(stat -c %Y "$CACHE_FILE" 2>/dev/null || stat -f %m "$CACHE_FILE" 2>/dev/null || echo 0)
+
+if [ "$LAST_MOD" -gt 0 ]; then
+  CACHE_AGE_SEC=$((NOW - LAST_MOD))
+  if [ "$CACHE_AGE_SEC" -ge 3600 ]; then
+    AGE_STR="$((CACHE_AGE_SEC / 3600))h"
+  elif [ "$CACHE_AGE_SEC" -ge 60 ]; then
+    AGE_STR="$((CACHE_AGE_SEC / 60))m"
+  else
+    AGE_STR="${CACHE_AGE_SEC}s"
+  fi
+else
+  CACHE_AGE_SEC=99999
+  AGE_STR="no-cache"
+fi
+
+# Background Trigger: Spawn quota-refresh.sh if cache is older than 30s
+REFRESH_SCRIPT="$(dirname "${BASH_SOURCE[0]}")/quota-refresh.sh"
+if [ "$CACHE_AGE_SEC" -ge 30 ] && [ -x "$REFRESH_SCRIPT" ]; then
+  (
+    exec 0</dev/null
+    exec 1>/dev/null
+    exec 2>/dev/null
+    "$REFRESH_SCRIPT"
+  ) &
+  disown $! 2>/dev/null || true
+fi
+
+# Determine Quota Remaining Fraction
+QUOTA_REMAINING=""
+if [ -n "$PAYLOAD_QUOTA_REMAINING" ] && [ "$PAYLOAD_QUOTA_REMAINING" != "null" ]; then
+  QUOTA_REMAINING="$PAYLOAD_QUOTA_REMAINING"
+elif [ -f "$CACHE_FILE" ]; then
+  QUOTA_REMAINING=$(jq -r '
+    .models | to_entries | map(.value.remainingFraction) | min // 1.0
+  ' "$CACHE_FILE" 2>/dev/null || echo "1.0")
+fi
+
+# Format Quota Output
+QUOTA_FMT=""
+if [ -n "$QUOTA_REMAINING" ] && [ "$QUOTA_REMAINING" != "null" ]; then
+  QUOTA_USED_PCT=$(awk "BEGIN {print int((1 - ${QUOTA_REMAINING}) * 100 + 0.5)}" 2>/dev/null || echo 0)
+  if [ "$QUOTA_USED_PCT" -lt 0 ]; then QUOTA_USED_PCT=0; fi
+  if [ "$QUOTA_USED_PCT" -gt 100 ]; then QUOTA_USED_PCT=100; fi
+
+  Q_BAR_COLOR="\033[32m"
+  [ "$QUOTA_USED_PCT" -ge 50 ] && Q_BAR_COLOR="\033[33m"
+  [ "$QUOTA_USED_PCT" -ge 75 ] && Q_BAR_COLOR="\033[38;5;208m"
+  [ "$QUOTA_USED_PCT" -ge 90 ] && Q_BAR_COLOR="\033[31m"
+
+  Q_BAR=""
+  Q_FILLED=$((QUOTA_USED_PCT / 10))
+  for ((i=0; i<Q_FILLED; i++)); do Q_BAR="${Q_BAR}▰"; done
+  for ((i=Q_FILLED; i<10; i++)); do Q_BAR="${Q_BAR}▱"; done
+
+  AGE_COLOR="${FG_GRAY}"
+  if [ "$CACHE_AGE_SEC" -ge 300 ]; then
+    AGE_COLOR="${FG_BRIGHT_RED}"
+  elif [ "$CACHE_AGE_SEC" -ge 60 ]; then
+    AGE_COLOR="${FG_BRIGHT_YELLOW}"
+  fi
+
+  QUOTA_FMT="${FG_GRAY}quota ${Q_BAR_COLOR}${Q_BAR} ${NUM_COLOR}${QUOTA_USED_PCT}%${R} ${AGE_COLOR}(${AGE_STR})${R}"
+fi
 
 # ─── State Indicator (No background colors) ──────────────────────────────────
 case "$STATE" in
@@ -177,9 +249,6 @@ FILLED_BARS=$((USED_PCT_INT / 10))
 for ((i=0; i<FILLED_BARS; i++)); do BAR="${BAR}▰"; done
 for ((i=FILLED_BARS; i<TOTAL_BARS; i++)); do BAR="${BAR}▱"; done
 
-
-
-
 # ─── Stats ───────────────────────────────────────────────────────────────────
 CTX="${FG_GRAY}ctx ${BAR_COLOR}${BAR} ${NUM_COLOR}${PCT_FMT}%${R}"
 ART_FMT="${FG_GRAY}artifacts ${NUM_COLOR}${ARTIFACTS}${R}"
@@ -191,7 +260,17 @@ DOT="${FG_GRAY} · ${R}"
 
 # ─── Output ──────────────────────────────────────────────────────────────────
 LINE1="${S}${M}${V}${DOT}${CWD}"
-LINE2=" ${CTX}${DOT}${ART_FMT}${DOT}${SUB_FMT}${DOT}${BG_FMT}${DOT}${SB}"
+LINE2_PARTS=(" ${CTX}")
+if [ -n "$QUOTA_FMT" ]; then
+  LINE2_PARTS+=("${QUOTA_FMT}")
+fi
+LINE2_PARTS+=("${ART_FMT}" "${SUB_FMT}" "${BG_FMT}" "${SB}")
+
+LINE2=$(IFS="" && echo "${LINE2_PARTS[*]}" | sed "s/ /${DOT}/2g")
+# Join line2 elements with DOT
+LINE2=" ${CTX}"
+[ -n "$QUOTA_FMT" ] && LINE2="${LINE2}${DOT}${QUOTA_FMT}"
+LINE2="${LINE2}${DOT}${ART_FMT}${DOT}${SUB_FMT}${DOT}${BG_FMT}${DOT}${SB}"
 
 if [ "$COLS" -ge 80 ]; then
   # Standard: two-line layout with border (ensures worktree/branch + CWD never overflow)
@@ -202,3 +281,4 @@ else
   echo -e "${S}${M}${V}"
   echo -e "${CTX}${DOT}${ART_FMT}${DOT}${BG_FMT}"
 fi
+
