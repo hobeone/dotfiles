@@ -1,13 +1,13 @@
 ---
 name: review-pipeline-coderabbit
-description: Full review pipeline from local changes through PR, CodeRabbit review, and umbrella drift join. Pauses at the user-controlled merge gate between Phase 3a and 3b. CodeRabbit is the sole pre-merge reviewer — no Codex loop, no postmortem-elevation phase.
+description: Full review pipeline from local changes through PR, CodeRabbit review (best-effort), and umbrella drift join. Pauses at the user-controlled merge gate between Phase 3a and 3b.
 ---
 
 # Review Pipeline (CodeRabbit)
 
 Orchestrate the full flow from local changes through PR review, user merge, and umbrella drift join. This skill ties together several sub-skills — invoke each by name.
 
-This is a personal, trimmed fork of `development-skills:review-pipeline-coderabbit`: the Codex review loop and the postmortem-elevation phase (which wrote findings back into the `development-skills` repo itself) are permanently removed rather than skipped per-call. CodeRabbit's automated review plus Gemini's own `/code-review` pass are the two reviewers in this pipeline.
+CodeRabbit's automated review (best-effort) plus Gemini's own `pr-review` pass are the reviewers in this pipeline.
 
 The pipeline crosses a **user-controlled merge gate** (Phase 3a → 3b): the user, not Gemini, merges the PR. Phases before the gate run on the PR branch; phases after run on `main` and tracking issues. Gemini pauses at the `## ← user merges PR ←` section.
 
@@ -34,21 +34,16 @@ Runs after the done-check loop and **before anything is committed**.
 
 From here on, every reviewer finding is by construction a penetration of this gate — note that provenance in each triage presentation.
 
-## Phase 1: CodeRabbit review
+## Phase 1: Review and fix loop
 
-1. Before pushing, perform a mandatory pre-review sync/rebase check via `run_command`:
-   ```bash
-   git fetch origin main && git merge-tree $(git write-tree) HEAD origin/main
-   ```
-   If merge conflicts exist or the branch has diverged, rebase or merge `origin/main` cleanly and resolve conflicts before proceeding. Then run `stage-commit-push` to stage, commit, and push local changes.
+1. Run `stage-commit-push` to stage, commit, and push local changes.
 2. Run `file-pullreq` in **gate mode** — drafts the PR title + body following `gh-body-conventions` and the standard body skeleton, runs the laundering pass, and gets the user's approval. The skill stops at approval and emits the approved title + body for the next step. It does NOT create the PR itself.
-3. Run `coderabbit-review`, passing the approved title + body — this creates the PR (the CodeRabbit app starts its review on PR open by itself; no reviewer-request step) and polls CodeRabbit's completion signal on the head commit until the review resolves. When the script exits `0` — a completed review with no review object and no skip signature — that is a genuine zero-finding pass; record it and skip steps 4–6. **Exception — non-review skip (auto-pause / rate-limit / file-count):** when the review script exits `2`, the review did not run (the terminal `success` reflects a skipped, unreviewed push, not a clean pass). Do NOT record it as zero-finding — read the script's printed cause and per-cause remedy and follow it. **When rate limited (exit `2` with rate-limit cause), automate the retry:** parse the reset window from the PR comment (e.g., via `gh pr view <PR#> --json comments`), invoke the `schedule` builtin (e.g., `DurationSeconds=<reset_seconds> + 30`, `TimerCondition="never"`, `Prompt="CodeRabbit rate limit expired. Post @coderabbitai review and resume polling."`), and stop turn. When the timer fires, automatically execute `gh pr comment <PR#> --body "@coderabbitai review"` and re-poll via `~/.gemini/skills/coderabbit-review/scripts/pr-with-coderabbit-review.sh --poll <PR_URL>`. For other skip causes (auto-pause / file-count), apply their respective remedies before re-polling.
-4. Triage the review:
-   - Filter to the latest review's comments only (by `pull_request_review_id`).
-   - Unfold and extract ALL collapsed `<details>` sections (nitpicks, outside-diff comments, coverage warnings).
-   - Decompose compound findings containing multiple sub-requirements into distinct 1:1 sub-items in the triage list. Every sub-item must be independently verified.
-5. Reply to each inline comment individually via `gh-post reply-inline <owner>/<repo> <PR> < /tmp/replies.jsonl`. Build the JSONL with one `{"id": <comment-id>, "body": "<reply>"}` per line. (If `gh-post` is unavailable, loop line-by-line using `jq` and `gh api "repos/<owner>/<repo>/pulls/comments/<id>/replies" -f body="$body"`).
-6. If actionable findings exist, apply the **fix-loop substeps** (see Rules), replacing the re-review step with `~/.gemini/skills/coderabbit-review/scripts/pr-with-coderabbit-review.sh --re-review <PR_URL>` — the push from `stage-commit-push` already triggered the incremental review; this waits for it. The `--re-review` call can also exit `2` (non-review skip) — apply the same automated `schedule` retry or cause-and-remedy branch as step 3 before triaging. Triage only new comments. Repeat until no actionable findings remain.
+3. Run `coderabbit-review`, passing the approved title + body — this creates the PR (the CodeRabbit app starts its review on PR open by itself; no reviewer-request step) and polls CodeRabbit's completion signal on the head commit **once, briefly**. CodeRabbit is best-effort here, not a gate:
+   - Exit `0` (completed, genuinely zero findings) or a review with findings → note the result; either way, proceed to step 4.
+   - Exit `2` (rate-limited / auto-paused / file-count skip) → read the script's printed cause, but do **not** nudge-and-repoll and do **not** block waiting for it. Note the cause and proceed to step 4 regardless — whatever review coverage exists will come from the user's own review or a delegated adversarial-review agent instead. A single opportunistic nudge (`gh pr comment <PR> --repo <owner>/<repo> --body "@coderabbitai review"`) is fine if cheap, but this step must not hold up the pipeline.
+4. Run `pr-review remote`. This is the actual comment-fetching and fix-loop mechanism regardless of source: it pulls CodeRabbit's inline comments/review summary (when CodeRabbit responded), general PR conversation comments (where the user's own local review or a delegated adversarial-review agent posts, under the user's own GitHub identity), filters out already-addressed items via its own "Feedback Addressed" tracking, forms an opinion per item, and presents via `ask_question`. For every **Implement** decision it internally verifies via `superpowers:receiving-code-review` (or self-verification) before touching code — layer this pipeline's own discipline underneath that: run `done-check` in delta mode after each fix (not just `pr-review`'s own quality-gate step), and route every commit through `stage-commit-push` per the Rules below, not manual git commands.
+5. **Reply to CodeRabbit's inline comments individually** (not folded into a single top-level reply) via `gh-post reply-inline <owner>/<repo> <PR> < /tmp/replies.jsonl` — one `{"id": <comment-id>, "body": "<reply>"}` per line, wrapper validates through the hardwrap detector before sending. (If `gh-post` is unavailable, loop line-by-line using `jq` and `gh api "repos/<owner>/<repo>/pulls/comments/<id>/replies" -f body="$body"`). This applies whenever `pr-review remote` is replying to a CodeRabbit-sourced inline thread; plain top-level PR comments (the user's or a delegated agent's) get a regular reply instead.
+6. If a fresh push re-triggers a CodeRabbit review, repeat step 3's best-effort poll (still non-blocking, still no repeated nudging) before running `pr-review remote` again, so CodeRabbit's findings fold in if it responds in time. Repeat steps 3–6 until `pr-review remote` reports no unaddressed feedback remains (from any source).
 
 ## Phase 2a: PR description delta (pre-merge)
 
@@ -81,7 +76,9 @@ Skip when the work is not tied to an umbrella tracking issue. Trigger only when 
 
 ## ← user merges PR ←
 
-Before stopping, check `gh pr view <PR> --json mergeable,mergeStateStatus` via `run_command`. A `mergeable: CONFLICTING` (or `UNKNOWN` after a fresh push — re-check after a few seconds) is a hard `ask_question` trigger, not something to resolve by guessing: surface the specific conflicting commits (`git log --oneline <merge-base>..origin/<base-branch>` filtered to files touched by both sides) and ask how to proceed. Do not attempt a rebase, `--auto`, or force-push on your own initiative — repo state can diverge from what the pipeline last saw (another process pushing to the base branch mid-session is exactly this case), and an automated resolution risks silently dropping work. Once the user directs a resolution, verify it (build, vet, and the relevant test suite) before pushing.
+Before stopping, check `gh pr view <PR> --json mergeable,mergeStateStatus` via `run_command`. A `mergeable: CONFLICTING` (or `UNKNOWN` after a fresh push — re-check after a few seconds) is a hard `ask_question` trigger, not something to resolve by guessing: surface the specific conflicting commits (`git log --oneline <merge-base>..origin/<base-branch>` filtered to files touched by both sides) and ask how to proceed. Do not attempt a rebase, `--auto`, or force-push on your own initiative — repo state can diverge from what the pipeline last saw (another process pushing to the base branch mid-session is exactly this case), and an automated resolution risks silently dropping work. Once the user directs a resolution, verify it (build, vet, and the relevant test suite) before pushing. This gate applies even after the user has taken over review personally — "the user is reviewing" is not the same as "the user approved this specific conflict resolution." Surface the conflict and get explicit direction before rebasing, regardless of who is driving review at that point.
+
+CodeRabbit is not a merge gate (see Phase 1) — do not wait for it or block the merge gate on it. If it never responded (rate-limited or otherwise), that's expected and not a reason to hold up the user.
 
 Stop here. The user merges the PR via the GitHub UI or `gh pr merge`. Do not attempt the merge from Gemini unless the user explicitly asks or approves via `ask_question`.
 
@@ -104,18 +101,16 @@ Runs only after the user has merged.
 
 ## Rules
 
-- **Fix-loop substeps** (Phase 1 step 6):
+- **Fix-loop substeps** (Phase 1 step 4, layered underneath `pr-review remote`'s own Implement/Skip/Defer loop): `pr-review remote` drives the per-item decision and the verified fix itself; this pipeline adds three things around that which `pr-review` doesn't know about on its own:
 
   1. **Oscillation check (iteration N ≥ 2).** Compare current actionable topics against the previous iteration's preserved topics. If any conceptual topic recurs, halt and follow the escalation order below — do NOT fix or done-check.
-  2. **Red-Green Mutation Proof.** Before applying the fix, write a test asserting the expected behavior and run it against the unpatched code to confirm failure (RED). For new logic paths, temporarily break/invert the condition to verify the test suite FAILS under mutation before finalizing code (GREEN).
-  3. Fix the code.
-  4. Run `done-check` in delta mode.
-  5. Run `stage-commit-push`.
-  6. Re-run the review (fresh, full review — no bias from previous iteration), using `--re-review`.
-  7. Preserve actionable topic classifications for the next iteration's oscillation check.
-  8. Re-triage — only new comments.
+  2. After each fix, run `done-check` in delta mode before the commit.
+  3. Route the commit through `stage-commit-push`.
+  4. Preserve actionable topic classifications for the next iteration's oscillation check, and re-poll CodeRabbit (Phase 1 step 6) before running `pr-review remote` again.
 
 - **Never skip done-check, including in fix loops.** Every fix commit is itself a diff that can introduce new drift — especially `completion-hygiene` and `paired-artifact-drift`.
+
+- **New-example derivation gate applies in the fix loop too.** If a fix introduces a new literal test example (a new fixture path, input value, or worked case) to satisfy a reviewer finding, `implement`'s Step 3.2.1 discipline still binds: don't assume the example's properties are obvious. A path chosen to be "just nonexistent," for instance, can land in a different error branch than intended — verify the example actually exercises the intended branch before asserting on it, the same way 3.2.1 requires for the initial implementation.
 
 - **Done-check delta mode.** Report only rows whose status changes from the previous audit, plus any new ⚠. Resolve every new ⚠ before the subsequent `stage-commit-push`. Pay special attention to:
 
@@ -158,3 +153,4 @@ Runs only after the user has merged.
   Convergence of independent reviewers (Gemini's own pass, CodeRabbit) on the same concern across iterations is the oscillation signal, regardless of any "no-clarifying-questions" preference elsewhere.
 
 - **Pause at the merge gate.** Phase 2b runs only after the user merges. Do not run `gh pr merge` from Gemini unless explicitly asked.
+

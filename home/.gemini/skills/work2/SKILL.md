@@ -102,15 +102,16 @@ git fetch origin main && git merge-tree $(git write-tree) HEAD origin/main
 ```
 If merge conflicts exist or the branch has diverged, rebase or merge `origin/main` cleanly and resolve all conflicts before proceeding.
 
-Run the `review-pipeline-coderabbit` skill (`~/.gemini/skills/review-pipeline-coderabbit/SKILL.md`).
+Run the `review-pipeline-coderabbit` skill (`~/.gemini/skills/review-pipeline-coderabbit/SKILL.md`). Note that CodeRabbit is best-effort (non-blocking brief poll); if it never responds (rate limit, etc.), proceed on whatever review coverage exists.
+
 Stop at the pipeline's own `## ← user merges PR ←` gate.
 
 ## Phase C — Wait For Your Review
 
-1. Run `gh pr view <PR#> --json reviews,comments` via `run_command` and check for a review from the user posted after the latest push.
-2. If none yet, tell the user the PR is open and ready, and stop turn.
-3. If review requests changes, run fix loop (fix → `~/.gemini/skills/done-check/SKILL.md` -> `~/.gemini/skills/stage-commit-push/SKILL.md` -> re-check).
-4. Proceed once review is approved.
+1. Run `pr-review remote`. It fetches from every source at once — CodeRabbit's inline comments/review summary (when available), and any plain top-level PR comment (the user's own review, or a delegated adversarial-review agent posting under the user's GitHub identity) — filters out anything already addressed, and reports if no unaddressed feedback exists.
+2. If it reports no feedback, tell the user the PR is open and ready, and stop turn — do not poll in a loop.
+3. If feedback is found, let `pr-review remote` run its decision loop, layering this pipeline's discipline underneath: `done-check` in delta mode after each fix, `stage-commit-push` for every commit, oscillation detection across iterations, and a best-effort CodeRabbit re-poll before the next pass if a push re-triggered it.
+4. Proceed to Phase D once `pr-review remote` reports no unaddressed feedback remains.
 
 ## Phase D — Summarize and Merge Decision
 
