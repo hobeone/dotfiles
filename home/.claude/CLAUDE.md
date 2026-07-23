@@ -25,7 +25,7 @@ Default: act without asking for file operations, git, tests, linters, PRs, issue
 
 Non-obvious autonomy:
 - Re-run flaky CI once (`gh run rerun <id> --failed`); investigate if it fails twice
-- After completing work: summarize and run `/pr-review local` before pushing
+- After completing work: summarize and run `pr-review-toolkit:review-pr` on the local diff before pushing
 - After creating/pushing to PR: run `/watch-ci <PR#>` immediately
 - When making issues: check for relevant labels, suggest new ones
 
@@ -118,7 +118,7 @@ After significant work: share what caused friction, where you were redirected (i
 
 Use `/work <issue-number>` for guided development. `/work --attach` to join an existing PR.
 
-- **Before pushing**: `/pr-review local`, update docs if needed
-- **After push**: `/pr-create` (or just push) → `/watch-ci` → CI completes → `/pr-review remote`
+- **Before pushing**: `pr-review-toolkit:review-pr` on the local diff, update docs if needed
+- **After push**: `/pr-create` (or just push) → `/watch-ci` → CI completes → `code-review:code-review` on the open PR
 - **On feedback**: Present via AskUserQuestion. Form your own opinion—you have context reviewers lack
 - **After fixes**: Push → auto-cycle repeats until clean

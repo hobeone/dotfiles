@@ -13,6 +13,25 @@ The forked skills live under `~/.gemini/skills/` (`research`, `implement`, `rese
 Flow: research-and-implement → review-pipeline-coderabbit (through the merge gate) →
 wait for **your** review → summarize → merge decision → reflect.
 
+## Review & Verification Model
+
+The cost-aware default picks the cheapest capable model tier (`flash` / `flash_lite`) for implementation. Review and verification are a separate decision: a cheap implementation paired with a strong review pass is usually the better spend. **When the change is complex enough to warrant it, run this pipeline's subagent review and verification steps on `pro` even if implementation ran on a lower tier.**
+
+The review/verification steps this applies to:
+- Phase A — the Step 3.5 plan-review subagent, and the `done-check` pass.
+- Phase B — local code review / subagent passes.
+- Phase C — the `receiving-code-review` verification of each fix.
+
+Escalate review + verification subagents to `pro` when **any** of these triggers is true (state which trigger fired):
+- Touches persistence / on-disk format, or a DB schema / migration.
+- Changes concurrency: mutex scope, goroutine lifecycle, channel protocols, lock ordering.
+- Touches crash-recovery or durability invariants.
+- Changes a public interface between packages, or the diff spans 3+ packages.
+- Is security-sensitive (auth, trust policy, parser logic).
+- Is large or high-churn by blast-radius signal.
+
+Otherwise keep review at the implementation tier. When in doubt, escalate the *review* — it is read-only and the downside of a missed defect is higher than the token cost.
+
 ## Prerequisites
 
 Checked once per session, before Step 1:
