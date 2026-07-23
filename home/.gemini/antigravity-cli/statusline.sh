@@ -18,12 +18,12 @@ FG_BRIGHT_WHITE="\033[97m"
 
 # Number Highlight Color
 NUM_COLOR="${FG_BRIGHT_WHITE}${B}"
+DOT="${FG_GRAY} · ${R}"
 
 # ─── Parse JSON from stdin (Single jq pass for performance) ──────────────────
 # Extract all fields in one pass to prevent spawning jq 8 times.
 STDIN_CONTENT=$(cat)
 
-# Save input to a tmp file for examination, not everything is fully documented
 # so looking at the actual file helps set up the parsing.
 (umask 077; printf "%s" "$STDIN_CONTENT" > /tmp/statusline_input.json) 2>/dev/null || true
 
@@ -42,12 +42,14 @@ STDIN_CONTENT=$(cat)
   read -r BG_TASKS
   read -r MODEL
   read -r COLS
-  read -r PAYLOAD_QUOTA_REMAINING
-  read -r PAYLOAD_QUOTA_LABEL
-  read -r PAYLOAD_QUOTA_RESET_SECS || true  # last read hits EOF without trailing newline
+  read -r Q_PREFIX
+  read -r Q5H_REM
+  read -r Q5H_RESET_SECS
+  read -r QW_REM
+  read -r QW_RESET_SECS || true  # last read hits EOF without trailing newline
 } <<< "$(
   if [ -z "$STDIN_CONTENT" ]; then
-    printf "idle\n\n\n\n\n0\n\nfalse\nfalse\n0\n0\n0\n\n80\n\n\n"
+    printf "idle\n\n\n\n\n0\n\nfalse\nfalse\n0\n0\n0\n\n80\n-\n-\n-\n-\n-"
   else
     printf "%s" "$STDIN_CONTENT" | jq -r '
       (.agent_state // "idle"),
@@ -64,19 +66,30 @@ STDIN_CONTENT=$(cat)
       (.task_count // 0),
       (.model.display_name // ""),
       (.terminal_width // 80),
-      # Find the most-constrained quota bucket (lowest remaining_fraction).
-      # Use "-" sentinel instead of "" for trailing fields because bash
-      # herestrings strip trailing empty lines.
-      (if .quota | type == "object" and length > 0
-       then [.quota | to_entries[] | select(.value.remaining_fraction != null)] | min_by(.value.remaining_fraction) | .value.remaining_fraction
-       else "-" end),
-      (if .quota | type == "object" and length > 0
-       then [.quota | to_entries[] | select(.value.remaining_fraction != null)] | min_by(.value.remaining_fraction) | .key
-       else "-" end),
-      (if .quota | type == "object" and length > 0
-       then [.quota | to_entries[] | select(.value.remaining_fraction != null)] | min_by(.value.remaining_fraction) | .value.reset_in_seconds // "-"
-       else "-" end)
-    ' 2>/dev/null || printf "idle\n\n\n\n\n0\n\nfalse\nfalse\n0\n0\n0\n\n80\n-\n-\n-"
+      # Extract 5h and weekly quota for the active model class
+      (
+        if .quota | type == "object" and length > 0 then
+          (.model.display_name // .model.id // "" | ascii_downcase) as $m |
+          (.quota | keys) as $keys |
+          ($keys | map(split("-")[0]) | unique) as $available_prefixes |
+          (if ($m | contains("gemini")) and ($keys | any(startswith("gemini-"))) then "gemini"
+           elif ($m | contains("claude")) and ($keys | any(startswith("claude-"))) then "claude"
+           elif ($m | contains("gpt")) and ($keys | any(startswith("gpt-"))) then "gpt"
+           else
+             (($available_prefixes | map(select(. != "" and ($m | contains(.)))) | first) //
+              (if ($keys | any(startswith("3p-"))) then "3p" else ($available_prefixes[0] // "-") end))
+           end) as $prefix |
+          .quota as $q |
+          ($q["\($prefix)-5h"] // $q["5h"] // $q["\($prefix)-5-hour"]) as $q5h |
+          ($q["\($prefix)-weekly"] // $q["weekly"] // $q["\($prefix)-7d"] // $q["7d"]) as $qw |
+          $prefix,
+          ($q5h.remaining_fraction // "-"),
+          ($q5h.reset_in_seconds // "-"),
+          ($qw.remaining_fraction // "-"),
+          ($qw.reset_in_seconds // "-")
+        else "-", "-", "-", "-", "-" end
+      )
+    ' 2>/dev/null || printf "idle\n\n\n\n\n0\n\nfalse\nfalse\n0\n0\n0\n\n80\n-\n-\n-\n-\n-"
   fi
 )"
 
@@ -85,80 +98,85 @@ STDIN_CONTENT=$(cat)
 PCT_FMT=$(LC_NUMERIC=C printf "%.1f" "$USED_PCT")
 PCT_INT=${USED_PCT%.*}; PCT_INT=${PCT_INT:-0}
 
+# ─── Quota Helpers ───────────────────────────────────────────────────────────
+fmt_reset_secs() {
+  local secs=${1%.*}
+  secs=${secs:-0}
+  if [ "$secs" -ge 86400 ]; then
+    echo "$((secs / 86400))d$(( (secs % 86400) / 3600 ))h"
+  elif [ "$secs" -ge 3600 ]; then
+    echo "$((secs / 3600))h$(( (secs % 3600) / 60 ))m"
+  elif [ "$secs" -ge 60 ]; then
+    echo "$((secs / 60))m"
+  elif [ "$secs" -gt 0 ]; then
+    echo "${secs}s"
+  fi
+}
+
+fmt_quota_bucket() {
+  local label="$1" rem="$2" reset_secs="$3"
+  if [ -z "$rem" ] || [ "$rem" = "null" ] || [ "$rem" = "-" ]; then
+    return
+  fi
+  local used_pct
+  used_pct=$(awk "BEGIN {print int((1 - ${rem}) * 100 + 0.5)}" 2>/dev/null || echo 0)
+  if [ "$used_pct" -lt 0 ]; then used_pct=0; fi
+  if [ "$used_pct" -gt 100 ]; then used_pct=100; fi
+
+  local q_color="\033[32m"
+  [ "$used_pct" -ge 50 ] && q_color="\033[33m"
+  [ "$used_pct" -ge 75 ] && q_color="\033[38;5;208m"
+  [ "$used_pct" -ge 90 ] && q_color="\033[31m"
+
+  local q_bar=""
+  local filled=$((used_pct * 5 / 100))
+  for ((i=0; i<filled; i++)); do q_bar="${q_bar}▰"; done
+  for ((i=filled; i<5; i++)); do q_bar="${q_bar}▱"; done
+
+  local reset_str=""
+  if [ -n "$reset_secs" ] && [ "$reset_secs" != "null" ] && [ "$reset_secs" != "-" ]; then
+    reset_str=$(fmt_reset_secs "$reset_secs")
+  fi
+
+  local res="${FG_GRAY}${label} ${q_color}${q_bar} ${NUM_COLOR}${used_pct}%${R}"
+  if [ -n "$reset_str" ]; then
+    res="${res} ${FG_GRAY}(${reset_str})${R}"
+  fi
+  echo -e "$res"
+}
+
 # ─── Quota Handling ──────────────────────────────────────────────────────────
-# Jetski provides per-model quota in the payload directly (no RPC needed).
-# Legacy Antigravity CLI used a background cache-refresh script; if the payload
-# has quota data we use it directly. Fall back to cache file only if the payload
-# has nothing (e.g. older Antigravity CLI environments).
-CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/antigravity"
-CACHE_FILE="${CACHE_DIR}/quota_cache.json"
+QUOTA_FMT=""
+Q5H_STR=$(fmt_quota_bucket "5h" "$Q5H_REM" "$Q5H_RESET_SECS")
+QW_STR=$(fmt_quota_bucket "7d" "$QW_REM" "$QW_RESET_SECS")
 
-QUOTA_REMAINING=""
-QUOTA_LABEL=""
-QUOTA_RESET_STR=""
+if [ -n "$Q5H_STR" ] && [ -n "$QW_STR" ]; then
+  QUOTA_FMT="${Q5H_STR}${DOT}${QW_STR}"
+elif [ -n "$Q5H_STR" ]; then
+  QUOTA_FMT="${Q5H_STR}"
+elif [ -n "$QW_STR" ]; then
+  QUOTA_FMT="${QW_STR}"
+else
+  # Legacy fallback: background quota-refresh.sh wrote a cache file
+  CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/antigravity"
+  CACHE_FILE="${CACHE_DIR}/quota_cache.json"
+  if [ -f "$CACHE_FILE" ]; then
+    LEGACY_REM=$(jq -r '.models | to_entries | map(.value.remainingFraction) | min // 1.0' "$CACHE_FILE" 2>/dev/null || echo "1.0")
+    QUOTA_FMT=$(fmt_quota_bucket "quota" "$LEGACY_REM" "")
 
-if [ -n "$PAYLOAD_QUOTA_REMAINING" ] && [ "$PAYLOAD_QUOTA_REMAINING" != "null" ] && [ "$PAYLOAD_QUOTA_REMAINING" != "-" ]; then
-  # Payload has quota (Jetski or newer Antigravity CLI)
-  QUOTA_REMAINING="$PAYLOAD_QUOTA_REMAINING"
-  [ "$PAYLOAD_QUOTA_LABEL" != "-" ] && QUOTA_LABEL="${PAYLOAD_QUOTA_LABEL:-}"
-
-  # Format reset countdown
-  if [ -n "$PAYLOAD_QUOTA_RESET_SECS" ] && [ "$PAYLOAD_QUOTA_RESET_SECS" != "null" ] && [ "$PAYLOAD_QUOTA_RESET_SECS" != "-" ]; then
-    RESET_SECS=${PAYLOAD_QUOTA_RESET_SECS%.*}  # truncate any decimal
-    RESET_SECS=${RESET_SECS:-0}
-    if [ "$RESET_SECS" -ge 3600 ]; then
-      QUOTA_RESET_STR="$((RESET_SECS / 3600))h$((RESET_SECS % 3600 / 60))m"
-    elif [ "$RESET_SECS" -ge 60 ]; then
-      QUOTA_RESET_STR="$((RESET_SECS / 60))m"
-    elif [ "$RESET_SECS" -gt 0 ]; then
-      QUOTA_RESET_STR="${RESET_SECS}s"
+    # Spawn background refresh if cache is stale
+    NOW=$(date +%s 2>/dev/null || echo 0)
+    LAST_MOD=$(stat -c %Y "$CACHE_FILE" 2>/dev/null || stat -f %m "$CACHE_FILE" 2>/dev/null || echo 0)
+    CACHE_AGE_SEC=99999
+    if [ "$LAST_MOD" -gt 0 ]; then
+      CACHE_AGE_SEC=$((NOW - LAST_MOD))
+    fi
+    REFRESH_SCRIPT="$(dirname "${BASH_SOURCE[0]}")/quota-refresh.sh"
+    if [ "$CACHE_AGE_SEC" -ge 30 ] && [ -x "$REFRESH_SCRIPT" ]; then
+      ( exec 0</dev/null; exec 1>/dev/null; exec 2>/dev/null; "$REFRESH_SCRIPT" ) &
+      disown $! 2>/dev/null || true
     fi
   fi
-elif [ -f "$CACHE_FILE" ]; then
-  # Legacy fallback: background quota-refresh.sh wrote a cache file
-  QUOTA_REMAINING=$(jq -r '
-    .models | to_entries | map(.value.remainingFraction) | min // 1.0
-  ' "$CACHE_FILE" 2>/dev/null || echo "1.0")
-
-  # Spawn background refresh if cache is stale
-  NOW=$(date +%s 2>/dev/null || echo 0)
-  LAST_MOD=$(stat -c %Y "$CACHE_FILE" 2>/dev/null || stat -f %m "$CACHE_FILE" 2>/dev/null || echo 0)
-  CACHE_AGE_SEC=99999
-  if [ "$LAST_MOD" -gt 0 ]; then
-    CACHE_AGE_SEC=$((NOW - LAST_MOD))
-  fi
-  REFRESH_SCRIPT="$(dirname "${BASH_SOURCE[0]}")/quota-refresh.sh"
-  if [ "$CACHE_AGE_SEC" -ge 30 ] && [ -x "$REFRESH_SCRIPT" ]; then
-    ( exec 0</dev/null; exec 1>/dev/null; exec 2>/dev/null; "$REFRESH_SCRIPT" ) &
-    disown $! 2>/dev/null || true
-  fi
-fi
-
-# Format Quota Output
-QUOTA_FMT=""
-if [ -n "$QUOTA_REMAINING" ] && [ "$QUOTA_REMAINING" != "null" ]; then
-  QUOTA_USED_PCT=$(awk "BEGIN {print int((1 - ${QUOTA_REMAINING}) * 100 + 0.5)}" 2>/dev/null || echo 0)
-  if [ "$QUOTA_USED_PCT" -lt 0 ]; then QUOTA_USED_PCT=0; fi
-  if [ "$QUOTA_USED_PCT" -gt 100 ]; then QUOTA_USED_PCT=100; fi
-
-  Q_BAR_COLOR="\033[32m"
-  [ "$QUOTA_USED_PCT" -ge 50 ] && Q_BAR_COLOR="\033[33m"
-  [ "$QUOTA_USED_PCT" -ge 75 ] && Q_BAR_COLOR="\033[38;5;208m"
-  [ "$QUOTA_USED_PCT" -ge 90 ] && Q_BAR_COLOR="\033[31m"
-
-  Q_BAR=""
-  Q_FILLED=$((QUOTA_USED_PCT / 10))
-  for ((i=0; i<Q_FILLED; i++)); do Q_BAR="${Q_BAR}▰"; done
-  for ((i=Q_FILLED; i<10; i++)); do Q_BAR="${Q_BAR}▱"; done
-
-  # Build label: "quota ▰▰▱▱▱ 19% claude-gpt (resets 15m)"
-  QUOTA_SUFFIX=""
-  [ -n "$QUOTA_LABEL" ] && QUOTA_SUFFIX=" ${FG_GRAY}${QUOTA_LABEL}"
-  if [ -n "$QUOTA_RESET_STR" ]; then
-    QUOTA_SUFFIX="${QUOTA_SUFFIX} ${FG_GRAY}(resets ${QUOTA_RESET_STR})${R}"
-  fi
-
-  QUOTA_FMT="${FG_GRAY}quota ${Q_BAR_COLOR}${Q_BAR} ${NUM_COLOR}${QUOTA_USED_PCT}%${R}${QUOTA_SUFFIX}"
 fi
 
 # ─── State Indicator (No background colors) ──────────────────────────────────
@@ -279,14 +297,6 @@ DOT="${FG_GRAY} · ${R}"
 
 # ─── Output ──────────────────────────────────────────────────────────────────
 LINE1="${S}${M}${V}${DOT}${CWD}"
-LINE2_PARTS=(" ${CTX}")
-if [ -n "$QUOTA_FMT" ]; then
-  LINE2_PARTS+=("${QUOTA_FMT}")
-fi
-LINE2_PARTS+=("${ART_FMT}" "${SUB_FMT}" "${BG_FMT}" "${SB}")
-
-LINE2=$(IFS="" && echo "${LINE2_PARTS[*]}" | sed "s/ /${DOT}/2g")
-# Join line2 elements with DOT
 LINE2=" ${CTX}"
 [ -n "$QUOTA_FMT" ] && LINE2="${LINE2}${DOT}${QUOTA_FMT}"
 LINE2="${LINE2}${DOT}${ART_FMT}${DOT}${SUB_FMT}${DOT}${BG_FMT}${DOT}${SB}"
@@ -297,7 +307,10 @@ if [ "$COLS" -ge 80 ]; then
   echo -e "${FG_GRAY}╰─${R}${LINE2}"
 else
   # Narrow: compact two-line layout (ensures branch/worktree is always displayed)
+  NARROW_LINE2="${CTX}"
+  [ -n "$QUOTA_FMT" ] && NARROW_LINE2="${NARROW_LINE2}${DOT}${QUOTA_FMT}"
+  NARROW_LINE2="${NARROW_LINE2}${DOT}${ART_FMT}${DOT}${BG_FMT}"
   echo -e "${S}${M}${V}"
-  echo -e "${CTX}${DOT}${ART_FMT}${DOT}${BG_FMT}"
+  echo -e "${NARROW_LINE2}"
 fi
 
