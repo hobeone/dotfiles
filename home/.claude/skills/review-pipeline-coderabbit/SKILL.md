@@ -47,15 +47,20 @@ From here on, every reviewer finding is by construction a penetration of this ga
 
 ## Phase 2a: PR description delta (pre-merge)
 
-Skip when the work is not tied to an umbrella tracking issue. Trigger only when the merged-bound PR or its `Closes #N` references a sub-issue with a `Parent: #<umbrella>` line.
+Skip when the work is not tied to an umbrella tracking issue. Trigger when the merged-bound PR or its `Closes #N` references a sub-issue tied to an umbrella by **either** signal below — the text convention and native GitHub sub-issue linkage are both valid, independent ways a leaf issue can be umbrella-tracked, and neither implies the other (an issue filed via native sub-issue linkage, e.g. the `sub_issues` REST API, carries no `Parent: #N` text and would silently miss the text-only check).
 
-1. **Find the parent reference.** Read the sub-issue body:
+1. **Find the parent reference**, checking both signals:
 
    ```bash
+   # Text convention (file-issue's umbrella-sub-issue template)
    gh issue view <leaf#> --json body -q .body | rg '^Parent:' | head -1
+
+   # Native GitHub sub-issue linkage — present on the plain issue GET response
+   # whenever the leaf was linked via the sub_issues API, with no body-text marker
+   gh api repos/<owner>/<repo>/issues/<leaf#> --jq '.parent_issue_url // empty'
    ```
 
-   No match → skip Phase 2a and 2b entirely.
+   Either signal found → the umbrella number is derivable (`Parent: #N` line, or the numeric suffix of `parent_issue_url`). No match on either → skip Phase 2a and 2b entirely.
 
 2. **Derive the plan-vs-actual delta.** Compare the sub-issue's Scope / Out of scope / Acceptance against the merged-bound PR's actual diff and behavior. Cover:
 
@@ -105,7 +110,7 @@ Runs only after the user has merged.
 
   1. **Oscillation check (iteration N ≥ 2).** Compare current actionable topics against the previous iteration's preserved topics. If any conceptual topic recurs, halt and follow the escalation order below — do NOT fix or done-check.
   2. After each fix, run `/done-check` in delta mode (not just `/pr-review`'s own quality-gate check) before the commit.
-  3. Route the commit through `/stage-commit-push`, not `/pr-review`'s own generic "commit with a message referencing feedback addressed" step — same discipline, this pipeline's specific mechanism.
+  3. Route the commit through `/stage-commit-push`, not `/pr-review`'s own generic "commit with a message referencing feedback addressed" step — same discipline, this pipeline's specific mechanism. This is always a NEW commit, never `git commit --amend` (see Rules) — confirm this explicitly before invoking `/stage-commit-push`, do not rely on remembering a general policy.
   4. Preserve actionable topic classifications for the next iteration's oscillation check, and re-poll CodeRabbit (Phase 1 step 6, still best-effort/non-blocking) before the next `/pr-review remote` pass.
 
 - **Never skip done-check, including in fix loops.** Every fix commit is itself a diff that can introduce new drift — especially `completion-hygiene` and `paired-artifact-drift`.
@@ -122,6 +127,8 @@ Runs only after the user has merged.
 - **Never inject previous review comments into the next review prompt.**
 
 - **Every commit goes through `/stage-commit-push`.** Do not manually run git add/commit/push during the pipeline.
+
+- **Every fix-loop commit is a NEW commit — `git commit --amend` is off-limits in this pipeline, full stop, even pre-first-push.** This applies to Phase 1 step 4's per-finding fixes and to any other multi-cycle review-fix flow this pipeline touches. Before running `/stage-commit-push` for a fix, explicitly check: "is this a new commit, or am I about to amend?" — if the instinct is to amend (to fold a fix into the commit that introduced the reviewed code, or to keep history "clean"), that instinct is wrong for this pipeline; run `/stage-commit-push` as a new commit instead. Squashing for a clean merged log is `gh pr merge --squash` at merge time, not a mid-review amend. A verbal self-correction ("I'll switch to new commits from here") is NOT sufficient by itself and must not be treated as closing this out — it has failed to hold under pressure mid-loop before (the very next fix in that session was amended again despite the stated correction). Only an actual new commit per fix closes this.
 
 - **Pre-commit branch gate.** Before each `/stage-commit-push`, verify the current branch is not the repo's default branch:
 

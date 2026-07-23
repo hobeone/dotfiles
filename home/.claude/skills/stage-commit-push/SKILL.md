@@ -7,6 +7,8 @@ description: Stage changed files, generate a conventional commit message, commit
 
 One-shot skill for the review-fix loop: stage modified files, generate a commit message, commit, and push.
 
+**Always a new commit, never `--amend`.** In a multi-cycle review-fix loop (e.g. `review-pipeline-coderabbit` Phase 1), every invocation of this skill creates a NEW commit — including before the branch has ever been pushed, and including when the fix is small or closely related to the commit that introduced the reviewed code. Do not fold a fix into a prior commit via `git commit --amend` to keep history tidy; that's what `gh pr merge --squash` is for, at merge time. Before step 3, explicitly confirm you are running `git commit` (a new commit), not `git commit --amend` — check this every time, don't rely on remembering it from earlier in the session.
+
 ## Procedure
 
 ### 1. Stage
@@ -48,6 +50,8 @@ Size doesn't determine type. API signature changes that correct a mistake are `f
 - Internal implementation context
 
 ### 3. Commit
+
+Confirm: this is a plain `git commit`, not `git commit --amend`. If there is any temptation to amend, stop and use a new commit instead — see the note above.
 
 ```bash
 git commit -m "$(cat <<'EOF'

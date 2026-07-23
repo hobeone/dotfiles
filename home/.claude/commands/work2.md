@@ -22,6 +22,35 @@ wait for **your** review (bolted on — not part of the pipeline itself) → sum
   realizations (mutex-scope, unchecked type assertions, `goimports`/`go vet`/`golangci-lint`,
   exported-symbol-as-public-API, interface satisfaction on signature changes).
 
+## Review & Verification Model
+
+The cost-aware default in `~/.claude/CLAUDE.md` picks the cheapest capable model for
+*implementation*. Review and verification are a separate decision: a cheap implementation
+paired with a strong review pass is usually the better spend than running everything on one
+tier. **When the change is complex enough to warrant it, run this pipeline's review and
+verification steps on Opus even if implementation ran on a cheaper model.**
+
+The review/verification steps this applies to:
+
+- Phase A — the Step 3.5 plan-review subagent, and the `/done-check` pass.
+- Phase B — Claude's own `/code-review` (Phase 0.5 of the review pipeline).
+- Phase C — the `receiving-code-review` verification of each fix.
+
+Escalate review + verification to Opus when **any** of these is true (state which trigger
+fired, per the global policy's "be verbose about the choice"):
+
+- Touches persistence / on-disk format, or a DB schema / `goose` migration.
+- Changes concurrency: mutex scope, goroutine lifecycle, channel protocols, lock ordering.
+- Touches crash-recovery or durability invariants.
+- Changes a public interface between packages, or the diff spans 3+ packages.
+- Is security-sensitive (auth, trust/CIDR policy, NNTP or NZB input parsing).
+- Is large or high-churn by the `get_risk` blast-radius signal.
+
+Otherwise keep review at the implementation tier. When in doubt, escalate the *review* — it
+is read-only and the downside of a missed defect here is higher than the token cost. This is
+a knob on the review subagents, not on the human-in-the-loop gates (plan approval, PR review,
+merge) — those are unchanged.
+
 ## Prerequisites
 
 Checked once per session, before Step 1:
@@ -120,7 +149,8 @@ but via hypothesis-driven investigation (`quaere-evidence`) rather than parallel
 - Phase 0 (worktree baseline): creates/uses an isolated git worktree automatically instead of switching branches in place, announces the branch and worktree path, doesn't poll.
 - Phase 1 (research): posts a plan to the issue with an `Inconclusive / Deferred items` section. Its Step 3.5
   plan-review gate offers a fresh-context subagent review pass before approval — accept or skip it as
-  offered. **You approve the plan before Phase 2 starts** — this is the plan-approval checkpoint, equivalent
+  offered. Run that subagent on Opus when a **Review & Verification Model** trigger fires (see above).
+  **You approve the plan before Phase 2 starts** — this is the plan-approval checkpoint, equivalent
   to `/work`'s architecture sign-off, and the primary plan-quality gate this workflow uses.
 - Phase 2 (implement): executes unit-by-unit, halts (does not ad-hoc patch) on any discovery not covered by
   the plan's discovery contract, ends with `/done-check`.
@@ -134,7 +164,9 @@ commit message) complete.
 
 ## Phase B — Review Pipeline
 
-Run `/review-pipeline-coderabbit`, with this variance from the skill's default text:
+Run `/review-pipeline-coderabbit`, with this variance from the skill's default text.
+Escalate the `/code-review` (Phase 0.5) pass to Opus when a **Review & Verification Model**
+trigger fires (see above).
 
 - **CodeRabbit is best-effort, not a gate** (per the skill's own Phase 1) — if it never responds (rate
   limit, app not installed, whatever), that's expected, not a stop condition. Only stop and tell the user if
