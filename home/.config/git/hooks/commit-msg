@@ -1,0 +1,29 @@
+#!/bin/bash
+set -euo pipefail
+
+msg_file="${1:-}"
+if [ -z "$msg_file" ] || [ ! -f "$msg_file" ]; then
+    exit 0
+fi
+
+python3 -c "
+import sys, re
+
+path = sys.argv[1]
+with open(path, 'rb') as f:
+    content = f.read()
+
+lines = []
+for line in content.split(b'\n'):
+    indent_len = len(line) - len(line.lstrip(b' \t'))
+    indent = line[:indent_len]
+    c = line[indent_len:]
+    c = re.sub(br'\b[A-Z0-9_]+=\S+', b'', c)
+    c = re.sub(br'[ \t]{2,}', b' ', c)
+    lines.append((indent + c).rstrip(b' \t'))
+
+new_content = b'\n'.join(lines)
+if new_content != content:
+    with open(path, 'wb') as f:
+        f.write(new_content)
+" "$msg_file"

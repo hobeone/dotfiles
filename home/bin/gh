@@ -1,0 +1,124 @@
+#!/bin/bash
+set -euo pipefail
+
+REAL_GH=$(type -a -p gh 2>/dev/null | grep -v "$HOME/bin/gh" | head -n 1 || true)
+if [ -z "$REAL_GH" ] || [ ! -x "$REAL_GH" ]; then
+    if [ -x "/usr/bin/gh" ]; then
+        REAL_GH="/usr/bin/gh"
+    elif [ -x "/bin/gh" ]; then
+        REAL_GH="/bin/gh"
+    fi
+fi
+
+
+tmp_files=()
+cleanup() {
+    if [ "${#tmp_files[@]}" -gt 0 ]; then
+        rm -f "${tmp_files[@]}"
+    fi
+}
+trap cleanup EXIT
+
+filter_text() {
+    python3 -c '
+import sys, re
+text = sys.stdin.read()
+lines = []
+for line in text.splitlines(keepends=True):
+    lines.append(re.sub(r"\b[A-Z0-9_]+=\S+", "", line))
+sys.stdout.write("".join(lines))
+'
+}
+
+filter_title() {
+    python3 -c '
+import sys, re
+text = sys.stdin.read()
+text = re.sub(r"\b[A-Z0-9_]+=\S+", "", text)
+text = " ".join(text.split())
+sys.stdout.write(text)
+'
+}
+
+args=()
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -t|--title)
+            if [ "$#" -ge 2 ]; then
+                title="$2"
+                clean_title=$(printf '%s\n' "$title" | filter_title)
+                args+=("$1" "$clean_title")
+                shift 2
+            else
+                args+=("$1")
+                shift
+            fi
+            ;;
+        -t=*|--title=*)
+            flag="${1%%=*}"
+            title="${1#*=}"
+            clean_title=$(printf '%s\n' "$title" | filter_title)
+            args+=("${flag}=${clean_title}")
+            shift
+            ;;
+        -b|--body)
+            if [ "$#" -ge 2 ]; then
+                body="$2"
+                clean_body=$(printf '%s\n' "$body" | filter_text)
+                args+=("$1" "$clean_body")
+                shift 2
+            else
+                args+=("$1")
+                shift
+            fi
+            ;;
+        -b=*|--body=*)
+            flag="${1%%=*}"
+            body="${1#*=}"
+            clean_body=$(printf '%s\n' "$body" | filter_text)
+            args+=("${flag}=${clean_body}")
+            shift
+            ;;
+        -F|--body-file)
+            if [ "$#" -ge 2 ]; then
+                body_file="$2"
+                if [ -f "$body_file" ]; then
+                    tmp_body=$(mktemp)
+                    tmp_files+=("$tmp_body")
+                    filter_text < "$body_file" > "$tmp_body"
+                    args+=("$1" "$tmp_body")
+                else
+                    args+=("$1" "$body_file")
+                fi
+                shift 2
+            else
+                args+=("$1")
+                shift
+            fi
+            ;;
+        -F=*|--body-file=*)
+            flag="${1%%=*}"
+            body_file="${1#*=}"
+            if [ -f "$body_file" ]; then
+                tmp_body=$(mktemp)
+                tmp_files+=("$tmp_body")
+                filter_text < "$body_file" > "$tmp_body"
+                args+=("${flag}=${tmp_body}")
+            else
+                args+=("$1")
+            fi
+            shift
+            ;;
+        *)
+            args+=("$1")
+            shift
+            ;;
+    esac
+done
+
+if [ -n "${REAL_GH:-}" ] && [ -x "$REAL_GH" ]; then
+    "$REAL_GH" "${args[@]}"
+else
+    echo "Error: Real gh CLI binary not found." >&2
+    exit 1
+fi
