@@ -1,7 +1,13 @@
 #!/bin/bash
 set -euo pipefail
 
-REAL_GH=$(type -a -p gh 2>/dev/null | grep -v "$HOME/bin/gh" | head -n 1 || true)
+REAL_GH=""
+if [ -x "$HOME/bin/gh.real" ]; then
+    REAL_GH="$HOME/bin/gh.real"
+else
+    REAL_GH=$(type -a -p gh 2>/dev/null | grep -v "$HOME/bin/gh" | head -n 1 || true)
+fi
+
 if [ -z "$REAL_GH" ] || [ ! -x "$REAL_GH" ]; then
     if [ -x "/usr/bin/gh" ]; then
         REAL_GH="/usr/bin/gh"
