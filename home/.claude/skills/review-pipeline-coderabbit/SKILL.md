@@ -25,7 +25,7 @@ Done-check runs **before** any commit.
 
 ## Phase 0.5: Claude code-review gate
 
-Runs after the done-check loop and **before anything is committed**.
+Runs after the done-check loop and **before anything is committed**. If a small/trivial fix was already committed before this gate was reached (e.g. a single-file, few-line change), do not uncommit to comply — run this gate against `git show <sha>` / the last commit's diff instead, and fold any resulting fix into a new commit rather than amending.
 
 1. `/code-review` cannot be invoked programmatically from within a pipeline skill (`disable-model-invocation` — the Skill tool always rejects it). Use the `pr-review-toolkit:code-reviewer` agent instead, at an effort matching `medium` (raise to a more thorough pass for large or risky diffs; keep the chosen effort fixed across this PR's iterations). Do not attempt `Skill: code-review` first — it will always fail and the failure carries no new information.
 2. Triage the output — classify each finding under the `finding-triage` SSOT dispositions.
