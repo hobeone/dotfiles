@@ -21,3 +21,4 @@ home/.npmrc
 .worktrees/
 .parallel-context.md
 home/.gemini/antigravity-cli/settings.json
+.repowise
