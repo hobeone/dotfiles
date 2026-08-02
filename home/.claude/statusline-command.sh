@@ -44,8 +44,23 @@ fmt_time_hm() {
   if date -r 0 +%s >/dev/null 2>&1; then date -r "$epoch" +"%H:%M"; else date -d "@$epoch" +"%H:%M"; fi
 }
 
+# Normalize a reset timestamp to epoch seconds. Accepts epoch seconds, epoch
+# milliseconds (>= 1e12, as some payload versions emit), or an ISO-8601 string.
+normalize_epoch() {
+  local ts="$1"
+  if [[ "$ts" =~ ^[0-9]+$ ]]; then
+    # 1e12 seconds is year 33658, so anything that large must be milliseconds.
+    if (( ${#ts} >= 13 )); then printf '%d' $(( ts / 1000 )); else printf '%d' "$ts"; fi
+    return
+  fi
+  [ -n "$ts" ] && to_epoch "$ts"
+}
+
+# Render time remaining until a reset as a d/h/m countdown. Always splits into
+# larger units - never emits a bare minute count like "153m".
 fmt_reset_countdown() {
-  reset_epoch="$1"
+  local reset_epoch now remaining
+  reset_epoch=$(normalize_epoch "$1")
   [[ "$reset_epoch" =~ ^[0-9]+$ ]] || return
   now=$(date +%s)
   remaining=$(( reset_epoch - now ))
@@ -54,9 +69,37 @@ fmt_reset_countdown() {
     printf '%dd %dh' $(( remaining / 86400 )) $(( (remaining % 86400) / 3600 ))
   elif (( remaining >= 3600 )); then
     printf '%dh %dm' $(( remaining / 3600 )) $(( (remaining % 3600) / 60 ))
-  else
+  elif (( remaining >= 60 )); then
     printf '%dm' $(( remaining / 60 ))
+  else
+    printf '<1m'
   fi
+}
+
+# Format a quota percentage for display. Bash has no float math, so awk does the
+# work: round to one decimal, then drop a trailing ".0" so whole numbers stay
+# clean. 7.000000000000001 -> "7", 15.64 -> "15.6", 0.42 -> "0.4".
+fmt_pct() {
+  awk -v p="$1" 'BEGIN {
+    if (p == "" || p + 0 != p) { print "0"; exit }
+    v = p + 0
+    if (v < 0) v = 0
+    if (v > 100) v = 100
+    s = sprintf("%.1f", v)
+    sub(/\.0$/, "", s)
+    print s
+  }'
+}
+
+# Round a (possibly fractional) percentage to a clamped integer, for the
+# progress bar and the color thresholds.
+pct_to_int() {
+  awk -v p="$1" 'BEGIN {
+    v = p + 0
+    if (v < 0) v = 0
+    if (v > 100) v = 100
+    printf "%d", int(v + 0.5)
+  }'
 }
 
 progress_bar() {
@@ -376,17 +419,19 @@ fi
 # Line 4: Rate limit (quota) usage
 line4=""
 if [ -n "$five_hour_pct" ]; then
-  five_hour_int=${five_hour_pct%.*}; five_hour_int=${five_hour_int:-0}
+  five_hour_int=$(pct_to_int "$five_hour_pct")
+  five_hour_disp=$(fmt_pct "$five_hour_pct")
   five_hour_bar=$(progress_bar "$five_hour_int" 10)
   reset_str=$(fmt_reset_countdown "$five_hour_reset")
-  line4="⏱️  $(quota_color "$five_hour_int")5h: ${five_hour_int}% [${five_hour_bar}]$(rst)"
+  line4="⏱️  $(quota_color "$five_hour_int")5h: ${five_hour_disp}% [${five_hour_bar}]$(rst)"
   [ -n "$reset_str" ] && line4="$line4 $(style_color)(resets ${reset_str})$(rst)"
 fi
 if [ -n "$seven_day_pct" ]; then
-  seven_day_int=${seven_day_pct%.*}; seven_day_int=${seven_day_int:-0}
+  seven_day_int=$(pct_to_int "$seven_day_pct")
+  seven_day_disp=$(fmt_pct "$seven_day_pct")
   seven_day_bar=$(progress_bar "$seven_day_int" 10)
   reset_str=$(fmt_reset_countdown "$seven_day_reset")
-  seg="📅 $(quota_color "$seven_day_int")7d: ${seven_day_int}% [${seven_day_bar}]$(rst)"
+  seg="📅 $(quota_color "$seven_day_int")7d: ${seven_day_disp}% [${seven_day_bar}]$(rst)"
   [ -n "$reset_str" ] && seg="$seg $(style_color)(resets ${reset_str})$(rst)"
   if [ -n "$line4" ]; then line4="$line4  $seg"; else line4="$seg"; fi
 fi
