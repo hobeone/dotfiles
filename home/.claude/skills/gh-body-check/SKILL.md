@@ -62,6 +62,19 @@ Out of scope: formatting, grammar, math notation, line width,
 sub-clause line breaks. Focus purely on "can an external reader
 resolve every referent here?"
 
+Do NOT flag file paths, function/type names, error/constant
+identifiers, or other references that are plausibly part of this
+repo's own source tree or the artifact's own diff — those are normal,
+resolvable PR/issue content even though you cannot browse the repo to
+confirm them. Only flag referents that are inherently session-private:
+local filesystem paths outside a repo checkout, chat-tone phrases,
+skill/command/workflow names (leading-slash commands, internal tool
+names), phase/step numbering from a working session, or unresolved
+placeholders. When in doubt whether an identifier is repo-internal
+versus session-private, do not flag it — false negatives here are
+cheap (a human still reads the final body); false positives cost a
+manual triage pass every time.
+
 Do NOT browse the repo or run tools. Judge from the body text alone.
 
 --- body ---

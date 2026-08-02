@@ -80,6 +80,7 @@ ______________________________________________________________________
 - New test function that duplicates an existing test function's shape (build input, call function, assert one condition) three or more times in the same file — a `duplication-extraction` candidate specifically realized as "should have been a table-driven test with `t.Run` subtests".
 - A new branch (new `if`/`switch` case, new error path) added to a function with no corresponding new test case exercising it.
 - A bug-fix diff whose regression test was not proven to fail on the pre-fix code (this project's own Red-Green Discipline convention, if the project states one).
+- **Error-classification predicates tested against synthetic look-alikes instead of real stdlib values.** A function that branches on `errors.As`/type assertion into a stdlib or third-party error type, or on a narrow interface check (`Timeout() bool`, `Temporary() bool`, `Unwrap() error`), where the test fixture is a hand-rolled struct satisfying only the interface under test rather than a real value of the concrete type (e.g. a bare `struct{}` with a `Timeout() bool` method standing in for `*net.OpError`, which itself also implements `Timeout()`). The synthetic fixture can pass while masking a branch-ordering bug that only manifests against the real type's broader interface surface — e.g. checking `errors.AsType[*net.OpError]` before the `Timeout()` interface makes the timeout branch dead code for every real network timeout, since `*net.OpError` itself satisfies `Timeout() bool`, but a synthetic non-`*net.OpError` fixture never exercises that ordering interaction.
 
 ### Mechanical detection
 
@@ -90,6 +91,8 @@ rg -n '^func Test\w+\(t \*testing\.T\)' -g '*_test.go'   # count near-duplicate 
 ### False-positive review
 
 Individually-named test functions are fine below the rule-of-three threshold, or when each genuinely exercises meaningfully different setup/assertion logic (not just different input literals against the identical call-and-assert shape).
+
+For the synthetic-fixture trigger: a hand-rolled fixture is fine when the function under test only checks the single narrow interface and never checks a concrete type that also happens to satisfy it — the risk is specifically ordering between multiple checks (a concrete-type check before a narrower interface check it also satisfies), not narrow-interface testing per se. When a classifier checks both a concrete type and a narrower interface it implements, at least one test case must use the real concrete type wrapping a genuine instance of what the interface represents (e.g. `&net.OpError{Err: os.ErrDeadlineExceeded}`, not a bespoke stub), not just a value satisfying the interface in isolation.
 
 ______________________________________________________________________
 
