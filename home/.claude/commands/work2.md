@@ -160,7 +160,10 @@ codebases with formal invariants. Expect it may halt on benign discoveries more 
 guided-development did. Note any such false-halt in the reflect step.
 
 Do not proceed to Phase B until `research-and-implement` reports Step 5 (final output: plan-vs-actual diff +
-commit message) complete.
+an uncommitted commit-message draft) complete. Phase A does **not** commit — `implement`'s own Step 5 says
+"do not commit unless the user explicitly authorized." The first commit happens in Phase B, Phase 1 step 1
+(`/stage-commit-push`), *after* the Phase 0.5 code-review gate — committing earlier skips that gate's
+"before anything is committed" contract.
 
 ## Phase B — Review Pipeline
 
