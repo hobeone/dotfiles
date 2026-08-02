@@ -1,12 +1,14 @@
 {
   "cleanupPeriodDays": 365,
   "env": {
-    "CLAUDE_CODE_DISABLE_TERMINAL_TITLE": "1"
+    "CLAUDE_CODE_DISABLE_TERMINAL_TITLE": "1",
+    "ENABLE_TOOL_SEARCH": "true"
   },
   "permissions": {
     "allow": [],
     "defaultMode": "bypassPermissions"
   },
+  "model": "opus",
   "hooks": {
     "UserPromptSubmit": [
       {
@@ -53,10 +55,10 @@
     "python-development@claude-code-workflows": false,
     "frontend-design@claude-plugins-official": true,
     "clangd-lsp@claude-plugins-official": true,
-    "development-skills@development-skills": true,
     "code-review@claude-plugins-official": true,
     "github@claude-plugins-official": true,
-    "antigravity@antigravity-for-claude-code": true
+    "antigravity@antigravity-for-claude-code": true,
+    "repowise@repowise": true
   },
   "extraKnownMarketplaces": {
     "claude-code-workflows": {
@@ -76,11 +78,31 @@
         "source": "github",
         "repo": "yuting0624/antigravity-for-claude-code"
       }
+    },
+    "repowise": {
+      "source": {
+        "source": "github",
+        "repo": "repowise-dev/repowise"
+      }
     }
   },
   "effortLevel": "medium",
+  "askUserQuestionTimeout": "never",
   "tui": "fullscreen",
   "skipDangerousModePermissionPrompt": true,
   "verbose": false,
-  "autoCompactEnabled": true
+  "autoCompactEnabled": true,
+  "fileCheckpointingEnabled": true,
+  "mcpServers": {
+    "repowise": {
+      "command": "/home/hobe/.local/share/uv/tools/repowise/bin/repowise",
+      "args": [
+        "mcp",
+        "/home/hobe/software/gonzbd",
+        "--transport",
+        "stdio"
+      ],
+      "description": "repowise: codebase intelligence — docs, graph, git signals, dead code, decisions"
+    }
+  }
 }
