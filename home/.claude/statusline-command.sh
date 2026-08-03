@@ -436,6 +436,29 @@ if [ -n "$seven_day_pct" ]; then
   if [ -n "$line4" ]; then line4="$line4  $seg"; else line4="$seg"; fi
 fi
 
+# ---- optional debug capture ----
+# Off unless ~/.claude/statusline-debug exists. Records the raw payload, the
+# extracted quota fields, and a byte dump of the rendered quota line, so a
+# display discrepancy can be traced to either the input, the formatting, or
+# the terminal rendering. Delete the marker file to disable.
+if [ -f "$HOME/.claude/statusline-debug" ]; then
+  debug_log="$HOME/.claude/statusline-debug.log"
+  # The statusline redraws on a timer, so an enabled-and-forgotten marker would
+  # grow this without bound. Start over past 1MB.
+  if [ -f "$debug_log" ] && [ "$(wc -c <"$debug_log" 2>/dev/null || echo 0)" -gt 1048576 ]; then
+    : >"$debug_log"
+  fi
+  {
+    printf '=== %s pid=%s term=%s ===\n' "$(date '+%F %T')" "$$" "${TERM:-unset}"
+    printf 'PAYLOAD: %s\n' "$input"
+    printf 'FIELDS: 5h_pct=[%s] 5h_reset=[%s] 7d_pct=[%s] 7d_reset=[%s]\n' \
+      "$five_hour_pct" "$five_hour_reset" "$seven_day_pct" "$seven_day_reset"
+    printf 'RENDERED: %s\n' "$line4"
+    printf 'BYTES:\n'
+    printf '%s' "$line4" | od -c
+  } >>"$debug_log" 2>/dev/null
+fi
+
 # Print lines
 if [ -n "$line2" ]; then
   printf '\n%s' "$line2"
