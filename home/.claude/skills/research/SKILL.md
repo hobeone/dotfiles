@@ -27,15 +27,31 @@ Check whether `$ARGUMENTS` is a number (existing issue) or free text (new task).
    - **Test baseline**: build and run existing tests. Record pre-existing failures so later regressions can be distinguished.
    - **Memory recall baseline**: read `MEMORY.md` (index only); for each entry whose one-line description plausibly intersects the work, open and read it. A hypothesis that contradicts an active memory rule is rejected at formation.
 
-4. Form hypotheses across three aspects:
+4. **Structural feasibility of any proposed new symbol (REQUIRED before hypothesis formation).**
+
+   For every new field, accessor, method, or variant the task proposes to add to an
+   existing type, read that type's actual definition and confirm it can hold the state
+   the symbol needs — either the state already lives there, or it can be added there
+   directly. State that lives on a *sibling* type does not count: an accessor cannot
+   filter on data its receiver has no access to.
+
+   This is a two-minute read and it runs unconditionally, before any hypothesis whose
+   verification cost scales with call-site or file count. An unimplementable API shape
+   invalidates every classification decision downstream of it, so finding out after the
+   call sites are classified is the expensive ordering.
+
+   If the receiver cannot hold the state, stop and re-form the task around the type that
+   can. Do not proceed to hypothesis formation on the original shape.
+
+5. Form hypotheses across three aspects:
 
    - **What needs to change**: required code modifications
    - **What invariants must hold**: contracts / preconditions / correctness properties
    - **What could break**: existing code paths affected by the change, especially where new inputs flow through existing APIs
 
-5. Each hypothesis is phrased as a **falsifiable Review Claim or Hypothesis** in the `quaere-evidence` sense — concrete enough that a subagent can attempt to disprove it.
+6. Each hypothesis is phrased as a **falsifiable Review Claim or Hypothesis** in the `quaere-evidence` sense — concrete enough that a subagent can attempt to disprove it.
 
-6. **Tag each hypothesis with a `kind`:**
+7. **Tag each hypothesis with a `kind`:**
 
    - `empirical` — resolved by reading code, running tests, observing runtime, inspecting git history, querying spec / external API / caller behavior. Subagent probes in Step 2 handle these.
    - `derivational` — resolved by deductive reasoning from defining equations / type laws / protocol axioms / mathematical or physical first principles. The truth value of a derivational hypothesis does not depend on the state of the codebase; reading more code will not resolve it. Step 2 handles these in the main context, not via subagents.
@@ -45,9 +61,9 @@ Check whether `$ARGUMENTS` is a number (existing issue) or free text (new task).
    - **Numerical verification stays derivational.** "Construct a candidate → check against an oracle (spec, reference value, closed-form ground truth)" is derivational; resolve in Step 2.B with a scratch script outside the project tree.
    - **Misclassification signal.** If a probe's action is "write code in the project, then check whether it works", it is a derivational gap dressed as an empirical probe — re-classify before the plan exits research.
 
-7. **Specific-example claim sweep (REQUIRED when applicable).** If the plan attaches deductive properties to a concrete example ("this example is symmetric / non-degenerate / exercises the multi-X path"), each property MUST be a separate `derivational` hypothesis — "obvious" is not an exemption. Form: "Example E has property P, derivable from E's defining equations / specification."
+8. **Specific-example claim sweep (REQUIRED when applicable).** If the plan attaches deductive properties to a concrete example ("this example is symmetric / non-degenerate / exercises the multi-X path"), each property MUST be a separate `derivational` hypothesis — "obvious" is not an exemption. Form: "Example E has property P, derivable from E's defining equations / specification."
 
-8. **Present hypotheses to the user for approval before spawning subagents.** Show the `kind` tag for each. The user can narrow scope, split into sub-issues, or correct mis-classifications.
+9. **Present hypotheses to the user for approval before spawning subagents.** Show the `kind` tag for each. The user can narrow scope, split into sub-issues, or correct mis-classifications.
 
 ## Step 2 — Verify hypotheses
 
@@ -64,8 +80,9 @@ Subagent contract:
 3. **For non-trivial existing code, read at `quaere-semantic` depth** (its `What / Why / Invariants / Failure / Connections` schema with the UNKNOWN-probe discipline). Shallow grep-only verification is permitted only for trivially mechanical hypotheses (existence checks, file locations).
 4. **Runtime probe (preferred for behavioral claims).** Behavioral claims (output ordering, return shape, error-path return, ABI / FFI layout, signal handling, performance) need a minimal reproducer — docs reading is corroboration, not verification. Boundary cases (minimal/maximal sizes, type variations, single-element containers) belong here.
 5. **Caller-contract verification for change-impact hypotheses.** Classify the change as compile-breaking (new required trait method, type change) or silently semantic (same signature, different behavior). Semantic changes need caller-by-caller verification. Flag any public API with unchecked internal assumptions (pointer arithmetic trusting an offset, a serializer trusting field order, an index trusting contiguity).
-6. Return a **Decision** in the four-state shape from `quaere-evidence` §6 (`confirmed` / `rejected` / `inconclusive` / `deferred`). For `inconclusive`, attach the remaining `probe:`. For `deferred`, attach reason and resolution-point.
-7. Report back with concise file paths, line numbers, function signatures, and probe results.
+6. **Verify the provenance of every cited symbol.** Before naming a function, type, field, or constant as fact, confirm it exists in the worktree's *currently checked-out* state — by read or grep, not by recall of a sibling branch, an unmerged PR, an earlier session, or a diff you read once. If a symbol comes from git history or another branch, say so explicitly rather than presenting it as current. This is one grep and it prevents a plan built on code that is not there.
+7. Return a **Decision** in the four-state shape from `quaere-evidence` §6 (`confirmed` / `rejected` / `inconclusive` / `deferred`). For `inconclusive`, attach the remaining `probe:`. For `deferred`, attach reason and resolution-point.
+8. Report back with concise file paths, line numbers, function signatures, and probe results.
 
 **Subagent granularity**: hypotheses requiring only existence checks or single-file grep can be resolved directly from the main context. Reserve subagents for hypotheses that touch multiple files or need deep reading. Spawn all empirical-hypothesis subagents in a single message; each owns its own `quaere-evidence` ledger.
 
