@@ -26,7 +26,6 @@ Default: act without asking for file operations, git, tests, linters, PRs, issue
 Non-obvious autonomy:
 - Re-run flaky CI once (`gh run rerun <id> --failed`); investigate if it fails twice
 - After completing work: summarize and run `pr-review-toolkit:review-pr` on the local diff before pushing
-- After creating/pushing to PR: run `/watch-ci <PR#>` immediately
 - When making issues: check for relevant labels, suggest new ones
 
 ### Model & Agent Selection

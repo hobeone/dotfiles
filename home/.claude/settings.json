@@ -6,7 +6,7 @@
   },
   "permissions": {
     "allow": [],
-    "defaultMode": "bypassPermissions"
+    "defaultMode": "auto"
   },
   "model": "opus",
   "hooks": {
@@ -90,7 +90,7 @@
   "askUserQuestionTimeout": "never",
   "tui": "fullscreen",
   "skipDangerousModePermissionPrompt": true,
-  "verbose": false,
+  "verbose": true,
   "autoCompactEnabled": true,
   "fileCheckpointingEnabled": true,
   "mcpServers": {
@@ -104,5 +104,33 @@
       ],
       "description": "repowise: codebase intelligence — docs, graph, git signals, dead code, decisions"
     }
+  },
+  "autoMode": {
+    "environment": [
+      "### Org-wide",
+      "**Organization**: None configured",
+      "**Cloud provider(s)**: None configured",
+      "**Repository visibility**: PUBLIC — hobeone/gonzbd (github.com)",
+      "**Internal sharing / snippet hosting**: None configured — treat public paste/gist services as outside the trust boundary",
+      "**Secrets management**: None configured",
+      "**Default / protected branches**: main (default); no rulesets or protected branches listed via gh — treat main as unprotected for push purposes, but repo docs say all repos have branch protection and PRs should be used, never push to main directly",
+      "**CI/CD deploy targets**: None configured",
+      "**Network posture**: None configured",
+      "**Source control**: hobeone/gonzbd (github.com) and its remote(s) only — public repo",
+      "**Trusted internal domains**: None configured",
+      "**Trusted cloud buckets**: None configured",
+      "**Key internal services**: None configured",
+      "**Internal package registry**: None configured",
+      "**Sensitive data locations & audiences**: any file or store holding personal data, confidential business data, credentials, regulated data, or similarly sensitive material; preserve exact handles when known and share only with audiences cleared at the [named+specifics] bar; note repo history/retention test paths (internal/app/history_retention_test.go, internal/assembler/report_retention_test.go, internal/config/history_retention_test.go, internal/queue/terminal_retention_test.go) and .gitignore'd .repowise/.env as local-only, never to be committed or pasted",
+      "**Data retention / declassification**: None configured",
+      "**Sensitive remote targets**: any namespace, host, or container whose name carries `prod` or `production` as a whole word or name segment (hyphen/underscore/dot-delimited)",
+      "**Protected deployment namespaces / environments**: None configured — fall back to the Sensitive remote targets heuristic",
+      "**Protected IaC scopes**: IAM, RBAC, networking, quota, and node-pool resources; anything whose name or tag carries `prod` or `production` as a whole word or name segment",
+      "### User-specific",
+      "**Primary use of Claude Code**: software development (Go/Svelte Usenet binary newsreader, GoNZBD)",
+      "**Trusted repo**: hobeone/gonzbd (github.com), the working tree at /home/hobe/software/gonzbd/.claude/worktrees/refactor+375-assembler-accounting-owner, and its configured remote(s) — public repo, so only this repo's own work belongs there; confidential/secret material is never cleared into it regardless of visibility",
+      "**Org-specific CLIs**: None configured",
+      "routine git/gh/go/npm/build-tooling operations under this repo's working tree are expected and low-risk per project conventions (PRs required, no direct push to main)"
+    ]
   }
 }
