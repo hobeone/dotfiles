@@ -50,7 +50,7 @@ Launch every lens agent in a **single message** so they run concurrently. Use `s
 
 Main context **must not** load the item bodies. Each agent reads its own lens's items in its own fresh context; main composes prompts and dispatches. This is `done-check` Step 2's discipline and it exists for the same reason: an author reads intent, a fresh context reads text.
 
-Prompt shape — substitute `<LENS>`, `<SLUGS>`, `<TARGET>`, and the mode-specific framing:
+Prompt shape — substitute `<REPO>`, `<LENS>`, `<SLUGS>`, `<TARGET>`, and the mode-specific framing:
 
 ```
 You are reviewing under a single quality lens: <LENS>. You have NO
@@ -90,6 +90,8 @@ If your lens finds nothing, say so plainly. A clean lens is a real
 result and padding it with speculation costs the caller a triage round
 for nothing.
 ```
+
+`<REPO>` is the absolute path of the directory holding these skills. Resolve it before dispatch and embed the resolved path — never the placeholder. A dispatched agent has no access to the conversation that assembled its prompt, so an unresolved `<REPO>` leaves it unable to find the item files it is told to read. Embed only the resolved paths and the target: **do not embed item body text**, since the agent reads the item files itself and that is what keeps main context free of rule text.
 
 Per-lens framing to append to `<LENS>`, matching the lens's own angle:
 
