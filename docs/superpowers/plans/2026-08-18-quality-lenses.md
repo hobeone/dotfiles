@@ -579,12 +579,24 @@ In Phase 0.5, find item 1 (the paragraph beginning ``1. `/code-review` cannot be
 2. Triage the output — classify each finding under the `finding-triage` SSOT dispositions.
 ```
 
-Replace item 2 with these three items, renumbering the existing items 3 and 4 to 5 and 6:
+Replace item 2 with these three items, renumbering the existing items 3 and 4 to 5 and 6. Item 5 additionally gets a clause replacement (see below) — its renumbering is not a plain text-preserving rename:
 
 ```markdown
 2. In the same message that dispatches the correctness reviewer, run `Skill: quality-lenses` in `diff` mode. Unlike `/code-review`, `quality-lenses` **is** model-invocable — invoke the skill directly, no agent substitution. Its lens agents and the correctness reviewer are independent and run concurrently; one dispatch, one triage table, one loop.
 3. Triage the combined output — classify each finding under the `finding-triage` SSOT dispositions, and record each finding's **provenance**: the correctness reviewer, or which lens. Provenance is not bookkeeping. The sentence below this list — that every later reviewer finding is by construction a penetration of this gate — is a claim about *correctness* coverage. Quality findings carry no such implication, and a CodeRabbit nit about naming is not evidence this gate leaked.
-4. Quality findings are **never blockers**. An actionable one is fixed like any other; anything else closes as a recorded deferral through `finding-triage`'s normal path. Do not hold the pipeline for a taste disagreement, and do not re-run the lens pass hoping for a different answer.
+4. Quality findings are **never blockers**. An actionable one is fixed like any other; anything else closes as a recorded deferral through `finding-triage`'s normal path. Do not hold the pipeline for a taste disagreement, and do not re-dispatch the lens pass inside one iteration hoping for a softer answer — the next iteration re-runs it as part of the full gate (item 5).
+```
+
+In renumbered item 5 (formerly item 3), also replace this clause — naming only the correctness reviewer left the lens pass out of the convergence loop entirely, and item 5's original text (`/code-review`) named a skill that item 1 explicitly forbids invoking. Find:
+
+```markdown
+then re-run `/code-review` at the same effort (fresh, full review — no bias from the previous iteration)
+```
+
+Replace with:
+
+```markdown
+then re-run the full gate at the same effort — the correctness reviewer and `Skill: quality-lenses` in `diff` mode, dispatched together as in items 1–2 (fresh, full review — no bias from the previous iteration)
 ```
 
 - [ ] **Step 4: Add the Rules entry**
