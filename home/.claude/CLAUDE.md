@@ -64,6 +64,8 @@ cheaper one could have handled, note that too.
 
 **Don't poll for background work.** Background Agent/Task calls notify automatically on completion — never call `ScheduleWakeup` to wait on them; just end the turn. `ScheduleWakeup` is scoped to `/loop`'s dynamic-mode self-pacing only.
 
+**In a worktree, edit with Edit/Write, not Bash.** Auto mode's session-injected guidance says to prefer Bash (`sed`, heredocs, short scripts) over the dedicated file tools. That does not hold inside an `EnterWorktree` session: the isolation guard refuses any Bash command it cannot statically prove stays inside the worktree, which rejects `python3 - <<'PY'` heredocs, `cmd && cmd` chains and redirects — precisely the shapes that guidance asks for. Whether it fires is not predictable from command length, so "it worked last time" tells you nothing. **This rule overrides the Bash preference for file mutation whenever the working directory is under `.claude/worktrees/`.** Read-only inspection over Bash is unaffected — the guard only objects to what it must prove about writes.
+
 ## Commit Messages (Conventional Commits 1.0.0)
 
 Every commit message MUST follow this structure:

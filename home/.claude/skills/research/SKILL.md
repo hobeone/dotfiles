@@ -225,6 +225,14 @@ Output: **clean** (proceed to Step 3.5) or **flagged** (list firings + proposed 
 
 After Step 3 produces a plan and before Step 4 collects user approval:
 
+0. **Carried-forward constraints, and a cheap contradiction check — run this BEFORE dispatching any review pass.**
+
+   When the task arrives carrying findings from a prior investigation — an ad-hoc audit done conversationally, a previous session, an issue comment, anything established before the plan existed — end the plan body with an explicit **Carried-forward constraints** table: one row per finding, stating the constraint and where it came from.
+
+   Then run a single cheap (Sonnet-tier) subagent whose *only* job is to diff the plan against that table and report contradictions. Nothing else — not soundness, not completeness.
+
+   This exists because a plan can silently regress against a fact the session already had. It has happened: an audit identified two test-table rows as already-covered duplicates, and the plan drafted afterwards listed them for conversion anyway. That is a mechanical contradiction, not a judgement call, and paying a premium-tier review round to catch it is waste. Prose context does not survive translation into a plan reliably enough to skip the check.
+
 1. **Always offer a fresh-context plan review** — never silently skip. Phrase it as a recommendation, not a question:
 
    > "Plan ready. Recommend an independent review pass before approval;
