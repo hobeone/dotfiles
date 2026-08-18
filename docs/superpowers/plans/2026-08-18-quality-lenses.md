@@ -681,7 +681,26 @@ Uses skills under `~/.claude/skills/`: `research`, `implement`, `research-and-im
 `coderabbit-review`.
 ```
 
-- [ ] **Step 3: Note the tier exemption in the Review & Verification Model**
+- [ ] **Step 3: Fix the stale exhaustive claim in the Notes section**
+
+In `home/.claude/commands/work2.md`, find the first bullet of the `## Notes` section:
+
+```markdown
+- The plan-review gate (`research` Step 3.5) uses a fresh-context subagent review pass. Claude's own
+  `/code-review` (Phase 0.5 of the review pipeline) plus the user's own reads (plan approval, PR review) are
+  the only other checks.
+```
+
+Replace with:
+
+```markdown
+- The plan-review gate (`research` Step 3.5) runs two passes: a fresh-context subagent review of the plan's
+  soundness and premises, and `quality-lenses` in `plan` mode. Phase 0.5 of the review pipeline likewise
+  runs two: Claude's own `/code-review` and `quality-lenses` in `diff` mode. Beyond those and the user's own
+  reads (plan approval, PR review), there are no further checks.
+```
+
+- [ ] **Step 4: Note the tier exemption in the Review & Verification Model**
 
 In the same file, find:
 
@@ -698,7 +717,7 @@ Replace with:
   trust boundary is expensive; a missed simplification is not.
 ```
 
-- [ ] **Step 4: Update the Phase A and Phase B summaries**
+- [ ] **Step 5: Update the Phase A and Phase B summaries**
 
 In the Phase A bullet list, find:
 
@@ -735,7 +754,7 @@ Escalate the correctness half of the Phase 0.5 local review gate to Opus when a 
 Verification Model** trigger fires (see above); the `quality-lenses` half stays at implementation tier.
 ```
 
-- [ ] **Step 5: Update the Step 3 pipeline listing shown to the user**
+- [ ] **Step 6: Update the Step 3 pipeline listing shown to the user**
 
 Find:
 
@@ -749,7 +768,7 @@ Replace with:
 2. /review-pipeline-coderabbit  — local review gates (Claude /code-review + quality-lenses), PR creation, review/fix-loop (CodeRabbit best-effort + /pr-review remote for any source)
 ```
 
-- [ ] **Step 6: Add the global Quality Gates line**
+- [ ] **Step 7: Add the global Quality Gates line**
 
 In `home/.claude/CLAUDE.md`, find:
 
@@ -772,7 +791,7 @@ Replace with:
   findings only — nothing is applied without a per-item decision.
 ```
 
-- [ ] **Step 7: Verify**
+- [ ] **Step 8: Verify**
 
 ```bash
 cd /home/hobe/dotfiles
@@ -782,7 +801,7 @@ grep -c "quality-lenses" home/.claude/CLAUDE.md           # expect 1
 
 Expected: `5` and `1`.
 
-- [ ] **Step 8: Commit**
+- [ ] **Step 9: Commit**
 
 ```bash
 cd /home/hobe/dotfiles

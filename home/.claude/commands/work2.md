@@ -15,9 +15,10 @@ wait for **your** review (bolted on — not part of the pipeline itself) → sum
 
 ## Notes
 
-- The plan-review gate (`research` Step 3.5) uses a fresh-context subagent review pass. Claude's own
-  `/code-review` (Phase 0.5 of the review pipeline) plus the user's own reads (plan approval, PR review) are
-  the only other checks.
+- The plan-review gate (`research` Step 3.5) runs two passes: a fresh-context subagent review of the plan's
+  soundness and premises, and `quality-lenses` in `plan` mode. Phase 0.5 of the review pipeline likewise
+  runs two: Claude's own `/code-review` and `quality-lenses` in `diff` mode. Beyond those and the user's own
+  reads (plan approval, PR review), there are no further checks.
 - Findings are not written back to any external skills repo.
 - **`quality-list` has a `lang-go.md` addendum** — `done-check` and `todo-check` have Go-specific
   realizations (mutex-scope, unchecked type assertions, `goimports`/`go vet`/`golangci-lint`,
