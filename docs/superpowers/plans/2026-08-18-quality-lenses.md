@@ -217,6 +217,8 @@ Each item also carries a `lens:` tag in the index above. A lens is a **review an
 Lenses and lanes are orthogonal and answer different questions. The lane says *which context can judge this item* (`done-check`'s fresh-subagent vs main-context split). The lens says *which reviewer should be obsessing over it* (`quality-lenses`' parallel dispatch). An item can be mechanical and altitude, or contextual and reuse; neither tag constrains the other.
 
 As with lanes, this index is the single source of truth for lens membership. Runners derive their lens groups by reading it — never by hardcoding a slug-to-lens table.
+
+`quality-lenses` carries a short framing paragraph per lens. That framing is a **derived surface**, not an independent rule: it compresses the tagged items' content into the angle one agent should hold. It is the only place outside this directory where item content is restated, and it is deliberate — an agent needs the angle before it reads the items. Treat it as paired with the item bodies: when you change what an item means, re-read the framing for its lens and update it in the same change, the way you would any other paired artifact.
 ```
 
 - [ ] **Step 4: Verify every item carries exactly one tag**
@@ -308,6 +310,8 @@ Derive the groups from the index every run. Do **not** carry a remembered slug-t
 
 A lens whose group is empty is skipped, not failed.
 
+The lens *vocabulary* is fixed by this file — the four names below, each with its own framing. The lens *membership* is derived: adding an item to `quality-list` and tagging it with an existing lens changes this skill's behaviour with no edit here, which is the point. Introducing a fifth lens value does require an edit here, to give it framing.
+
 Detect project language(s) exactly as `done-check` Step 0 does, so each agent can load matching `quality-list/lang-<language>.md` addenda.
 
 ## Step 1 — Resolve the target
@@ -373,7 +377,7 @@ result and padding it with speculation costs the caller a triage round
 for nothing.
 ```
 
-`<REPO>` is the absolute path of the directory holding these skills. Resolve it before dispatch and embed the resolved path — never the placeholder. A dispatched agent has no access to the conversation that assembled its prompt, so an unresolved `<REPO>` leaves it unable to find the item files it is told to read. Embed only the resolved paths and the target: **do not embed item body text**, since the agent reads the item files itself and that is what keeps main context free of rule text.
+`<REPO>` is the absolute path of the directory that *contains* the `skills/` directory — on this machine `/home/hobe/.claude`, so that `<REPO>/skills/quality-list/items/<slug>.md` resolves to a real file. It is not the skills directory itself; resolving it that way yields `.../skills/skills/...` and the agent reads nothing. Resolve it before dispatch and embed the resolved path — never the placeholder. A dispatched agent has no access to the conversation that assembled its prompt, so an unresolved `<REPO>` leaves it unable to find the item files it is told to read. Embed only the resolved paths and the target: **do not embed item body text**, since the agent reads the item files itself and that is what keeps main context free of rule text.
 
 Per-lens framing to append to `<LENS>`, matching the lens's own angle:
 
@@ -465,7 +469,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 The primary call site. Removing complexity from a plan costs a sentence; removing it from merged code costs a rewrite.
 
 **Files:**
-- Modify: `home/.claude/skills/research/SKILL.md` (Step 3.5, items 1 and 2)
+- Modify: `home/.claude/skills/research/SKILL.md` (Step 3.5, items 1, 2, and 3)
 
 **Interfaces:**
 - Consumes: `Skill: quality-lenses` in `plan` mode (Task 3).
@@ -491,7 +495,7 @@ In `home/.claude/skills/research/SKILL.md`, Step 3.5 item 1, find this paragraph
 Append a new paragraph immediately after it, at the same indentation:
 
 ```markdown
-   In the same dispatch, run `Skill: quality-lenses` in `plan` mode with the plan body as its target. Its lens agents and the soundness reviewer above are independent and run concurrently — one message, not two rounds. The lens pass asks a different question than the soundness reviewer does: not "is this plan correct?" but "is this plan bigger, more duplicative, or shallower than it needs to be?". It returns findings only; it patches nothing.
+   In the same review round, run `Skill: quality-lenses` in `plan` mode with the plan body as its target. Its lens agents and the soundness reviewer above are independent and run concurrently — one message, not two rounds. The lens pass asks a different question than the soundness reviewer does: not "is this plan correct?" but "is this plan bigger, more duplicative, or shallower than it needs to be?". It returns findings only; it patches nothing.
 ```
 
 - [ ] **Step 3: Route lens findings through the existing triage**
@@ -509,18 +513,34 @@ Add these two bullets immediately after it, at the same indentation:
    - **Lens findings — `altitude`**: a finding that the plan solves the problem at the wrong depth is a **premise concern**, not an implementation one — return to Step 1 with the rest of the premise concerns. Do not patch depth in place. A plan that layers a special case on shared infrastructure is not repaired by editing the special case; the hypothesis about where the problem lives is what is wrong. This is the case the lens pass exists to catch, and patching it in place is how it gets missed.
 ```
 
-- [ ] **Step 4: Verify both edits landed and the loop rules were not touched**
+- [ ] **Step 4: Fix the loop gate to re-run both passes**
+
+The loop gate was written when there was only one review pass. Left as-is, iteration 2+ re-runs only the soundness reviewer, so plan edits made in response to lens findings are never re-reviewed — the same defect Task 5 Step 3 already fixed for the diff gate's loop.
+
+In `home/.claude/skills/research/SKILL.md`, Step 3.5 item 3, find:
+
+```markdown
+3. **Loop gate**: after patching, re-run the review pass fresh (no bias from the previous iteration's findings).
+```
+
+Replace with:
+
+```markdown
+3. **Loop gate**: after patching, re-run both passes fresh — the soundness reviewer and `Skill: quality-lenses` in `plan` mode, dispatched together as in item 1 (no bias from the previous iteration's findings).
+```
+
+- [ ] **Step 5: Verify all edits landed and the loop rules were not touched**
 
 ```bash
 cd /home/hobe/dotfiles
-grep -c "quality-lenses" home/.claude/skills/research/SKILL.md       # expect 1
+grep -c "quality-lenses" home/.claude/skills/research/SKILL.md       # expect 2
 grep -ci "premise concern" home/.claude/skills/research/SKILL.md     # expect 4
 grep -n "Cap: 3 iterations" home/.claude/skills/research/SKILL.md    # must still be present
 ```
 
-Expected: `1`; exactly `4`; and the iteration cap line intact. The count is case-insensitive and counts *lines*, not occurrences: the file carries three such lines today (measured, not assumed) and Step 3's altitude bullet adds the fourth. The lens pass reuses the existing loop gate and cap — it must not have introduced a second one.
+Expected: `2`; exactly `4`; and the iteration cap line intact. The count is case-insensitive and counts *lines*, not occurrences: the file carries three such lines today (measured, not assumed) and Step 3's altitude bullet adds the fourth. The lens pass reuses the existing loop gate and cap — it must not have introduced a second one.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
 cd /home/hobe/dotfiles
@@ -582,7 +602,7 @@ In Phase 0.5, find item 1 (the paragraph beginning ``1. `/code-review` cannot be
 Replace item 2 with these three items, renumbering the existing items 3 and 4 to 5 and 6. Item 5 additionally gets a clause replacement (see below) — its renumbering is not a plain text-preserving rename:
 
 ```markdown
-2. In the same message that dispatches the correctness reviewer, run `Skill: quality-lenses` in `diff` mode. Unlike `/code-review`, `quality-lenses` **is** model-invocable — invoke the skill directly, no agent substitution. Its lens agents and the correctness reviewer are independent and run concurrently; one dispatch, one triage table, one loop.
+2. In the same round that dispatches the correctness reviewer, run `Skill: quality-lenses` in `diff` mode. Unlike `/code-review`, `quality-lenses` **is** model-invocable — invoke the skill directly, no agent substitution. Its lens agents and the correctness reviewer are independent and run concurrently; one dispatch, one triage table, one loop.
 3. Triage the combined output — classify each finding under the `finding-triage` SSOT dispositions, and record each finding's **provenance**: the correctness reviewer, or which lens. Provenance is not bookkeeping. The sentence below this list — that every later reviewer finding is by construction a penetration of this gate — is a claim about *correctness* coverage. Quality findings carry no such implication, and a CodeRabbit nit about naming is not evidence this gate leaked.
 4. Quality findings are **never blockers**. An actionable one is fixed like any other; anything else closes as a recorded deferral through `finding-triage`'s normal path. Do not hold the pipeline for a taste disagreement, and do not re-dispatch the lens pass inside one iteration hoping for a softer answer — the next iteration re-runs it as part of the full gate (item 5).
 ```
@@ -604,7 +624,7 @@ then re-run the full gate at the same effort — the correctness reviewer and `S
 In the `## Rules` section, add this bullet after the existing `Fix-loop substeps` bullet:
 
 ```markdown
-- **Lens findings and `done-check` overlap deliberately.** The lens runner and `done-check` read the same `quality-list` items; they differ in depth and moment, not in rule set. `done-check` applies every item as a checklist row on every pass; `quality-lenses` gives one agent per lens the time to go read the surrounding code, and runs only at this gate and the plan gate. When both surface the same thing, triage it once — the duplicate is confirmation, not a second finding. Do not "fix" the overlap by removing items from either runner.
+- **Lens findings and `done-check` overlap deliberately.** The lens runner and `done-check` read the same `quality-list` items; they differ in depth and moment, not in rule set. `done-check` applies every item as a checklist row on every pass; `quality-lenses` gives one agent per lens the time to go read the surrounding code, and within this pipeline runs only at this gate and the plan gate. When both surface the same thing, triage it once — the duplicate is confirmation, not a second finding. Do not "fix" the overlap by removing items from either runner.
 ```
 
 - [ ] **Step 5: Judgement check — read the phase end to end**
@@ -696,8 +716,8 @@ Replace with:
 ```markdown
 - The plan-review gate (`research` Step 3.5) runs two passes: a fresh-context subagent review of the plan's
   soundness and premises, and `quality-lenses` in `plan` mode. Phase 0.5 of the review pipeline likewise
-  runs two: Claude's own `/code-review` and `quality-lenses` in `diff` mode. Beyond those and the user's own
-  reads (plan approval, PR review), there are no further checks.
+  runs two: Claude's own `/code-review` and `quality-lenses` in `diff` mode. The rest of the pipeline's
+  checks — done-check, CodeRabbit, `/pr-review remote`, and your own reads — are described in the phases below.
 ```
 
 - [ ] **Step 4: Note the tier exemption in the Review & Verification Model**
