@@ -26,6 +26,8 @@ Derive the groups from the index every run. Do **not** carry a remembered slug-t
 
 A lens whose group is empty is skipped, not failed.
 
+The lens *vocabulary* is fixed by this file — the four names below, each with its own framing. The lens *membership* is derived: adding an item to `quality-list` and tagging it with an existing lens changes this skill's behaviour with no edit here, which is the point. Introducing a fifth lens value does require an edit here, to give it framing.
+
 Detect project language(s) exactly as `done-check` Step 0 does, so each agent can load matching `quality-list/lang-<language>.md` addenda.
 
 ## Step 1 — Resolve the target
@@ -91,7 +93,7 @@ result and padding it with speculation costs the caller a triage round
 for nothing.
 ```
 
-`<REPO>` is the absolute path of the directory holding these skills. Resolve it before dispatch and embed the resolved path — never the placeholder. A dispatched agent has no access to the conversation that assembled its prompt, so an unresolved `<REPO>` leaves it unable to find the item files it is told to read. Embed only the resolved paths and the target: **do not embed item body text**, since the agent reads the item files itself and that is what keeps main context free of rule text.
+`<REPO>` is the absolute path of the directory that *contains* the `skills/` directory — on this machine `/home/hobe/.claude`, so that `<REPO>/skills/quality-list/items/<slug>.md` resolves to a real file. It is not the skills directory itself; resolving it that way yields `.../skills/skills/...` and the agent reads nothing. Resolve it before dispatch and embed the resolved path — never the placeholder. A dispatched agent has no access to the conversation that assembled its prompt, so an unresolved `<REPO>` leaves it unable to find the item files it is told to read. Embed only the resolved paths and the target: **do not embed item body text**, since the agent reads the item files itself and that is what keeps main context free of rule text.
 
 Per-lens framing to append to `<LENS>`, matching the lens's own angle:
 
