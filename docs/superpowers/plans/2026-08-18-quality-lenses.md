@@ -310,21 +310,13 @@ Derive the groups from the index every run. Do **not** carry a remembered slug-t
 
 A lens whose group is empty is skipped, not failed.
 
-The lens *vocabulary* is fixed by this file — the four names below, each with its own framing. The lens *membership* is derived: adding an item to `quality-list` and tagging it with an existing lens changes this skill's behaviour with no edit here, which is the point. Introducing a fifth lens value does require an edit here, to give it framing.
+The lens *vocabulary* is fixed by this file — the four names below, each with its own framing — while membership is what the index derives. Introducing a fifth lens value therefore does require an edit here, to give it framing.
 
 Detect project language(s) exactly as `done-check` Step 0 does, so each agent can load matching `quality-list/lang-<language>.md` addenda.
 
 ## Step 1 — Resolve the target
 
-**`diff` mode** — cover all four sources, identically to `done-check` Step 1, so the two runners never disagree about what is under review:
-
-```bash
-git log --oneline @{upstream}..HEAD                       # committed
-git diff @{upstream}..HEAD                                # committed content
-git diff --cached                                         # staged
-git diff                                                  # unstaged
-git ls-files --others --exclude-standard                  # untracked paths
-```
+**`diff` mode** — resolve the target exactly as `done-check` Step 1 does: run its diff-resolution commands unchanged, covering all four sources. Read that step rather than re-deriving it here — the two runners must not disagree about what is under review, and a copy of the command list here would drift the first time either file changed. This is the same pointer discipline Step 0 uses for language detection.
 
 Read the contents of any untracked file relevant to the review — paths alone let you check nothing. If `@{upstream}` is unset, substitute the merge base with the default branch.
 
@@ -397,7 +389,7 @@ Then stop. Triage, fixes, `done-check`, and commits all belong to the caller.
 ## Rules
 
 - **Never edit.** No exceptions, no "it was a one-word fix". The read-only property is what makes this composable with `finding-triage`.
-- **Never hardcode the lens groups.** Read the index every run.
+- **Never hardcode the lens groups** — see Step 0.
 - **Never copy item text into this file.** Agents read item bodies themselves.
 - **Quality findings are not blockers.** The caller decides; an unactioned finding closes as a recorded deferral, not a failure.
 - **Do not re-run to convergence on your own.** A single pass per invocation. Convergence loops belong to the calling gate, which knows how many rounds it has spent.
