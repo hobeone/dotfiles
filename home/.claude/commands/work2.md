@@ -6,8 +6,9 @@ description: Research + implement + review pipeline for gonzbd work
 # Work2
 
 Uses skills under `~/.claude/skills/`: `research`, `implement`, `research-and-implement`,
-`review-pipeline-coderabbit`, `done-check`, `quality-list`, `stage-commit-push`, `todo-check`,
-`finding-triage`, `file-pullreq`, `gh-body-check`, `gh-body-conventions`, `coderabbit-review`.
+`review-pipeline-coderabbit`, `done-check`, `quality-list`, `quality-lenses`, `stage-commit-push`,
+`todo-check`, `finding-triage`, `file-pullreq`, `gh-body-check`, `gh-body-conventions`,
+`coderabbit-review`.
 
 Flow: research-and-implement → review-pipeline-coderabbit (through the merge gate) →
 wait for **your** review (bolted on — not part of the pipeline itself) → summarize → merge decision → reflect.
@@ -33,7 +34,10 @@ verification steps on Opus even if implementation ran on a cheaper model.**
 The review/verification steps this applies to:
 
 - Phase A — the Step 3.5 plan-review subagent, and the `/done-check` pass.
-- Phase B — Claude's own `/code-review` (Phase 0.5 of the review pipeline).
+- Phase B — Claude's own `/code-review` (Phase 0.5 of the review pipeline). The `quality-lenses`
+  agents sharing that dispatch are **not** covered by these triggers — they stay at implementation
+  tier. The triggers exist because a missed correctness defect in persistence, concurrency, or a
+  trust boundary is expensive; a missed simplification is not.
 - Phase C — the `receiving-code-review` verification of each fix.
 
 Escalate review + verification to Opus when **any** of these is true (state which trigger
@@ -114,7 +118,7 @@ do not pre-create one.
 
 ### Pipeline
 1. /research-and-implement 42   — research + plan approval + implementation + done-check
-2. /review-pipeline-coderabbit  — local review gates (Claude /code-review), PR creation, review/fix-loop (CodeRabbit best-effort + /pr-review remote for any source)
+2. /review-pipeline-coderabbit  — local review gates (Claude /code-review + quality-lenses), PR creation, review/fix-loop (CodeRabbit best-effort + /pr-review remote for any source)
 3. Wait for your review (bolted on — not part of the pipeline itself)
 4. Summarize + merge decision
 5. Reflect
@@ -150,6 +154,9 @@ but via hypothesis-driven investigation (`quaere-evidence`) rather than parallel
 - Phase 1 (research): posts a plan to the issue with an `Inconclusive / Deferred items` section. Its Step 3.5
   plan-review gate offers a fresh-context subagent review pass before approval — accept or skip it as
   offered. Run that subagent on Opus when a **Review & Verification Model** trigger fires (see above).
+  That gate also runs `quality-lenses` in `plan` mode alongside the soundness reviewer; its altitude
+  findings route as premise concerns back to Step 1, which is the one path in this pipeline that can
+  send a plan back for being the wrong shape rather than wrong in a detail.
   **You approve the plan before Phase 2 starts** — this is the plan-approval checkpoint, equivalent
   to `/work`'s architecture sign-off, and the primary plan-quality gate this workflow uses.
 - Phase 2 (implement): executes unit-by-unit, halts (does not ad-hoc patch) on any discovery not covered by
@@ -168,8 +175,8 @@ an uncommitted commit-message draft) complete. Phase A does **not** commit — `
 ## Phase B — Review Pipeline
 
 Run `/review-pipeline-coderabbit`, with this variance from the skill's default text.
-Escalate the `/code-review` (Phase 0.5) pass to Opus when a **Review & Verification Model**
-trigger fires (see above).
+Escalate the correctness half of the Phase 0.5 local review gate to Opus when a **Review &
+Verification Model** trigger fires (see above); the `quality-lenses` half stays at implementation tier.
 
 - **CodeRabbit is best-effort, not a gate** (per the skill's own Phase 1) — if it never responds (rate
   limit, app not installed, whatever), that's expected, not a stop condition. Only stop and tell the user if
