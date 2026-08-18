@@ -41,5 +41,6 @@ Listed in canonical reading order. Reference items by slug (e.g., `behavior-cove
 - [signature-change-regression](items/signature-change-regression.md) — mechanical
 - [public-doc-durability](items/public-doc-durability.md) — mechanical
 - [public-api-surface](items/public-api-surface.md) — mechanical
+- [efficiency-waste](items/efficiency-waste.md) — mechanical
 
 Language-specific addenda live alongside this file as `lang-<language>.md` and supplement specific items with triggers and mitigation idioms (current examples: `lang-cpp.md`, `lang-rust.md`). An addendum section **realizes** an item concretely; it never **bounds** the item: its triggers and N/A criteria scope only that realization, and a diff outside the realization's constructs remains subject to the base item's conditions.
