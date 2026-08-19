@@ -90,20 +90,14 @@ does not have. Branch naming follows `/work2`'s `<type>/<issue#>-<slug>` convent
 
 ## Phase A0 — Premise
 
-Invoke `premise-check` against the issue or free text.
+Invoke `premise-check` against the issue or free text. Its Steps 1–3 (split, classify, and
+null-hypothesis audit) run as that skill defines them — read them from `premise-check/SKILL.md`
+rather than re-deriving them here; a copy would drift the first time that file changed, the same
+pointer discipline `quality-lenses` Step 1 uses for `done-check` Step 1.
 
-**Step 1 (its Step 1)** splits the input into a Problem paragraph and a Proposed solution
-paragraph. A solution-only issue is itself a finding, recorded as one, with a derived Problem
-paragraph labelled as derived.
-
-**Step 2 (its Step 2)** classifies via `brainstorming`'s spike / bounded / architectural verdict.
-State the classification out loud so the user can override it before routing. When in doubt, take
-the heavier path.
-
-**Step 3 (its Step 3)** dispatches one fresh-context falsifying audit under `quaere-evidence`.
-Verdict is `holds`, `holds-with-correction`, or `rejected` — `holds` is the default whenever
-falsification fails, deliberately asymmetric: a false rejection here is more expensive than a
-false acceptance.
+The interface `/work3` consumes out of those three steps is the **verdict token** — `holds`,
+`holds-with-correction`, or `rejected` — which Gate 1 branches on below, and the **route
+classification** from Step 2, consumed by the routing table immediately following.
 
 **Routing** by the Step 2 classification, route token only:
 
