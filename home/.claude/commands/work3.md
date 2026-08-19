@@ -62,7 +62,7 @@ Ask via AskUserQuestion: **Start** / **Modify scope** / **Cancel**. Mark the fir
 | | Phases | Temperament |
 |---|---|---|
 | Before the line | 0, A0, A0b, A1, A2 | Conversational. One clarifying question per message. Sketches discussed, not just selected. No time-box, no iteration cap. |
-| After the line | A3, B, C, D | Fire-and-forget. No check-ins between tasks. Ambiguity is settled by `Ruling:` and recorded. One gate (merge) plus named stop conditions. |
+| After the line | A3, B, C, D | Fire-and-forget on *design*. No check-ins between tasks; ambiguity is settled by `Ruling:` and recorded. Stops here are **review-driven, never design-driven** — enumerated in full under Gate 2. |
 
 The bet: **the expensive mistakes are made before the first line of code, and the expensive
 interruptions happen after it.** Human attention spent on premise and approach is cheap and
@@ -96,19 +96,33 @@ rather than re-deriving them here; a copy would drift the first time that file c
 pointer discipline `quality-lenses` Step 1 uses for `done-check` Step 1.
 
 The interface `/work3` consumes out of those three steps is the **verdict token** — `holds`,
-`holds-with-correction`, or `rejected` — which Gate 1 branches on below, and the **route
-classification** from Step 2, consumed by the routing table immediately following.
+`holds-with-correction`, or `rejected` — and the **route classification** from Step 2.
 
-**Routing** by the Step 2 classification, route token only:
+**Evaluation order: verdict first, then route.** The two tokens are not independent branches run in
+parallel — the verdict is settled at Gate 1 *before* any route action is taken, including the
+`spike` route's termination. Otherwise a `rejected` verdict on a spike would never reach Gate 1's
+fork, and the workflow would run a probe against a problem the auditor had just produced evidence
+against. Concretely:
 
-| Route | What it triggers |
+1. If the verdict is `rejected`, go straight to Gate 1's rejected-premise fork. Nothing on the
+   routing table below runs until the user has chosen a branch of that fork.
+2. Otherwise (`holds` or `holds-with-correction`), take the route below, then bring its output to
+   Gate 1.
+
+**Routing** by the Step 2 classification. The route's own effects are defined in
+`premise-check/SKILL.md` § Routing — read them there. What follows is only what the route changes
+about `/work3`'s own phases:
+
+| Route | `/work3` consequence |
 |---|---|
-| `spike` | Run the probe as cheaply as correctness allows, report a recommendation, label anything built as throwaway. **Terminates here** — turning a spike's answer into work is a new `/work3` invocation. |
-| `bounded` | Run `brainstorming`'s clarifying-question step first — one question per message, only the ones that change the answer — then invoke `solution-space` against the (possibly corrected) problem statement. |
-| `architectural` | Run `brainstorming`'s full architectural path — clarifying questions, 2–3 approaches, sectioned design, spec document. **Skip `solution-space`** — brainstorming already proposes multiple approaches on this path, and `solution-space` exists only to fill the gap in brainstorming's *bounded* path. |
+| `spike` | No `brainstorming` design path, no `solution-space`, no Phase A1. `/work3` ends when the recommendation is reported — a terminal path, so close out the `[work3:*]` todos before stopping (see *Terminal paths* below). |
+| `bounded` | `brainstorming`'s clarifying-question step, then `solution-space` against the (possibly corrected) Problem paragraph. |
+| `architectural` | `brainstorming`'s full architectural path. **`solution-space` does not run** — brainstorming already proposes multiple approaches here, and `solution-space` exists only to fill the gap in brainstorming's *bounded* path. |
 
 On the `bounded` route, `solution-space` dispatches its three biased authors — `as-asked`,
-`minimal`, `structural` — and adjudicates their sketches in main context per its own Step 2.
+`minimal`, `structural` — and adjudicates their sketches in main context per its own Step 2. Its
+input contract is asymmetric by design (`solution-space/SKILL.md` Step 1); pass both
+`premise-check` Step 1 paragraphs into the skill and let it distribute them.
 
 ## GATE 1 — Direction approval
 
@@ -119,20 +133,47 @@ reasoning behind it. On the `architectural` route, present brainstorming's propo
 same way. Then stop and discuss.
 
 The user may interrogate a sketch, ask for a fourth, ask for two to be combined, reject the
-problem statement's framing itself, or send the whole thing back. **Re-running `solution-space`
-with an added constraint is a normal outcome, not a failure** — there is no iteration cap and no
-time-box on this phase.
+problem statement's framing itself, or send the whole thing back. Re-dispatching with an added
+constraint is expected here — see `solution-space/SKILL.md` § Rules for why that is not a failure
+state. There is no iteration cap and no time-box on this phase.
 
 `AskUserQuestion` is used only to **close** the conversation once the options are settled and
 mutually exclusive — never to open it.
 
-**When the premise verdict was `rejected`**, the conversation carries a fork with three branches:
+### The rejected-premise fork
 
-- **Implement what was asked** — proceed with the `as-asked` direction. The auditor's evidence is
-  posted to the issue as an accepted, acknowledged risk.
-- **Implement the real fix** — post the counter-proposal and its evidence to the issue, then
-  re-run `solution-space` against the corrected problem statement and present its result.
-- **Neither — stop.**
+**When the premise verdict was `rejected`**, this fork is presented *before* the route runs (see
+*Evaluation order* in Phase A0), so it is reached on all three routes. Three branches:
+
+- **Implement what was asked** — record the auditor's evidence as an accepted, acknowledged risk
+  (see *Recording when no issue exists yet*, below), then take the route as classified: on
+  `bounded`, run `solution-space` and proceed with its `as-asked` candidate; on `architectural`,
+  run `brainstorming`'s architectural path constrained to the issue's proposed solution; on
+  `spike`, run the probe as classified and terminate there.
+- **Implement the real fix** — record the counter-proposal and its evidence, rewrite the Problem
+  paragraph to the corrected form, then take the route against the *corrected* problem: on
+  `bounded`, run `solution-space` and present its result; on `architectural`, run `brainstorming`'s
+  architectural path; on `spike`, re-probe against the corrected problem. The route classification
+  is re-checked against the corrected problem before this happens — correcting the problem can
+  change what kind of work it is.
+- **Neither — stop.** A terminal path: close out the `[work3:*]` todos before stopping (see
+  *Terminal paths* below).
+
+**Recording when no issue exists yet.** On the `adhoc` input path no tracking issue exists until
+`research` Step 5.1 runs in Phase A2, so "post to the issue" has no destination at this gate. When
+an issue exists, post the evidence or counter-proposal to it now. When it does not, hold the
+artifact and post it as the first comment after the issue is created in Phase A2. Do not create an
+issue early to have somewhere to post — this mirrors `solution-space/SKILL.md` Step 3's handling of
+the same situation for the sketch comparison, and both held artifacts are posted together.
+
+### Terminal paths
+
+Three paths end a `/work3` run without reaching Phase D: the `spike` route at Phase A0, **Neither —
+stop** at this gate, and the `subagent-driven-development` stop condition in Phase A3. Each is a
+correct ending, not a failure — and each must **close out every `[work3:*]` todo** (complete the
+ones that ran, cancel the ones that will not) before the turn ends. The session guard in *Check for
+active session* blocks on incomplete `[work3:*]` todos, so a run that stops correctly but leaves
+them open latches the guard and blocks the next `/work3` invocation.
 
 ## Phase A1 — Plan
 
@@ -146,16 +187,32 @@ Tasks must be **independently testable** — Phase A3 dispatches one implementer
 ## Phase A2 — Plan validation
 
 Execute `research` Steps **3.4**, **3.5**, and **5** *by pointer*: read them from
-`research/SKILL.md` and run them unchanged rather than restating them here — the same pointer
-discipline `quality-lenses` uses for `done-check` Step 1. Copying that text into this file would
-drift the first time either file changed.
+`research/SKILL.md` and run them **by pointer, with the one documented deviation below**, rather
+than restating them here — the same pointer discipline `quality-lenses` uses for `done-check`
+Step 1. Copying that text into this file would drift the first time either file changed.
 
-- Step 3.4 is the mandatory reachability check.
-- Step 3.5 is **demoted from a human gate to an automatic loop**: the soundness reviewer and
+- Step 3.4 is the mandatory reachability check. No deviation.
+- Step 3.5 — **the one deviation.** Its item 1 is a mandatory *offer* to the user; `/work3` runs it
+  as a **mandatory automatic loop** instead, because Phase A2 sits before the autonomy boundary but
+  the offer itself is not a decision worth the user's turn. The soundness reviewer and
   `quality-lenses` in `plan` mode run together, findings are applied, and the pass repeats until
   clean or three rounds elapse. **Three rounds without convergence escalates to the user.**
+  Everything else in 3.5 — its triage categories, its per-premise iteration counting, its
+  "the plan that exits this step is the contract" rule — runs unchanged.
 - Step 5 is the post-to-GitHub step (`gh-body-check` + `gh-post`), run once the plan is approved
-  below.
+  below. Its Step 5.1 is where an `adhoc` run's tracking issue is created; any artifacts held from
+  Gate 1 (the `solution-space` comparison, the auditor's evidence or counter-proposal) are posted
+  as comments immediately after it exists.
+
+**Where Step 3.5's escape hatches go inside the automatic loop.** Step 3.5 item 2 routes altitude
+lens findings and premise concerns to "return to Step 1" — a `research` step `/work3` never
+executes, so that destination has to be re-pointed here. **Altitude findings and premise concerns
+route back to the chosen direction**, not to the user and not to a `research` step: re-open the
+direction settled at Gate 1, correct it, and re-enter Phase A1 to rewrite the plan against the
+corrected direction. Per Step 3.5's own rule this resets the iteration counter, because it is a new
+premise rather than another round on the old one. Only a *third* failure to converge within one
+premise escalates to the user. Do not patch depth in place — that is exactly the failure Step 3.5's
+altitude clause exists to prevent.
 
 ## GATE 2 — Plan approval ◀ autonomy boundary
 
@@ -165,7 +222,24 @@ user's time: the conversation here is about whether the *design* is right, not w
 document is tidy. As at Gate 1, sending the plan back for reshaping is a normal outcome, not a
 failure.
 
-**Everything after this gate runs without check-ins.**
+**Everything after this gate is review-driven, never design-driven.** No check-in happens merely
+because a phase ended, a task finished, or the workflow wants confirmation that it is still on
+course — that is the whole content of the boundary. Stops still occur after it, but every one of
+them is caused by a reviewer finding something or by something needing the user's signature. They
+are, exhaustively:
+
+| Post-boundary stop | Cause |
+|---|---|
+| The PR-body approval in `/file-pullreq` **gate mode** (Phase B, via `review-pipeline-coderabbit` Phase 1 step 2) | A PR body needs the user's sign-off before it is published. Never auto-approved — that would contradict `gh-body-check` discipline. |
+| Per-finding triage when `/pr-review remote` returns feedback (Phase B step 4 and Phase C) | A reviewer found something. Each finding is decided individually via `AskUserQuestion`. No feedback, no stop. |
+| The merge-conflict check at the pipeline's merge gate | Repo state diverged; resolving it by guessing can drop work. |
+| **GATE 3 — merge** (Phase C) | The user merges, never Claude. |
+| The named stop conditions — Phase A2's three-round non-convergence, Phase A3's SDD stop condition, the errors in *Error Handling* | Something is broken enough that guessing is worse than asking. |
+
+This is the live distinction between `/work3` and `/work2`: `/work2` also stops for the PR body and
+for review findings, and `/work3` keeps those stops deliberately. What `/work3` removes is the
+design-driven check-in — the per-phase "shall I continue?" — by front-loading that conversation into
+Gates 1 and 2.
 
 ---
 
@@ -197,7 +271,8 @@ between tasks.
 
 The stop maps onto `subagent-driven-development`'s existing fourth stop condition ("a plan so
 broken that every path forward is a guess") and is **passed as controller instruction — the
-vendored skill is not edited.**
+vendored skill is not edited.** It is a terminal path: close out the `[work3:*]` todos before
+stopping, per Gate 1's *Terminal paths*.
 
 `systematic-debugging` is invoked whenever an implementer or its reviewer hits a test failure or
 unexpected behaviour, before any fix is proposed. It is not on the happy path.
@@ -215,8 +290,11 @@ same message as the claim, or the claim is not made.
 
 ## Phase B — Review pipeline
 
-Run `review-pipeline-coderabbit` to its merge gate. Two variances, carried over from `/work2`
-verbatim in substance:
+Run `review-pipeline-coderabbit` to its merge gate. **This pipeline contains user stops** — its
+Phase 1 step 2 runs `/file-pullreq` in gate mode and waits for PR-body approval, and its step 4
+presents `/pr-review remote`'s findings for per-finding triage. Both are review-driven stops kept
+on purpose; see the enumeration under Gate 2. Two variances, carried over from `/work2` verbatim in
+substance:
 
 - **CodeRabbit is best-effort and never a stop condition.** If it never responds (rate limit, app
   not installed, whatever), that's expected, not a stop condition.
@@ -227,8 +305,11 @@ verbatim in substance:
 
 Run `/pr-review remote` feeding `receiving-code-review`. **Phase C's wait and Gate 3 are one
 checkpoint, not two**: when `/pr-review remote` reports no unaddressed feedback, the merge
-question is asked in the same breath. This is what keeps the post-boundary half of the workflow
-to a single gate.
+question is asked in the same breath rather than as a separate turn. This removes one
+*design-driven* stop — the bare "review is done, shall I ask about merging?" — and is not a claim
+that Gate 3 is the only post-boundary stop; the enumeration under Gate 2 is authoritative. When
+`/pr-review remote` *does* return feedback, its per-finding triage stops for the user first, and
+the merge question follows once the loop converges.
 
 ## GATE 3 — Merge decision
 
@@ -274,4 +355,4 @@ absent); CodeRabbit app assumed installed, degraded to best-effort per Phase B a
 | Active `[work3:*]` session exists | "Active work3 session exists. Complete or clear first." |
 | `gh-post` missing | Stop, print the `uv tool install` command from Prerequisites. |
 | Plan-review loop fails to converge in three rounds (Phase A2) | Escalate to the user — the automatic loop stops itself; do not force a fourth round. |
-| SDD stop condition fires (Phase A3) | Stop and present the ledger's `Ruling:` entries and the blocking discovery to the user, per `subagent-driven-development`'s own Finish step. |
+| SDD stop condition fires (Phase A3) | Stop and present the ledger's `Ruling:` entries and the blocking discovery to the user, per `subagent-driven-development`'s own Finish step. Terminal path — close out the `[work3:*]` todos. |
