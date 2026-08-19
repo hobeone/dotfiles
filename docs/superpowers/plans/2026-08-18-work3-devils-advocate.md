@@ -421,8 +421,8 @@ SP=/home/hobe/.claude/plugins/cache/claude-plugins-official/superpowers/6.3.0/sk
 grep -qF '/work3' $REPO/home/.claude/CLAUDE.md \
   && test -L ~/.claude/skills/premise-check && test -L ~/.claude/skills/solution-space \
   && test -f ~/.claude/commands/work3.md \
-  && [ "$(find $SP -name 'SKILL.md' -print0 | sort -z | xargs -0 sha256sum | sha256sum | cut -d' ' -f1)" \
-       = "faf241c1723b9549e903398bce6e0dbe89473cc8c9a74edba8c8c81421362080" ] \
+  && [ "$(find "$SP" -name 'SKILL.md' -print0 | sort -z | xargs -0 cat | sha256sum | cut -d' ' -f1)" \
+       = "0c573edfdf17fbdefeb1aa4eec150f6325ad33db0551be018a673d8dbcd68700" ] \
   && [ -z "$(cd $REPO && git diff --stat HEAD -- home/.claude/commands/work2.md)" ] \
   && echo TASK6-PASS
 ```
