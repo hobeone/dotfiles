@@ -30,8 +30,9 @@ invoking it. `/work3` is the correction.
 - **Front-load the conversation.** Premise, approach, and design are worked out *with* the user, in
   dialogue, not presented as a single multiple-choice question. This is where the user's judgment is
   worth the most and where a wrong turn is cheapest to correct.
-- **Autonomy after the plan is approved.** Once the design is settled, run to a merge-ready PR without
-  further check-ins. Exactly one more gate — the merge decision — plus the named stop conditions.
+- **Autonomy after the plan is approved.** Once the design is settled, run to a merge-ready PR with no
+  *design-driven* check-in — nothing pauses merely because a phase ended. Review-driven stops remain;
+  see *The autonomy boundary* below, which names where the one authoritative enumeration lives.
 - Prove or disprove the problem before planning a solution to it.
 - Force at least one genuinely smaller alternative onto the table before implementation begins.
 - Retain every quality gate `/work2` has today: `done-check`, `quality-lenses`, `finding-triage`'s
@@ -75,16 +76,15 @@ invoking it. `/work3` is the correction.
 The precise claim is not "no stops after the line" — Phases B and C are `/work2`'s, unchanged, and
 `/work2` stops in them. The claim is that every post-boundary stop is **review-driven** (a reviewer
 found something, or a PR body needs sign-off) and none is **design-driven** (no check-in happens
-merely because a phase ended). Exhaustively, the post-boundary stops are:
+merely because a phase ended).
 
-1. **Gate 3 — the merge decision.** Never automatic.
-2. **The PR-body approval** in `/file-pullreq` gate mode, reached through
-   `review-pipeline-coderabbit` Phase 1. Auto-approving a body would contradict `gh-body-check`
-   discipline, so this stop is kept deliberately.
-3. **Per-finding triage** when `/pr-review remote` returns feedback, in Phase B's fix loop and in
-   Phase C. No feedback, no stop.
-4. **The named stop conditions** — Phase A2's three-round non-convergence, Phase A3's SDD stop
-   condition, and the command's error rows.
+**The enumeration itself lives in `work3.md`, under Gate 2, and only there.** This spec deliberately
+does not carry a second copy. An earlier revision did, and the two lists immediately diverged — one
+had five entries, one had four, and both were labelled exhaustive while both in fact omitted two real
+stops. A list that claims completeness is exactly the kind of text that must have a single owner: the
+operational document an executing agent actually reads. This spec keeps authority over the *claim*
+(review-driven only, never design-driven); `work3.md` keeps the *inventory*, because the inventory is
+a fact about `review-pipeline-coderabbit`'s behaviour rather than a design decision.
 
 Keeping this distinction sharp is what still separates `/work3` from `/work2`: both stop for
 reviewers, only `/work2` stops for the workflow's own bookkeeping.
