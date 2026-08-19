@@ -56,9 +56,7 @@
     "frontend-design@claude-plugins-official": true,
     "clangd-lsp@claude-plugins-official": true,
     "code-review@claude-plugins-official": true,
-    "github@claude-plugins-official": true,
-    "antigravity@antigravity-for-claude-code": true,
-    "repowise@repowise": true
+    "github@claude-plugins-official": true
   },
   "extraKnownMarketplaces": {
     "claude-code-workflows": {
@@ -78,12 +76,6 @@
         "source": "github",
         "repo": "yuting0624/antigravity-for-claude-code"
       }
-    },
-    "repowise": {
-      "source": {
-        "source": "github",
-        "repo": "repowise-dev/repowise"
-      }
     }
   },
   "effortLevel": "medium",
@@ -93,18 +85,6 @@
   "verbose": true,
   "autoCompactEnabled": true,
   "fileCheckpointingEnabled": true,
-  "mcpServers": {
-    "repowise": {
-      "command": "/home/hobe/.local/share/uv/tools/repowise/bin/repowise",
-      "args": [
-        "mcp",
-        "/home/hobe/software/gonzbd",
-        "--transport",
-        "stdio"
-      ],
-      "description": "repowise: codebase intelligence — docs, graph, git signals, dead code, decisions"
-    }
-  },
   "autoMode": {
     "environment": [
       "### Org-wide",
