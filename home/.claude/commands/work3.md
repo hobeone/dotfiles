@@ -241,6 +241,13 @@ waits for green CI and does not re-prompt once green.
 is provenance-based, which matters here because `/work3` always runs in a worktree. Its
 three-option menu is constrained to the pipeline's merge gate: never automatic.
 
+If merged, continue into `review-pipeline-coderabbit`'s post-merge umbrella-drift-join phase only
+when Phase B's PR-description delta step determined this PR is umbrella-tracked; otherwise there
+is nothing further to do post-merge — the same self-skip as Phase B's own delta step, expected
+behaviour, not a bug.
+
+Suggest `/commit-commands:clean_gone`.
+
 Then run `summarize-work`, then `improve-workflow`.
 
 ---
