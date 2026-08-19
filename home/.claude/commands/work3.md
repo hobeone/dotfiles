@@ -233,6 +233,8 @@ are, exhaustively:
 | The PR-body approval in `/file-pullreq` **gate mode** (Phase B, via `review-pipeline-coderabbit` Phase 1 step 2) | A PR body needs the user's sign-off before it is published. Never auto-approved — that would contradict `gh-body-check` discipline. |
 | Per-finding triage when `/pr-review remote` returns feedback (Phase B step 4 and Phase C) | A reviewer found something. Each finding is decided individually via `AskUserQuestion`. No feedback, no stop. |
 | The merge-conflict check at the pipeline's merge gate | Repo state diverged; resolving it by guessing can drop work. |
+| **Oscillation escalation** — the same conceptual topic recurs across 2+ review iterations (`review-pipeline-coderabbit` Phase 0.5 item 5, Phase 1's oscillation check, and its Rules § *Oscillation detection*) | The invariant behind the finding is not understood well enough to fix confidently. The pipeline halts instead of fixing again, and the escalation asks a scope question that may close the PR and refile upstream. |
+| **The pre-commit branch gate** (`review-pipeline-coderabbit` Rules § *Pre-commit branch gate*) | A commit was about to land on the repo's default branch. Phase 0's worktree should make this unreachable; it is listed anyway, because an enumeration that omits stops reachable in principle is the defect this table exists to prevent. |
 | **GATE 3 — merge** (Phase C) | The user merges, never Claude. |
 | The named stop conditions — Phase A2's three-round non-convergence, Phase A3's SDD stop condition, the errors in *Error Handling* | Something is broken enough that guessing is worse than asking. |
 
