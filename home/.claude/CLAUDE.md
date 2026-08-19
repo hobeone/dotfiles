@@ -53,6 +53,9 @@ cheaper one could have handled, note that too.
 
 - Run quality gates (linter, formatter, tests) before pushing.
 - New code needs tests. User-facing features need examples. Flag gaps.
+- Before pushing, run `quality-lenses` in `diff` mode over the change and triage what it returns.
+  `/work2` does this inside the pipeline's Phase 0.5; ad-hoc work has to invoke it. It returns
+  findings only — nothing is applied without a per-item decision.
 
 ## Execution Standards
 

@@ -22,24 +22,37 @@ Each item's lane is declared once, in the Items index below (the `— mechanical
 
 Listed in canonical reading order. Reference items by slug (e.g., `behavior-coverage`); numbering is not stable and not part of the SSOT.
 
-- [invariant-derivation](items/invariant-derivation.md) — contextual
-- [purpose-verification](items/purpose-verification.md) — contextual
-- [pattern-audit](items/pattern-audit.md) — contextual
-- [duplication-extraction](items/duplication-extraction.md) — mechanical
-- [scope-discipline](items/scope-discipline.md) — contextual
-- [behavior-coverage](items/behavior-coverage.md) — mechanical
-- [implementation-guards](items/implementation-guards.md) — mechanical
-- [impact-verification](items/impact-verification.md) — mechanical
-- [test-execution](items/test-execution.md) — contextual
-- [completion-hygiene](items/completion-hygiene.md) — contextual
-- [architectural-boundary](items/architectural-boundary.md) — mechanical
-- [escape-hatch-necessity](items/escape-hatch-necessity.md) — contextual
-- [paired-artifact-drift](items/paired-artifact-drift.md) — mechanical
-- [docstring-drift](items/docstring-drift.md) — contextual
-- [discovery-surfacing](items/discovery-surfacing.md) — contextual
-- [ported-code-attribution](items/ported-code-attribution.md) — mechanical (+ contextual half)
-- [signature-change-regression](items/signature-change-regression.md) — mechanical
-- [public-doc-durability](items/public-doc-durability.md) — mechanical
-- [public-api-surface](items/public-api-surface.md) — mechanical
+- [invariant-derivation](items/invariant-derivation.md) — contextual — lens: none
+- [purpose-verification](items/purpose-verification.md) — contextual — lens: none
+- [pattern-audit](items/pattern-audit.md) — contextual — lens: reuse
+- [duplication-extraction](items/duplication-extraction.md) — mechanical — lens: reuse
+- [scope-discipline](items/scope-discipline.md) — contextual — lens: simplification
+- [behavior-coverage](items/behavior-coverage.md) — mechanical — lens: none
+- [implementation-guards](items/implementation-guards.md) — mechanical — lens: none
+- [impact-verification](items/impact-verification.md) — mechanical — lens: none
+- [test-execution](items/test-execution.md) — contextual — lens: none
+- [completion-hygiene](items/completion-hygiene.md) — contextual — lens: simplification
+- [architectural-boundary](items/architectural-boundary.md) — mechanical — lens: altitude
+- [escape-hatch-necessity](items/escape-hatch-necessity.md) — contextual — lens: altitude
+- [paired-artifact-drift](items/paired-artifact-drift.md) — mechanical — lens: none
+- [docstring-drift](items/docstring-drift.md) — contextual — lens: none
+- [discovery-surfacing](items/discovery-surfacing.md) — contextual — lens: none
+- [ported-code-attribution](items/ported-code-attribution.md) — mechanical (+ contextual half) — lens: none
+- [signature-change-regression](items/signature-change-regression.md) — mechanical — lens: none
+- [public-doc-durability](items/public-doc-durability.md) — mechanical — lens: none
+- [public-api-surface](items/public-api-surface.md) — mechanical — lens: altitude
+- [efficiency-waste](items/efficiency-waste.md) — mechanical — lens: efficiency
 
 Language-specific addenda live alongside this file as `lang-<language>.md` and supplement specific items with triggers and mitigation idioms (current examples: `lang-cpp.md`, `lang-rust.md`). An addendum section **realizes** an item concretely; it never **bounds** the item: its triggers and N/A criteria scope only that realization, and a diff outside the realization's constructs remains subject to the base item's conditions.
+
+## Lenses
+
+Each item also carries a `lens:` tag in the index above. A lens is a **review angle**, not an audit lane: it groups items that a single dedicated reviewer should hold in mind at once. The four lenses — `reuse`, `simplification`, `efficiency`, `altitude` — are the angles the `quality-lenses` runner dispatches one agent per. Items belonging to no lens are tagged `lens: none` explicitly; an absent tag is a bug, not a value.
+
+Lenses and lanes are orthogonal and answer different questions. The lane says *which context can judge this item* (`done-check`'s fresh-subagent vs main-context split). The lens says *which reviewer should be obsessing over it* (`quality-lenses`' parallel dispatch). An item can be mechanical and altitude, or contextual and reuse; neither tag constrains the other.
+
+As with lanes, this index is the single source of truth for lens membership. Runners derive their lens groups by reading it — never by hardcoding a slug-to-lens table.
+
+A lens tag names an item's **dominant** angle; it is not an exhaustive claim about the item. A multi-concern item can exceed its tag. `public-api-surface` is tagged `altitude` for its Concern A — tighten the producer rather than layering defensive transformation on the consumer — while its Concern B, parallel-implementation surface asymmetry, is a symmetry question no single lens covers. `completion-hygiene` is tagged `simplification` for its dead-code and debug-artifact clause, not for the lint and build-hygiene bulk of the item. When an uncovered concern starts mattering more than the tag it hides behind, split the item rather than widening the tag.
+
+`quality-lenses` carries a short framing paragraph per lens. That framing is a **derived surface**, not an independent rule: it compresses the tagged items' content into the angle one agent should hold. It is the only place outside this directory where item content is restated, and it is deliberate — an agent needs the angle before it reads the items. Treat it as paired with the item bodies: when you change what an item means, re-read the framing for its lens and update it in the same change, the way you would any other paired artifact.

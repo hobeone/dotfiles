@@ -23,14 +23,16 @@ The pipeline crosses a **user-controlled merge gate** (Phase 3a → 3b): the use
 
 Done-check runs **before** any commit.
 
-## Phase 0.5: Claude code-review gate
+## Phase 0.5: Local review gate (correctness + quality)
 
 Runs after the done-check loop and **before anything is committed**. If a small/trivial fix was already committed before this gate was reached (e.g. a single-file, few-line change), do not uncommit to comply — run this gate against `git show <sha>` / the last commit's diff instead, and fold any resulting fix into a new commit rather than amending.
 
 1. `/code-review` cannot be invoked programmatically from within a pipeline skill (`disable-model-invocation` — the Skill tool always rejects it). Use the `pr-review-toolkit:code-reviewer` agent instead, at an effort matching `medium` (raise to a more thorough pass for large or risky diffs; keep the chosen effort fixed across this PR's iterations). Do not attempt `Skill: code-review` first — it will always fail and the failure carries no new information.
-2. Triage the output — classify each finding under the `finding-triage` SSOT dispositions.
-3. If actionable findings exist: fix, run `/done-check` in delta mode, then re-run `/code-review` at the same effort (fresh, full review — no bias from the previous iteration). If the same conceptual topic recurs across 2+ iterations, stop and follow the escalation order in Rules.
-4. Repeat until no actionable findings remain.
+2. In the same round that dispatches the correctness reviewer, run `Skill: quality-lenses` in `diff` mode. Unlike `/code-review`, `quality-lenses` **is** model-invocable — invoke the skill directly, no agent substitution. Its lens agents and the correctness reviewer are independent and run concurrently; one dispatch, one triage table, one loop.
+3. Triage the combined output — classify each finding under the `finding-triage` SSOT dispositions, and record each finding's **provenance**: the correctness reviewer, or which lens. Provenance is not bookkeeping. The sentence below this list — that every later reviewer finding is by construction a penetration of this gate — is a claim about *correctness* coverage. Quality findings carry no such implication, and a CodeRabbit nit about naming is not evidence this gate leaked.
+4. Quality findings are **never blockers**. An actionable one is fixed like any other; anything else closes as a recorded deferral through `finding-triage`'s normal path. Do not hold the pipeline for a taste disagreement, and do not re-dispatch the lens pass inside one iteration hoping for a softer answer — the next iteration re-runs it as part of the full gate (item 5).
+5. If actionable findings exist: fix, run `/done-check` in delta mode, then re-run the full gate at the same effort — the correctness reviewer and `Skill: quality-lenses` in `diff` mode, dispatched together as in items 1–2 (fresh, full review — no bias from the previous iteration). If the same conceptual topic recurs across 2+ iterations, stop and follow the escalation order in Rules.
+6. Repeat until no actionable findings remain.
 
 From here on, every reviewer finding is by construction a penetration of this gate — note that provenance in each triage presentation.
 
@@ -117,6 +119,8 @@ Runs only after the user has merged.
   2. After each fix, run `/done-check` in delta mode (not just `/pr-review`'s own quality-gate check) before the commit.
   3. Route the commit through `/stage-commit-push`, not `/pr-review`'s own generic "commit with a message referencing feedback addressed" step — same discipline, this pipeline's specific mechanism. This is always a NEW commit, never `git commit --amend` (see Rules) — confirm this explicitly before invoking `/stage-commit-push`, do not rely on remembering a general policy.
   4. Preserve actionable topic classifications for the next iteration's oscillation check, and re-poll CodeRabbit (Phase 1 step 6, still best-effort/non-blocking) before the next `/pr-review remote` pass.
+
+- **Lens findings and `done-check` overlap deliberately.** The lens runner and `done-check` read the same `quality-list` items; they differ in depth and moment, not in rule set. `done-check` applies every item as a checklist row on every pass; `quality-lenses` gives one agent per lens the time to go read the surrounding code, and within this pipeline runs only at this gate and the plan gate. When both surface the same thing, triage it once — the duplicate is confirmation, not a second finding. Do not "fix" the overlap by removing items from either runner.
 
 - **Never skip done-check, including in fix loops.** Every fix commit is itself a diff that can introduce new drift — especially `completion-hygiene` and `paired-artifact-drift`.
 

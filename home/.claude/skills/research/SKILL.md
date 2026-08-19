@@ -240,14 +240,18 @@ After Step 3 produces a plan and before Step 4 collects user approval:
 
    If run: dispatch a fresh-context subagent (no access to this conversation) with the plan body, the issue/task text, and instructions to look for (a) implementation soundness given the plan's own stated assumptions, and (b) whether those assumptions themselves actually hold — it should re-derive or spot-check at least one non-trivial claim rather than taking the plan's word for it.
 
+   In the same review round, run `Skill: quality-lenses` in `plan` mode with the plan body as its target. Its lens agents and the soundness reviewer above are independent and run concurrently — one message, not two rounds. The lens pass asks a different question than the soundness reviewer does: not "is this plan correct?" but "is this plan bigger, more duplicative, or shallower than it needs to be?". It returns findings only; it patches nothing.
+
 2. **If review runs**: triage the findings.
 
    - **Implementation concerns** (algorithm details, error handling, test coverage gaps, naming): patch the plan in place and proceed to the loop gate below.
+   - **Lens findings — `reuse`, `simplification`, `efficiency`**: implementation concerns. Patch the plan in place. A reuse finding that names an existing helper deletes a planned component outright; prefer that over planning to write it and simplify later.
+   - **Lens findings — `altitude`**: a finding that the plan solves the problem at the wrong depth is a **premise concern**, not an implementation one — return to Step 1 with the rest of the premise concerns. Do not patch depth in place. A plan that layers a special case on shared infrastructure is not repaired by editing the special case; the hypothesis about where the problem lives is what is wrong. This is the case the lens pass exists to catch, and patching it in place is how it gets missed.
    - **Premise concerns** (the assumed root cause may be wrong, the described mechanism doesn't match how the code actually fails, a fixture's claimed properties may not hold, an "obvious" derivation is unproven): **return to Step 1**. Do not patch the plan in place — the hypothesis set itself is suspect, and incremental edits perpetuate the bad premise across iterations.
 
    Distinguishing the two: an implementation concern asks "given the plan's assumptions, is the proposed approach sound?"; a premise concern asks "are the plan's assumptions actually true?". If the reviewer would have given a different answer with empirical evidence in hand, it's a premise concern.
 
-3. **Loop gate**: after patching, re-run the review pass fresh (no bias from the previous iteration's findings). Exit the loop when a pass raises no new concerns. Cap: 3 iterations within the same premise. If the cap is reached, or a pass keeps raising the same unresolved concern, surface the outstanding findings to the user and ask whether to proceed as-is, patch further manually, or escalate. Premise concerns return to Step 1 and reset the counter — iteration count is per-premise, not lifetime.
+3. **Loop gate**: after patching, re-run both passes fresh — the soundness reviewer and `Skill: quality-lenses` in `plan` mode, dispatched together as in item 1 (no bias from the previous iteration's findings). Exit the loop when a pass raises no new concerns. Cap: 3 iterations within the same premise. If the cap is reached, or a pass keeps raising the same unresolved concern, surface the outstanding findings to the user and ask whether to proceed as-is, patch further manually, or escalate. Premise concerns return to Step 1 and reset the counter — iteration count is per-premise, not lifetime.
 
 4. **The plan that exits this step is the contract.** Step 5 will post that plan once. Revisions happen here, before posting; there is no "post then revise" loop.
 
