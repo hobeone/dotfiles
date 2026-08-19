@@ -7,7 +7,7 @@ description: Full review pipeline from local changes through PR, review/fix-loop
 
 Orchestrate the full flow from local changes through PR review, user merge, and umbrella drift join. This skill ties together several sub-skills — invoke each by name.
 
-Claude's own `/code-review` pass (Phase 0.5, pre-commit) is one reviewer. Post-push, CodeRabbit is checked but is **not** a merge gate — the account's rate limits hit often enough that blocking on it isn't worth the friction. The user's own review, or a delegated adversarial-review agent posting comments to the PR under the user's own GitHub identity, is equally valid input; `/pr-review remote` is the single mechanism that fetches and addresses feedback from either or both sources, since its comment-fetch already covers CodeRabbit's structured review (inline comments + review summary) and plain top-level PR comments (where a locally-run or delegated review lands) alike.
+Claude's own `/code-review` pass (Phase 0.5, pre-push) is one reviewer. Post-push, CodeRabbit is checked but is **not** a merge gate — the account's rate limits hit often enough that blocking on it isn't worth the friction. The user's own review, or a delegated adversarial-review agent posting comments to the PR under the user's own GitHub identity, is equally valid input; `/pr-review remote` is the single mechanism that fetches and addresses feedback from either or both sources, since its comment-fetch already covers CodeRabbit's structured review (inline comments + review summary) and plain top-level PR comments (where a locally-run or delegated review lands) alike.
 
 The pipeline crosses a **user-controlled merge gate** (Phase 3a → 3b): the user, not Claude, merges the PR. Phases before the gate run on the PR branch; phases after run on `main` and tracking issues. Claude pauses at the `## ← user merges PR ←` section.
 
@@ -21,11 +21,18 @@ The pipeline crosses a **user-controlled merge gate** (Phase 3a → 3b): the use
    - Re-triage
 4. Repeat until every row is `✅`, `⊘ N/A`, or `⚠` closed as a recorded deferral per done-check step 5.
 
-Done-check runs **before** any commit.
+Done-check runs **before anything is pushed** — the same contract Phase 0.5 states, widened for the
+same reason and at the same time. `/work3` reaches this pipeline after
+`subagent-driven-development` has already committed every task, so a literal pre-*commit* reading is
+unsatisfiable there. What the loop actually protects is *before anyone else sees the change*, and an
+unpushed branch satisfies that whether or not it carries commits. `/work2` is unaffected — its Phase A
+still does not commit, so the loop still runs pre-commit there in practice. Do not narrow this back
+to "before any commit": that wording was removed on purpose, and restoring it re-breaks `/work3` in
+exactly the way Phase 0.5's old wording did.
 
 ## Phase 0.5: Local review gate (correctness + quality)
 
-Runs after the done-check loop and **before anything is committed**. If a small/trivial fix was already committed before this gate was reached (e.g. a single-file, few-line change), do not uncommit to comply — run this gate against `git show <sha>` / the last commit's diff instead, and fold any resulting fix into a new commit rather than amending.
+Runs after the done-check loop and **before anything is pushed**. The gate's purpose is *before anyone else sees the change*, which commits to an unpushed branch satisfy. This wording was widened deliberately: `/work3` runs `subagent-driven-development`, which commits after every task, and the earlier pre-commit wording was incompatible with it. `/work2` is unaffected — its Phase A still does not commit, so the gate still runs pre-commit there in practice. If a small/trivial fix was already committed before this gate was reached (e.g. a single-file, few-line change), do not uncommit to comply — run this gate against `git show <sha>` / the last commit's diff instead, and fold any resulting fix into a new commit rather than amending.
 
 1. `/code-review` cannot be invoked programmatically from within a pipeline skill (`disable-model-invocation` — the Skill tool always rejects it). Use the `pr-review-toolkit:code-reviewer` agent instead, at an effort matching `medium` (raise to a more thorough pass for large or risky diffs; keep the chosen effort fixed across this PR's iterations). Do not attempt `Skill: code-review` first — it will always fail and the failure carries no new information.
 2. In the same round that dispatches the correctness reviewer, run `Skill: quality-lenses` in `diff` mode. Unlike `/code-review`, `quality-lenses` **is** model-invocable — invoke the skill directly, no agent substitution. Its lens agents and the correctness reviewer are independent and run concurrently; one dispatch, one triage table, one loop.
