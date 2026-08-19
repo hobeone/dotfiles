@@ -21,7 +21,14 @@ The pipeline crosses a **user-controlled merge gate** (Phase 3a → 3b): the use
    - Re-triage
 4. Repeat until every row is `✅`, `⊘ N/A`, or `⚠` closed as a recorded deferral per done-check step 5.
 
-Done-check runs **before** any commit.
+Done-check runs **before anything is pushed** — the same contract Phase 0.5 states, widened for the
+same reason and at the same time. `/work3` reaches this pipeline after
+`subagent-driven-development` has already committed every task, so a literal pre-*commit* reading is
+unsatisfiable there. What the loop actually protects is *before anyone else sees the change*, and an
+unpushed branch satisfies that whether or not it carries commits. `/work2` is unaffected — its Phase A
+still does not commit, so the loop still runs pre-commit there in practice. Do not narrow this back
+to "before any commit": that wording was removed on purpose, and restoring it re-breaks `/work3` in
+exactly the way Phase 0.5's old wording did.
 
 ## Phase 0.5: Local review gate (correctness + quality)
 

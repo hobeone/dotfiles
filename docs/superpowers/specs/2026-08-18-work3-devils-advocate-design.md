@@ -70,7 +70,24 @@ invoking it. `/work3` is the correction.
 | | Phases | Temperament |
 |---|---|---|
 | **Before the line** | 0, A0, A0b, A1, A2 | Conversational. Clarifying questions asked one at a time. Sketches presented for discussion, not just selection. The user may interrogate, combine, reject, or ask for a fourth option. Nothing is time-boxed. |
-| **After the line** | A3, B, C, D | Fire-and-forget. No check-ins between tasks; ambiguity is settled by `Ruling:` and recorded. One gate (merge) and the named stop conditions. |
+| **After the line** | A3, B, C, D | Fire-and-forget on *design*. No check-ins between tasks; ambiguity is settled by `Ruling:` and recorded. Stops are review-driven only — enumerated below. |
+
+The precise claim is not "no stops after the line" — Phases B and C are `/work2`'s, unchanged, and
+`/work2` stops in them. The claim is that every post-boundary stop is **review-driven** (a reviewer
+found something, or a PR body needs sign-off) and none is **design-driven** (no check-in happens
+merely because a phase ended). Exhaustively, the post-boundary stops are:
+
+1. **Gate 3 — the merge decision.** Never automatic.
+2. **The PR-body approval** in `/file-pullreq` gate mode, reached through
+   `review-pipeline-coderabbit` Phase 1. Auto-approving a body would contradict `gh-body-check`
+   discipline, so this stop is kept deliberately.
+3. **Per-finding triage** when `/pr-review remote` returns feedback, in Phase B's fix loop and in
+   Phase C. No feedback, no stop.
+4. **The named stop conditions** — Phase A2's three-round non-convergence, Phase A3's SDD stop
+   condition, and the command's error rows.
+
+Keeping this distinction sharp is what still separates `/work3` from `/work2`: both stop for
+reviewers, only `/work2` stops for the workflow's own bookkeeping.
 
 This is the design's central bet: **the expensive mistakes are made before the first line of code, and
 the expensive interruptions happen after it.** Spending human attention on premise and approach is
@@ -166,7 +183,10 @@ changes what happens after the plan is approved.
 
 `home/.claude/skills/solution-space/SKILL.md`.
 
-**Input:** the problem statement from `premise-check`.
+**Input:** both Step 1 paragraphs from `premise-check`, distributed asymmetrically — `as-asked` is
+the only author that sees the Proposed-solution paragraph (it is costing out that specific
+proposal); `minimal` and `structural` see the Problem paragraph alone, because their mandates are
+only worth anything unanchored from the issue's proposal.
 
 Invoke `dispatching-parallel-agents`. Three fresh-context authors, one message, none seeing the
 others, each under a **mandated bias**:
@@ -243,7 +263,8 @@ already applied, so the conversation is about whether the design is right rather
 document is tidy. As at Gate 1, this is a discussion — sending the plan back for reshaping is a normal
 outcome.
 
-**This gate is the autonomy boundary.** Everything after it runs without check-ins.
+**This gate is the autonomy boundary.** Everything after it is review-driven, never design-driven —
+see *The autonomy boundary* above for the exhaustive list of post-boundary stops.
 
 ### Phase A3 — Implementation
 
@@ -278,7 +299,8 @@ for the amendment below, plus two placements:
 - **Phase C's wait and Gate 3 are one checkpoint, not two.** `/work2` stops the turn while waiting for
   the user's own PR review and asks the merge question afterwards. `/work3` keeps that single stop:
   when `/pr-review remote` reports no unaddressed feedback, the merge question is asked in the same
-  breath. This is what keeps the post-boundary half of the workflow to a single gate.
+  breath. That removes a design-driven stop; it does not make Gate 3 the only post-boundary stop
+  (see *The autonomy boundary*).
 - **`finishing-a-development-branch` owns Phase D's integration decision and cleanup.** `/work3`
   always runs in a worktree, and that skill's cleanup is provenance-based — it knows which worktrees it
   may remove and which are externally managed. Its Step 1 green-suite requirement composes with the
@@ -290,13 +312,15 @@ failure or unexpected behaviour, before any fix is proposed. It is not on the ha
 
 ## Amendment to an existing skill
 
-**`review-pipeline-coderabbit` Phase 0.5 — "before anything is committed" becomes "before anything is
+**`review-pipeline-coderabbit` Phases 0 and 0.5 — "before any commit" becomes "before anything is
 pushed."**
 
-SDD commits after every task; the current contract says the local review gate runs before the first
-commit. These are incompatible. The gate's actual purpose is *before anyone else sees the change*, and
-commits to an unpushed worktree branch satisfy that. The phase text is amended to say so, and the
-amendment is noted in the skill so a future reader does not "restore" the old wording.
+SDD commits after every task; the old contract said the local gates run before the first commit.
+These are incompatible. The gates' actual purpose is *before anyone else sees the change*, and
+commits to an unpushed worktree branch satisfy that. Both phases carry the pre-commit wording and
+**both** are amended — Phase 0's done-check loop closes with the same sentence Phase 0.5 opens with,
+and fixing only one leaves the defect one section higher. The amendment is noted in the skill at both
+sites so a future reader does not "restore" the old wording.
 
 `/work2` is unaffected — its Phase A still does not commit, so the gate still runs pre-commit there in
 practice. The contract is widened, not narrowed.
@@ -318,7 +342,7 @@ adjudicated before it can do harm.
 | `home/.claude/skills/premise-check/SKILL.md` | New |
 | `home/.claude/skills/solution-space/SKILL.md` | New |
 | `home/.claude/commands/work3.md` | New |
-| `home/.claude/skills/review-pipeline-coderabbit/SKILL.md` | Amend Phase 0.5 commit → push contract |
+| `home/.claude/skills/review-pipeline-coderabbit/SKILL.md` | Amend Phases 0 and 0.5 commit → push contract |
 | `home/.claude/CLAUDE.md` | One line in PR Workflow naming `/work3` and when to prefer it |
 
 `~/.claude/skills/` holds one symlink **per skill**, not one directory symlink — each new skill
