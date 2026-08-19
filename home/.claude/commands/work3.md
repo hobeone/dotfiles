@@ -166,3 +166,105 @@ document is tidy. As at Gate 1, sending the plan back for reshaping is a normal 
 failure.
 
 **Everything after this gate runs without check-ins.**
+
+---
+
+## Phase A3 — Implementation
+
+### Step 0 — Preflight and task brief
+
+Run `todo-check` once over the plan. Gather its output **plus** `implement`'s recall steps —
+`implement/SKILL.md` Steps 3.0.1 (pre-commit hook recall), 3.0.2 (memory recall), and 3.0.3
+(project-documentation recall), referenced by number, not copied — into a **shared task-brief
+preamble** handed to every SDD implementer.
+
+SDD implementers receive fresh context, so anything not written into the brief is lost. This is
+the single most likely regression in this design, and the reason the preamble is gathered once
+here rather than left to each implementer to rediscover.
+
+### Step 1 — `subagent-driven-development`
+
+Invoke `subagent-driven-development` per its own process. Per task: a fresh implementer working
+under `test-driven-development`'s iron law, followed by `requesting-code-review`. No check-ins
+between tasks.
+
+**Discovery handling:**
+
+| Discovery | Handling |
+|---|---|
+| Inside the chosen direction's scope | `Ruling: <decision> — <why> — <cost if wrong>` in the ledger; continue. |
+| Invalidates the chosen direction | **Stop.** |
+
+The stop maps onto `subagent-driven-development`'s existing fourth stop condition ("a plan so
+broken that every path forward is a guess") and is **passed as controller instruction — the
+vendored skill is not edited.**
+
+`systematic-debugging` is invoked whenever an implementer or its reviewer hits a test failure or
+unexpected behaviour, before any fix is proposed. It is not on the happy path.
+
+SDD's per-task commits go through `stage-commit-push` like every other commit in these pipelines.
+
+### Step 2 — Whole-branch review
+
+Per `subagent-driven-development`'s own Final Review.
+
+### Step 3 — Completion gate
+
+`verification-before-completion` runs *before* `done-check` is allowed to report: evidence in the
+same message as the claim, or the claim is not made.
+
+## Phase B — Review pipeline
+
+Run `review-pipeline-coderabbit` to its merge gate. Two variances, carried over from `/work2`
+verbatim in substance:
+
+- **CodeRabbit is best-effort and never a stop condition.** If it never responds (rate limit, app
+  not installed, whatever), that's expected, not a stop condition.
+- **The PR-description delta applies only to umbrella-tracked sub-issues** (`Parent: #N` in the
+  issue body). Most issues don't use that convention, so this self-skips — expected, not a bug.
+
+## Phase C — Your review
+
+Run `/pr-review remote` feeding `receiving-code-review`. **Phase C's wait and Gate 3 are one
+checkpoint, not two**: when `/pr-review remote` reports no unaddressed feedback, the merge
+question is asked in the same breath. This is what keeps the post-boundary half of the workflow
+to a single gate.
+
+## GATE 3 — Merge decision
+
+Never automatic. Ask via `AskUserQuestion`: **Merge now** / **Wait**. An approved merge still
+waits for green CI and does not re-prompt once green.
+
+## Phase D — Land and reflect
+
+`finishing-a-development-branch` owns the integration decision and worktree cleanup. Its cleanup
+is provenance-based, which matters here because `/work3` always runs in a worktree. Its
+three-option menu is constrained to the pipeline's merge gate: never automatic.
+
+Then run `summarize-work`, then `improve-workflow`.
+
+---
+
+## Review & Verification Model
+
+Carries `/work2`'s six Opus escalation triggers by reference (persistence, concurrency,
+durability, cross-package interface, security, blast radius), plus one addition: **the
+`premise-check` auditor is a verification role** and escalates under the same triggers, because a
+false rejection there is the most expensive mistake this workflow can make. `solution-space`
+authors stay at implementation tier — they are generative and their output is adjudicated before
+it can do harm.
+
+## Prerequisites
+
+Same as `/work2`: `gh-post` present (`command -v gh-post`, stop and print the install command if
+absent); CodeRabbit app assumed installed, degraded to best-effort per Phase B above.
+
+## Error Handling
+
+| Error | Response |
+|-------|----------|
+| Issue not found | "Issue #N not found. Check the number." |
+| Active `[work3:*]` session exists | "Active work3 session exists. Complete or clear first." |
+| `gh-post` missing | Stop, print the `uv tool install` command from Prerequisites. |
+| Plan-review loop fails to converge in three rounds (Phase A2) | Escalate to the user — the automatic loop stops itself; do not force a fourth round. |
+| SDD stop condition fires (Phase A3) | Stop and present the ledger's `Ruling:` entries and the blocking discovery to the user, per `subagent-driven-development`'s own Finish step. |
