@@ -26,13 +26,34 @@ existing review apparatus.
 Block on incomplete `[work3:*]` todos (independent of `[work:*]` and `[work2:*]` — the three
 commands' session checks do not collide with each other).
 
-`/work3` has **no `--attach` mode.** This is deliberate, not an oversight: `/work2`'s `--attach`
-infers completed phases from PR state (has a review landed, has done-check evidence been posted).
-That inference is fine for `/work2`'s single conversational checkpoint, but `/work3` has two
-conversational gates before any code exists, and inferring "premise already validated" or
-"direction already approved" from PR state would let a resumed session skip the exact
-conversation the autonomy boundary depends on. The design spec does not cover attach/resume for
-this command, so it stays out of scope until a spec change adds it.
+`/work3` has **no `--attach` mode**, and this is deliberate: `/work2`'s `--attach` infers completed
+phases from PR state (has a review landed, has done-check evidence been posted). That inference is
+fine for `/work2`'s single conversational checkpoint, but `/work3`'s two gates close *before any PR
+exists*, so there is nothing for PR state to infer from — and guessing would skip the exact
+conversation the autonomy boundary depends on.
+
+**`/work3 --resume <issue>` reads gate state instead of inferring it.** The distinction is the whole
+design: a gate is resumable only when it left a record saying so.
+
+The record already exists in substance. `premise-check`'s evidence and `solution-space`'s
+three-sketch comparison are both posted to the issue as they are produced, which is where the
+settled direction lives. What was missing is a declaration that a gate *closed*, so:
+
+- **Gate 1**, on closing, posts `<!-- work3:gate1-settled -->` followed by one sentence naming the
+  direction chosen and the verdict it rests on.
+- **Gate 2**, on closing, posts `<!-- work3:gate2-settled -->` followed by one sentence naming the
+  approved plan and how it was authorized (an explicit approval, or the instruction that satisfied
+  the gate under the three-condition rule).
+
+`--resume` reads the `[work3:*]` todos and those markers. A gate whose marker is present and names
+its outcome is resumed; a gate whose marker is **absent, ambiguous, or contradicted by later
+conversation on the issue is re-run in full, never inferred**. Re-running a settled gate costs one
+conversation. Skipping an unsettled one costs the guarantee the command exists to provide, so the
+asymmetry is deliberate and should stay.
+
+This matters more here than the phrasing suggests: `/work3` targets exactly the work that does not
+fit one sitting, and a run can spend a long stretch on premise and solution-space before a single
+line of code exists. Losing that to a context boundary is the failure this prevents.
 
 ### 2. Parse input
 
@@ -140,6 +161,12 @@ state. There is no iteration cap and no time-box on this phase.
 `AskUserQuestion` is used only to **close** the conversation once the options are settled and
 mutually exclusive — never to open it.
 
+**On closing, post the gate marker** to the issue: `<!-- work3:gate1-settled -->` followed by one
+sentence naming the direction chosen and the premise verdict it rests on. This is what makes the
+gate resumable (see *Check for active session*), and it is written when the decision is fresh
+rather than reconstructed later from a transcript. On the `adhoc` path it is held with the other
+artifacts and posted once the issue exists in Phase A2.
+
 ### The rejected-premise fork
 
 **When the premise verdict was `rejected`**, this fork is presented *before* the route runs (see
@@ -178,11 +205,28 @@ them open latches the guard and blocks the next `/work3` invocation.
 ## Phase A1 — Plan
 
 Invoke `writing-plans` against the chosen direction. On the `architectural` route, the plan is
-written against the committed spec document instead. The plan is saved to
-`docs/superpowers/plans/YYYY-MM-DD-<slug>.md` and committed.
+written against the committed spec document instead.
 
-Tasks must be **independently testable** — Phase A3 dispatches one implementer per task via
-`subagent-driven-development`, and a task that cannot be verified alone cannot be reviewed alone.
+Tasks must be **independently testable**. This is the property Phase A3 needs to dispatch one
+implementer per task, and it is also what makes the task count meaningful below — a plan whose
+tasks cannot be verified alone has not been decomposed, whatever its length.
+
+**Where the plan is recorded** depends on how much plan there is:
+
+- **`architectural`, or 4+ independently-testable tasks** — save to
+  `docs/superpowers/plans/YYYY-MM-DD-<slug>.md` and commit it, *provided the repo already has a
+  `docs/` tree*. If it does not, use whatever convention the repo does use for durable notes and
+  say which; if it has none, keep the plan in chat and carry it into the PR body, and say that too.
+- **Fewer than 4 tasks** — the plan is presented in chat at Gate 2 and carried into the PR body.
+  No file is written.
+
+Route classification informs this; the **task count decides it**. The classification is made at
+Phase A0, before the plan exists, so it cannot know how large the change turned out to be — a
+`bounded` problem can still decompose into a dozen tasks that badly want a committed plan.
+
+Inventing a directory convention a repo has never used, to hold a plan for a change smaller than
+the plan, is not a planning requirement. Skipping the file for that reason is a normal outcome and
+needs no apology; it is the size of the plan that decides, never the effort of writing it.
 
 ## Phase A2 — Plan validation
 
@@ -222,6 +266,30 @@ user's time: the conversation here is about whether the *design* is right, not w
 document is tidy. As at Gate 1, sending the plan back for reshaping is a normal outcome, not a
 failure.
 
+**A direct user instruction can satisfy this gate**, under three conditions, all required:
+
+1. The instruction names the work to be done, not merely assent to continue.
+2. The direction it authorizes is the one settled in the conversation immediately preceding it.
+3. Nothing material has changed since — no new finding, no re-scoping, no reversed decision.
+
+When all three hold, record the instruction as the gate's authorization in one sentence naming what
+it authorized, and proceed. Re-asking "may I proceed?" for a decision the user has just made *is*
+the design-driven check-in this boundary exists to remove. When any condition fails, ask.
+
+A bare "go ahead", "continue", "sounds good", or "yes" **never** satisfies a gate. Those resume
+execution; they do not grant authorization, and treating them as approval is how a gate becomes
+theatre — the user is answering the turn, not the question.
+
+This latitude covers **Gates 1 and 2 only**. Gate 3 (merge) and the PR-body approval are never
+satisfied by inference, per the post-boundary stop table below: both publish something outward, and
+an instruction given before the artifact existed cannot have approved it.
+
+**On closing, post the gate marker** to the issue: `<!-- work3:gate2-settled -->` followed by one
+sentence naming the approved plan and how it was authorized — an explicit approval, or the
+instruction that satisfied the gate under the rule above. Recording *how* matters as much as
+*that*: it is the only way a later reader, or a resumed session, can tell a decision the user made
+from one the workflow inferred.
+
 **Everything after this gate is review-driven, never design-driven.** No check-in happens merely
 because a phase ended, a task finished, or the workflow wants confirmation that it is still on
 course — that is the whole content of the boundary. Stops still occur after it, but every one of
@@ -260,9 +328,25 @@ here rather than left to each implementer to rediscover.
 
 ### Step 1 — `subagent-driven-development`
 
-Invoke `subagent-driven-development` per its own process. Per task: a fresh implementer working
-under `test-driven-development`'s iron law, followed by `requesting-code-review`. No check-ins
-between tasks.
+**Whether to dispatch implementers at all** follows the same threshold as the plan file in Phase A1:
+
+- **`architectural`, or 4+ independently-testable tasks, or a plan spanning 3+ packages** — invoke
+  `subagent-driven-development` per its own process. Per task: a fresh implementer working under
+  `test-driven-development`'s iron law, followed by `requesting-code-review`. No check-ins between
+  tasks.
+- **Below that** — implement directly in this context, still under `test-driven-development`'s iron
+  law. A task brief that costs more to write than the task costs to do is not fresh context, it is
+  transcription.
+
+Everything else in this phase runs in **both** modes: Step 0's preflight and shared brief, the
+`Ruling:` ledger, `systematic-debugging` on any failure, Step 2's whole-branch review, and Step 3's
+completion gate. The threshold governs who writes the code, not what the code must satisfy.
+
+One thing the direct mode buys that fan-out cannot: **reviewer findings that contradict each other
+have to be resolved somewhere that holds both**. Phase B dispatches several reviewers at once, by
+design, and when two of them disagree the resolution needs the user's constraints and the whole
+change in one context. Fresh implementers, one per task, each see one finding — so above the
+threshold, expect that resolution to land here in the controller rather than in a subagent.
 
 **Discovery handling:**
 

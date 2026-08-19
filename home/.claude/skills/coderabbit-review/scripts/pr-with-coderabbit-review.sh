@@ -189,6 +189,10 @@ review_skip_reason() {
 # differs, so the message is per-cause. Reads the globals $repo / $pr_number.
 print_skip_notice() {
     local reason="$1"
+    # Free-text detail for causes the script cannot enumerate — currently the
+    # commit-status description, which states its own cause and is the only
+    # place some skips are announced.
+    local detail="${2:-}"
     local trigger="  gh pr comment $pr_number --repo $repo --body \"@coderabbitai review\""
     # `${BASH_SOURCE[0]}`, not `$0`: this file is designed to be sourced (the
     # contract test sources it), and the recovery hint must print the script's own
@@ -218,6 +222,17 @@ print_skip_notice() {
             echo "won't help while the file count is unchanged: either split the PR so fewer files change (the"
             echo "push re-reviews on its own), or raise the limit (plan / .coderabbit.yaml) and trigger a fresh"
             echo "review manually — a config change does not auto-apply to an open PR — then re-poll:"
+            echo "$trigger"
+            echo "$poll_cmd"
+            ;;
+        status-skip)
+            echo "=== Review Skipped (per commit status) ==="
+            echo "CodeRabbit reported the skip in its commit-status description, which states the cause:"
+            echo "  ${detail}"
+            echo "The review did NOT run, so the terminal 'success' status is not a clean pass. A manual"
+            echo "trigger is worth attempting — it has started a real review on some repositories — but it"
+            echo "does not always take, and on a repository whose plan or settings exclude it the cause will"
+            echo "persist. Check the CodeRabbit dashboard for this repository if the nudge does nothing:"
             echo "$trigger"
             echo "$poll_cmd"
             ;;
@@ -348,9 +363,24 @@ poll_for_review() {
                     return 0
                 fi
                 # `success` + no review object is ambiguous: it is either a
-                # genuine clean pass or a NON-REVIEW skip (auto-pause, rate
-                # limit, or file-count) that still emits terminal success. Rule
-                # out every skip signature before reporting a clean pass.
+                # genuine clean pass or a NON-REVIEW skip that still emits
+                # terminal success. Rule out every skip signature before
+                # reporting a clean pass.
+                #
+                # The status description comes first, and is the stronger
+                # signal: CodeRabbit states the cause there itself, where the
+                # checks below infer it from HTML markers in bot comments. Not
+                # every skip emits a marker -- "Review skipped: manual review
+                # required for this OSS repository" emits none at all, so
+                # review_skip_reason returns "no skip found" and the run is
+                # reported as a clean pass. That is a false green on a review
+                # gate: it turns "nobody looked" into "looked and found
+                # nothing", which are opposite facts. Checking here also
+                # short-circuits paginating every comment on the common path.
+                if grep -qiE 'review skipped' <<<"$status_desc"; then
+                    print_skip_notice "status-skip" "$status_desc"
+                    return 2
+                fi
                 local skip_reason skip_rc=0
                 skip_reason=$(review_skip_reason) || skip_rc=$?
                 if [[ "$skip_rc" -eq 0 ]]; then
