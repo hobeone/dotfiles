@@ -1,8 +1,9 @@
 # Design Spec: `/work3` — Devil's Advocate
 
-A fire-and-forget workflow that takes an issue or a free-text description, **validates its premise
-before planning it**, **generates competing solutions before committing to one**, and then implements
-under the full existing review and simplification apparatus.
+A workflow that takes an issue or a free-text description, **validates its premise before planning
+it**, **generates competing solutions before committing to one**, settles both of those *in
+conversation with the user*, and then implements the agreed design fire-and-forget under the full
+existing review and simplification apparatus.
 
 `/work3` composes existing skills. It introduces two new ones and amends one; everything else is
 invoked, not restated.
@@ -25,8 +26,12 @@ invoking it. `/work3` is the correction.
 
 ## Goals
 
-- Accept an issue number, URL, or free-text description and run to a merge-ready PR with **two** human
-  gates on the common path.
+- Accept an issue number, URL, or free-text description and run to a merge-ready PR.
+- **Front-load the conversation.** Premise, approach, and design are worked out *with* the user, in
+  dialogue, not presented as a single multiple-choice question. This is where the user's judgment is
+  worth the most and where a wrong turn is cheapest to correct.
+- **Autonomy after the plan is approved.** Once the design is settled, run to a merge-ready PR without
+  further check-ins. Exactly one more gate — the merge decision — plus the named stop conditions.
 - Prove or disprove the problem before planning a solution to it.
 - Force at least one genuinely smaller alternative onto the table before implementation begins.
 - Retain every quality gate `/work2` has today: `done-check`, `quality-lenses`, `finding-triage`'s
@@ -58,6 +63,22 @@ invoking it. `/work3` is the correction.
 | Test discipline | `test-driven-development`, iron law, inside every implementer | The single largest thing `/work2` lacks. |
 | Plan authoring | `writing-plans` | SDD requires bite-sized independently-testable tasks. `research`'s prose plan body does not decompose that way. |
 
+## The autonomy boundary
+
+`/work3` is deliberately **two workflows joined at one line**, and the line is plan approval:
+
+| | Phases | Temperament |
+|---|---|---|
+| **Before the line** | 0, A0, A0b, A1, A2 | Conversational. Clarifying questions asked one at a time. Sketches presented for discussion, not just selection. The user may interrogate, combine, reject, or ask for a fourth option. Nothing is time-boxed. |
+| **After the line** | A3, B, C, D | Fire-and-forget. No check-ins between tasks; ambiguity is settled by `Ruling:` and recorded. One gate (merge) and the named stop conditions. |
+
+This is the design's central bet: **the expensive mistakes are made before the first line of code, and
+the expensive interruptions happen after it.** Spending human attention on premise and approach is
+cheap and high-leverage; spending it on task 7 of 12 is neither.
+
+An earlier draft of this spec collapsed the pre-line phases into a single `AskUserQuestion` in pursuit
+of a low gate count. That was wrong. Gate *count* is not the objective — gate *placement* is.
+
 ## Architecture
 
 ```
@@ -66,6 +87,7 @@ Phase A0  premise-check                                  [NEW]
             └─ GATE 1 — premise verdict + direction
 Phase A1  writing-plans  (or brainstorming's spec first) [superpowers]
 Phase A2  plan validation — research Steps 3.4, 3.5, 5   [by pointer]
+            └─ GATE 2 — plan approval   ◀── autonomy boundary
 Phase A3  subagent-driven-development                    [superpowers]
             per task: test-driven-development
                       requesting-code-review
@@ -73,7 +95,7 @@ Phase A3  subagent-driven-development                    [superpowers]
           verification-before-completion → done-check
 Phase B   review-pipeline-coderabbit                     [existing]
 Phase C   /pr-review remote → receiving-code-review
-            └─ GATE 2 — merge decision
+            └─ GATE 3 — merge decision
 Phase D   finishing-a-development-branch → summarize-work + improve-workflow
 ```
 
@@ -133,11 +155,12 @@ and the cost of a false rejection here is higher than the cost of a false accept
 | Verdict | Path |
 |---|---|
 | **spike** | Run the probe as cheaply as correctness allows. Report a recommendation. Anything built is labelled throwaway. **Terminates here** — turning a spike's answer into work is a new `/work3` invocation. |
-| **bounded** | Run `solution-space`. One gate. |
+| **bounded** | Run `brainstorming`'s clarifying-question step first — one question per message, only the ones that change the answer — then `solution-space`. |
 | **architectural** | Run `brainstorming`'s full architectural path — clarifying questions, 2–3 approaches, sectioned design with per-section approval, spec document, spec self-review, user review gate. Skip `solution-space`; brainstorming supplies the alternatives natively. |
 
-Gate count therefore varies by path, deliberately. Fire-and-forget applies to bounded work.
-Architectural work earns its gates.
+Gate count therefore varies by path, deliberately, and all of the variance sits *before* the autonomy
+boundary. Architectural work earns extra design conversation; bounded work gets a shorter one. Neither
+changes what happens after the plan is approved.
 
 ### Phase A0b — `solution-space` (new skill, bounded path only)
 
@@ -173,20 +196,25 @@ recorded as rejected-with-reason. The full comparison is posted to the issue —
 
 ### Gate 1 — Direction approval
 
-One `AskUserQuestion`. Its shape depends on the premise verdict.
+**A conversation, not a multiple-choice question.** Present the premise verdict and the three sketches
+in chat — each with its complexity numbers, what it does not solve, and its own self-objection — with a
+recommendation and the reasoning behind it. Then stop and discuss.
 
-**Premise holds or holds-with-correction:** the three sketches with their complexity numbers,
-recommendation first, plus "none of these".
+The user may interrogate a sketch, ask for a fourth, ask two to be combined, reject the framing of the
+problem statement itself, or send the whole thing back. Re-running `solution-space` with an added
+constraint is a normal outcome here, not a failure. There is no iteration cap and no time-box; this
+phase ends when the user says which direction to take, not when a counter runs out.
 
-**Premise rejected:**
+`AskUserQuestion` is used only to *close* the conversation once the options are genuinely settled and
+mutually exclusive — never to open it.
+
+**When the premise was rejected**, the conversation carries the fork:
 
 - **Implement what was asked** — proceed with the `as-asked` direction. The auditor's evidence is
   posted to the issue as an accepted, acknowledged risk.
 - **Implement the real fix** — post the counter-proposal and its evidence to the issue, then re-run
   `solution-space` against the corrected problem statement and present its result.
 - **Neither — stop.**
-
-This is the only gate before the merge gate on the bounded path.
 
 ### Phase A1 — Plan
 
@@ -207,8 +235,15 @@ pointer discipline `quality-lenses` uses for `done-check` Step 1.
 Step 3.5 is demoted from a human gate to an **automatic loop**: the soundness reviewer and
 `quality-lenses` in `plan` mode run together, findings are applied, and the pass repeats until clean or
 three rounds elapse. Altitude findings route back to the chosen direction rather than to the user.
-**Three rounds without convergence escalates to the user** — the only unplanned stop on the bounded
-path.
+**Three rounds without convergence escalates to the user.**
+
+**Gate 2 — plan approval.** The cleaned plan is then presented to the user for approval. Running the
+automatic loop *first* is what makes this gate worth the user's time: the mechanical findings are
+already applied, so the conversation is about whether the design is right rather than whether the
+document is tidy. As at Gate 1, this is a discussion — sending the plan back for reshaping is a normal
+outcome.
+
+**This gate is the autonomy boundary.** Everything after it runs without check-ins.
 
 ### Phase A3 — Implementation
 
@@ -240,10 +275,10 @@ report. Evidence in the same message as the claim, or the claim is not made.
 `receiving-code-review`, then `summarize-work` and `improve-workflow`. Unchanged from `/work2` except
 for the amendment below, plus two placements:
 
-- **Phase C's wait and Gate 2 are one checkpoint, not two.** `/work2` stops the turn while waiting for
+- **Phase C's wait and Gate 3 are one checkpoint, not two.** `/work2` stops the turn while waiting for
   the user's own PR review and asks the merge question afterwards. `/work3` keeps that single stop:
   when `/pr-review remote` reports no unaddressed feedback, the merge question is asked in the same
-  breath. This is what keeps the bounded path at two gates.
+  breath. This is what keeps the post-boundary half of the workflow to a single gate.
 - **`finishing-a-development-branch` owns Phase D's integration decision and cleanup.** `/work3`
   always runs in a worktree, and that skill's cleanup is provenance-based — it knows which worktrees it
   may remove and which are externally managed. Its Step 1 green-suite requirement composes with the
@@ -295,7 +330,7 @@ directory needs its own symlink created, or it will not resolve.
 |---|---|
 | Adjudication bias — main context wrote the problem statement and will favour its own reading. | Authors return their own strongest self-objection; all three sketches are posted to the issue where the user sees what was rejected and why. |
 | Auditor false-rejects a real problem. | Asymmetric default (`holds` on failure to falsify); the verdict is a gate branch, never an auto-action; Opus escalation on the six triggers. |
-| Ceremony on trivial issues. | The classification short-circuit: `spike` terminates at a report, `bounded` runs one gate. |
+| Ceremony on trivial issues. | The classification short-circuit: `spike` terminates at a report and never reaches planning; `bounded` skips brainstorming's sectioned-design and spec-document steps entirely. |
 | Task-brief regression — SDD implementers lose `implement`'s recall steps. | Named explicitly as Phase A3 Step 0; the shared preamble is a required artifact, and its absence is a verification-plan check. |
 | SDD's per-task commits interact badly with `stage-commit-push`'s conventional-commit discipline. | SDD commits go through `stage-commit-push` like every other commit in these pipelines. |
 | Two new skills plus an engine swap is a large surface for prompt documents with no test runner. | Verification plan below; dogfood on a real issue before `/work3` is recommended for anything. |
@@ -311,7 +346,9 @@ These are prompt documents; there is no test runner. Verification is:
    restating them. Confirm no reachability-check text is duplicated.
 3. **No vendored edits.** `git status` in the Superpowers plugin cache is clean after a full run.
 4. **Dogfood, bounded path.** Run `/work3` on a real bounded issue. Confirm: three sketches reach
-   Gate 1 with complexity numbers; exactly two human gates fire; the task-brief preamble exists and
+   Gate 1 as a discussion rather than a bare multiple-choice prompt, with complexity numbers and
+   self-objections shown; Gates 2 and 3 fire and no further check-in occurs between them; the
+   task-brief preamble exists and
    carries the recall steps; `done-check` reports only after `verification-before-completion` has run.
 5. **Dogfood, rejection path.** Run `/work3` on an issue whose premise is known to be wrong. Confirm
    the fork appears at Gate 1 with both branches, and that choosing "implement the real fix" posts the
