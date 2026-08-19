@@ -121,6 +121,9 @@ After significant work: share what caused friction, where you were redirected (i
 ## PR Workflow
 
 Use `/work <issue-number>` for guided development. `/work --attach` to join an existing PR.
+`/work3 <issue-number>` when the issue's premise is worth testing before you plan a solution to it —
+it validates the premise, argues three candidate solutions with you, then implements the agreed one
+without further check-ins. `/work2` remains the choice when the approach is already settled.
 
 - **Before pushing**: `pr-review-toolkit:review-pr` on the local diff, update docs if needed
 - **After push**: `/pr-create` (or just push) → `/watch-ci` → CI completes → `code-review:code-review` on the open PR
