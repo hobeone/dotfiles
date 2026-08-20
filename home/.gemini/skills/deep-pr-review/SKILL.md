@@ -1,6 +1,6 @@
 ---
 name: deep-pr-review
-description: Use when asked to deeply review a pull request, run a CodeRabbit-style review, review a diff before merge, or produce severity-ranked PR findings. Runs a 10-angle recall-biased review and posts findings as a GitHub review in CodeRabbit's comment format.
+description: Use when asked to deeply review a pull request, run a CodeRabbit-style review, review a diff before merge, or produce severity-ranked PR findings. Runs a 12-angle recall-biased review and posts findings as a GitHub review in CodeRabbit's comment format.
 ---
 
 # Deep PR Review
@@ -14,7 +14,7 @@ The finding methodology is ported from Claude Code's `/code-review xhigh`:
 
 ```
 Phase 0  gather the diff                                     sequential
-Phase 1  10 finder angles, ≤8 candidates each                FAN OUT — 10 subagents
+Phase 1  12 finder angles, ≤8 candidates each                FAN OUT — 12 subagents
 Phase 2  dedup + 1-vote 3-state verify (recall-biased)        FAN OUT — 1 subagent per candidate
 Phase 3  gap sweep — fresh pass for what Phase 1 missed       sequential (needs the deduped list)
 Phase 4  render in CodeRabbit format                          sequential
@@ -25,8 +25,8 @@ Phase 5  post as a single GitHub review                       sequential
 
 Phases 1 and 2 are embarrassingly parallel and are the whole cost of this
 review. Run each as **one `run_subagent` call carrying every entry** — entries
-in a single call launch concurrently, so ten angles cost one angle's wall-clock.
-Ten separate calls run them in series and defeat the point.
+in a single call launch concurrently, so twelve angles cost one angle's wall-clock.
+Twelve separate calls run them in series and defeat the point.
 
 Subagents do **not** share your context. Every entry's prompt must be
 self-contained:
@@ -42,7 +42,7 @@ Model routing, per entry:
 
 | Entries | Model | Why |
 |---|---|---|
-| Angles A–E (correctness) | `pro` | a missed bug here is unrecoverable — no later phase re-finds it |
+| Angles A–E, K, L (correctness) | `pro` | a missed bug here is unrecoverable — no later phase re-finds it |
 | Angles F–J (cleanup, altitude, conventions) | `flash` | pattern-matching against rules you already pasted in |
 | Phase 2 verifiers | `pro` | this is the judgment call that decides what ships |
 
@@ -70,7 +70,7 @@ losing the others.
 **If `run_subagent` is unavailable or refused**, do not error: work every angle
 yourself, in sequence, in this context. Do not skip angles for lack of fan-out.
 Then say so in the review body's Method line — a sequential run is a different
-review from a ten-angle fan-out, and the reader must not be misled about which
+review from a twelve-angle fan-out, and the reader must not be misled about which
 one produced the findings.
 
 **Do not modify the branch.** This skill only reads and comments. If the user
@@ -113,11 +113,17 @@ PR re-exposes or fails to fix them.
 
 ---
 
-## Phase 1 — Find candidates (10 angles, up to 8 each)
+## Phase 1 — Find candidates (12 angles, up to 8 each)
 
-One `run_subagent` call, ten entries, one entry per angle below. Each returns up
+One `run_subagent` call, twelve entries, one entry per angle below. Each returns up
 to 8 candidates; each candidate needs `file`, `line`, a one-line `summary`, and
 a concrete `failure_scenario`.
+
+### Mandatory Subagent Prompt Guardrails (Include in Every Entry)
+When dispatching each angle subagent, include these explicit rules in its prompt:
+- **Exact SHA Inspection**: Do NOT inspect files in the local working tree if it differs from the PR head. Always inspect code using `git show <headRefOid>:<path>` or `git diff <base>..<headRefOid>` to avoid testing against stale base code.
+- **Loop Invariants & Sparse Iteration**: When proposing index substitutions (e.g., replacing a tracking variable `prev` with `slice[i-1]`), you MUST audit all `continue`, `break`, and conditional filter branches in the loop to verify the index invariant holds under sparse or filtered iterations.
+- **Callback & Closure Re-entrancy**: When evaluating lazy resolvers, callbacks, or closures, check whether the callee invokes them under a lock (`RLock`/`Lock`) that could deadlock or re-acquire locks.
 
 Do **not** let one angle's conclusions suppress another's — if two angles flag
 the same line for different reasons, record both. That independence is the
@@ -167,10 +173,12 @@ the changed code. Flag new code that re-implements something the codebase
 already has — grep shared/utility modules and files adjacent to the change, and
 name the existing helper to call instead.
 
-### Angle G — simplification
-Flag unnecessary complexity the diff adds: redundant or derivable state,
-copy-paste with slight variation, deep nesting, dead code left behind. Name the
-simpler form that does the same job.
+### Angle G — simplification (structural pruning)
+Flag structural bloat that can be deleted or flattened without changing behavior:
+- **Control-Flow Collapse**: Nested `if/else` blocks, redundant boolean flags, or multi-branch checks that can be flattened into guard clauses or early returns.
+- **State & Struct Minimization**: Fields, parameters, or return values that store derivable data which can be computed on demand without I/O or lock overhead.
+- **Signature & Call-Site Pruning**: Signatures that force callers to perform repetitive setup (e.g. passing eager strings when a lazy closure or direct domain object simplifies the call site).
+- **YAGNI / Single-Use Abstractions**: New helper functions, interfaces, or wrappers that have only one call site and obscure linear control flow without providing architectural boundary isolation. Name the simpler form that does the exact same job.
 
 ### Angle H — efficiency
 Flag wasted work the diff introduces: redundant computation or repeated I/O,
@@ -193,11 +201,23 @@ rule and the exact line that breaks it** — no style preferences, no vague
 "spirit of the doc" inferences. Name the file path and quote the rule in the
 finding. If no instruction file applies, return nothing for this angle.
 
+### Angle K — state lifecycle & reset asymmetry
+Audit every map, cache, latch, or persistent record added or modified across all four lifecycle phases:
+- **Admission**: Where is it written or latched?
+- **Deduplication / Read**: What does it gate or suppress?
+- **Eviction / Reset**: Is it cleared on job retry, cancellation, deletion, or queue purge? (A latch that survives a retry silently suppresses future alerts).
+- **Process Restart**: Does in-memory state desynchronize from SQLite/disk across restarts?
+
+### Angle L — signal loss & error-path accounting
+Trace functions returning composite results (e.g. `([]PostAnomaly, error)`) across every early exit and `return nil, err` path:
+- Ask: If this branch exits early or fails halfway, what accumulated findings, metrics, partial writes, or cleanup steps are discarded?
+- Check whether callers assume an empty slice/zero value means "no anomaly occurred" rather than "failed before checking".
+
 > Cleanup, altitude, and conventions candidates use the same shape; in
 > `failure_scenario`, state the concrete cost (what is duplicated, wasted,
 > harder to maintain, or which rule is broken) instead of a crash. **Correctness
-> bugs always outrank cleanup, altitude, and conventions findings** when the
-> output cap forces a cut.
+> bugs (Angles A–E, K, L) always outrank cleanup, altitude, and conventions
+> findings** when the output cap forces a cut.
 
 ---
 
@@ -230,6 +250,10 @@ that lost an anchor. These are PLAUSIBLE.
 **REFUTED only when constructible from the code**: factually wrong (quote the
 actual line); provably impossible (type/constant/invariant — show it); already
 handled in this diff (cite the guard); or pure style with no observable effect.
+
+**Verification Guardrails (Mandatory for Phase 2 Subagents):**
+- **Exact SHA Inspection**: Do NOT verify findings against the local working branch if it differs from the PR head. Use `git show <headRefOid>:<path>` or `git diff <base>..<headRefOid>` to ensure verification reflects the actual PR code.
+- **Loop & Index Refactoring Check**: If a finding proposes index arithmetic substitutions (e.g., replacing a tracking variable like `prev` with `slice[i-1]`), verify whether any `continue`, `break`, or conditional filter in the loop can cause `i-1` to point to a skipped or unexamined element. If sparse iterations break the invariant, REFUTE the finding.
 
 Keep CONFIRMED and PLAUSIBLE. Drop REFUTED. Do not drop on uncertainty.
 
