@@ -184,7 +184,7 @@ In `@{file}`:
 <details>
 <summary>ℹ️ Review info</summary>
 
-**Method**: 10-angle recall-biased review (5 correctness + 3 cleanup + altitude
+**Method**: 12-angle recall-biased review (7 correctness + 3 cleanup + altitude
 + conventions) fanned out to concurrent subagents, 1-vote verify, gap sweep.
 State "run sequentially in a single context" instead when the fan-out did not
 run — `post-review.sh --sequential` emits that wording.
