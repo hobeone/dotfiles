@@ -259,6 +259,21 @@ Step 1. Copying that text into this file would drift the first time either file 
   clean or three rounds elapse. **Three rounds without convergence escalates to the user.**
   Everything else in 3.5 — its triage categories, its per-premise iteration counting, its
   "the plan that exits this step is the contract" rule — runs unchanged.
+
+  **A round that produced blocking corrections has not converged, however obvious the fix.**
+  Applying corrections and proceeding is not a clean round — it is an unreviewed plan wearing a
+  reviewed plan's approval. Re-run the loop against the *corrected* plan, and keep re-running until
+  a round returns nothing blocking. The re-run may be narrowed to the corrected region rather than
+  the whole plan, but it must be a fresh context: deriving the correction yourself and then checking
+  your own derivation is the failure this loop exists to prevent, and it does not stop being that
+  because the correction came from a reviewer.
+
+  This is the cheapest place in the whole workflow to catch a design hole and the most expensive to
+  skip. A correction usually *changes the shape* of the thing being reviewed — it does not merely
+  patch a line — so the taxonomy, invariant, or case analysis built on top of it is new work that
+  nobody has read. Ask specifically what the corrected shape now fails to cover, since a correction
+  that closes the reported hole while leaving an adjacent one open looks identical to a complete fix
+  from inside the round that produced it.
 - Step 5 is the post-to-GitHub step (`gh-body-check` + `gh-post`), run once the plan is approved
   below. Its Step 5.1 is where an `adhoc` run's tracking issue is created; any artifacts held from
   Gate 1 (the `solution-space` comparison, the auditor's evidence or counter-proposal) are posted
@@ -400,9 +415,35 @@ on purpose; see the enumeration under Gate 2. Two variances, carried over from `
 substance:
 
 - **CodeRabbit is best-effort and never a stop condition.** If it never responds (rate limit, app
-  not installed, whatever), that's expected, not a stop condition.
+  not installed, whatever), that's expected, not a stop condition. It is also **not low-value
+  because it is cheap**: an external reviewer holding no theory of the change asks questions the
+  gates that share your theory never think to ask, and has caught defects every local gate passed.
 - **The PR-description delta applies only to umbrella-tracked sub-issues** (`Parent: #N` in the
   issue body). Most issues don't use that convention, so this self-skips — expected, not a bug.
+- **Batch review fixes into one push.** Review budgets are per-hour on some plans, so a second push
+  inside the window silently buys nothing — the check goes green having reviewed nothing, and the
+  commit that actually merges is the unreviewed one. Fix everything from a round, then push once.
+- **A skipped check is not a green check.** Auto-pause, rate-limiting, file-count caps and
+  repository-level exclusions all report terminal `success` while the review never ran. Read the
+  status *description*, not the state. A skip is "no coverage", and it must be said out loud rather
+  than counted as a clean pass — including at the merge gate, where an approved merge waiting for
+  "green CI" must not be satisfied by a check that is green because it did nothing.
+
+**Phase 0.5's local gate dispatches a third reviewer: `pr-review-toolkit:comment-analyzer`,**
+alongside the correctness reviewer and the `quality-lenses` agents, in the same concurrent message.
+
+It is there because prose drifts from code faster than code drifts from itself, and nothing else in
+this pipeline reads a comment as a *claim to be checked*. The recurring shape is not a stale comment
+but a confident one: a sentence asserting that a payload is discarded, a branch is checked, or a
+case is handled, written by the author of the code it describes, in the same sitting. Reviewers
+holding the change's thesis read such a sentence as a summary and move on.
+
+Two consequences make it worth its own agent rather than a line in another reviewer's prompt.
+Checking a comment's claim is a *different search* from checking the code's behaviour, and it has
+repeatedly surfaced live defects — verifying a false sentence is what exposed the vulnerability that
+became this pipeline's largest security fix. And a comment that describes a hazard without guarding
+it reads as considered while leaving the code exposed, so **a comment naming a risk should come with
+a guard or a test, or it is decoration** — that is a finding, not a style note.
 
 ### Two rules that apply to every review round, in Phase B and Phase C alike
 
