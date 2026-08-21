@@ -211,6 +211,22 @@ Tasks must be **independently testable**. This is the property Phase A3 needs to
 implementer per task, and it is also what makes the task count meaningful below — a plan whose
 tasks cannot be verified alone has not been decomposed, whatever its length.
 
+**The plan MUST carry an `Inconclusive / Deferred items` section**, in the shape `research` Step 5
+mandates — each item with its `probe` and `expected branches`, or the literal
+`Inconclusive / Deferred items: none identified`. `writing-plans` does not ask for one, which is
+why it is required here rather than left to the sub-skill.
+
+This section is the **discovery contract**, and it is what makes Phase A3's autonomy safe rather
+than merely unattended. Past the boundary an implementer settles ambiguity by `Ruling:` and keeps
+going; the contract is the only thing that distinguishes an ambiguity it may settle from a finding
+that refutes the plan. Without it, a design breaking under implementation has nothing to be checked
+against, and the run either patches around it silently or improvises a stop the boundary does not
+sanction. Both have happened.
+
+An item belongs here when the plan *assumed* something it did not verify — that an index can be
+keyed on a given field, that a value is caller-controlled, that a helper is reachable from a phase.
+Those are the assumptions that break, and naming them costs a line each.
+
 **Where the plan is recorded** depends on how much plan there is:
 
 - **`architectural`, or 4+ independently-testable tasks** — save to
@@ -243,6 +259,21 @@ Step 1. Copying that text into this file would drift the first time either file 
   clean or three rounds elapse. **Three rounds without convergence escalates to the user.**
   Everything else in 3.5 — its triage categories, its per-premise iteration counting, its
   "the plan that exits this step is the contract" rule — runs unchanged.
+
+  **A round that produced blocking corrections has not converged, however obvious the fix.**
+  Applying corrections and proceeding is not a clean round — it is an unreviewed plan wearing a
+  reviewed plan's approval. Re-run the loop against the *corrected* plan, and keep re-running until
+  a round returns nothing blocking. The re-run may be narrowed to the corrected region rather than
+  the whole plan, but it must be a fresh context: deriving the correction yourself and then checking
+  your own derivation is the failure this loop exists to prevent, and it does not stop being that
+  because the correction came from a reviewer.
+
+  This is the cheapest place in the whole workflow to catch a design hole and the most expensive to
+  skip. A correction usually *changes the shape* of the thing being reviewed — it does not merely
+  patch a line — so the taxonomy, invariant, or case analysis built on top of it is new work that
+  nobody has read. Ask specifically what the corrected shape now fails to cover, since a correction
+  that closes the reported hole while leaving an adjacent one open looks identical to a complete fix
+  from inside the round that produced it.
 - Step 5 is the post-to-GitHub step (`gh-body-check` + `gh-post`), run once the plan is approved
   below. Its Step 5.1 is where an `adhoc` run's tracking issue is created; any artifacts held from
   Gate 1 (the `solution-space` comparison, the auditor's evidence or counter-proposal) are posted
@@ -304,6 +335,7 @@ are, exhaustively:
 | **Oscillation escalation** — the same conceptual topic recurs across 2+ review iterations (`review-pipeline-coderabbit` Phase 0.5 item 5, Phase 1's oscillation check, and its Rules § *Oscillation detection*) | The invariant behind the finding is not understood well enough to fix confidently. The pipeline halts instead of fixing again, and the escalation asks a scope question that may close the PR and refile upstream. |
 | **The pre-commit branch gate** (`review-pipeline-coderabbit` Rules § *Pre-commit branch gate*) | A commit was about to land on the repo's default branch. Phase 0's worktree should make this unreachable; it is listed anyway, because an enumeration that omits stops reachable in principle is the defect this table exists to prevent. |
 | **GATE 3 — merge** (Phase C) | The user merges, never Claude. |
+| **The plan's design is refuted during implementation** — a discovery the plan's `Inconclusive / Deferred items` section (Phase A1) does not list, per `implement/SKILL.md` Step 3.2 | The plan is wrong, not merely incomplete, so continuing means implementing a design already known to be broken. This is NOT the design-driven check-in the boundary removes: nobody is asking whether to proceed, the premise for proceeding has been falsified. The escalation reports what was observed, why it contradicts the plan, and asks whether to re-plan or widen the contract explicitly. Step 3.2's fast-path still applies — a discovery inside a planned file, needing no new research, extending reasoning the plan already approved, is noted in the plan-vs-actual diff and NOT stopped on. |
 | The named stop conditions — Phase A2's three-round non-convergence, Phase A3's SDD stop condition, the errors in *Error Handling* | Something is broken enough that guessing is worse than asking. |
 
 This is the live distinction between `/work3` and `/work2`: `/work2` also stops for the PR body and
@@ -383,9 +415,66 @@ on purpose; see the enumeration under Gate 2. Two variances, carried over from `
 substance:
 
 - **CodeRabbit is best-effort and never a stop condition.** If it never responds (rate limit, app
-  not installed, whatever), that's expected, not a stop condition.
+  not installed, whatever), that's expected, not a stop condition. It is also **not low-value
+  because it is cheap**: an external reviewer holding no theory of the change asks questions the
+  gates that share your theory never think to ask, and has caught defects every local gate passed.
 - **The PR-description delta applies only to umbrella-tracked sub-issues** (`Parent: #N` in the
   issue body). Most issues don't use that convention, so this self-skips — expected, not a bug.
+- **Batch review fixes into one push.** Review budgets are per-hour on some plans, so a second push
+  inside the window silently buys nothing — the check goes green having reviewed nothing, and the
+  commit that actually merges is the unreviewed one. Fix everything from a round, then push once.
+- **A skipped check is not a green check.** Auto-pause, rate-limiting, file-count caps and
+  repository-level exclusions all report terminal `success` while the review never ran. Read the
+  status *description*, not the state. A skip is "no coverage", and it must be said out loud rather
+  than counted as a clean pass — including at the merge gate, where an approved merge waiting for
+  "green CI" must not be satisfied by a check that is green because it did nothing.
+
+**Phase 0.5's local gate dispatches a third reviewer: `pr-review-toolkit:comment-analyzer`,**
+alongside the correctness reviewer and the `quality-lenses` agents, in the same concurrent message.
+
+It is there because prose drifts from code faster than code drifts from itself, and nothing else in
+this pipeline reads a comment as a *claim to be checked*. The recurring shape is not a stale comment
+but a confident one: a sentence asserting that a payload is discarded, a branch is checked, or a
+case is handled, written by the author of the code it describes, in the same sitting. Reviewers
+holding the change's thesis read such a sentence as a summary and move on.
+
+Two consequences make it worth its own agent rather than a line in another reviewer's prompt.
+Checking a comment's claim is a *different search* from checking the code's behaviour, and it has
+repeatedly surfaced live defects — verifying a false sentence is what exposed the vulnerability that
+became this pipeline's largest security fix. And a comment that describes a hazard without guarding
+it reads as considered while leaving the code exposed, so **a comment naming a risk should come with
+a guard or a test, or it is decoration** — that is a finding, not a style note.
+
+### Two rules that apply to every review round, in Phase B and Phase C alike
+
+**1. Count the feedback before reading any of it.** Feedback arrives on three independent
+endpoints and a reviewer may use any of them. Enumerate IDs and count first:
+
+```bash
+gh api repos/OWNER/REPO/pulls/N/comments  --paginate -q '.[].id' | wc -l   # inline
+gh api repos/OWNER/REPO/pulls/N/reviews   --paginate -q '.[].id' | wc -l   # review bodies
+gh api repos/OWNER/REPO/issues/N/comments --paginate -q '.[].id' | wc -l   # conversation
+```
+
+Triage must then account for **every** ID, minus your own replies. **Never pipe a feedback listing
+through `head`** — truncating the fetch produces a confident, wrong completeness claim, and nothing
+in the output says it was cut. This is not hypothetical: a run reported "seven actionable comments"
+as the total while an entire eight-finding review, three of them Major, sat unread below the cut.
+
+A count that does not match what you triaged is a stop, not a rounding error.
+
+**2. Re-review the fix commits, not the branch.** After each round of fixes lands, review
+`git diff <round-start>..HEAD` — the fixes themselves — before declaring the round done. A fix that
+lands cleanly can introduce a new defect in the code it just touched, and that is a different
+failure from the one *Oscillation detection* covers: oscillation is a finding that will not stay
+fixed, this is a fix that creates a finding.
+
+It has happened, and the shape is worth recognising: a review fix correctly stopped classifying an
+empty record as a conflict, and left the loop *terminating* on it — converting a false report into
+a missing one, which is strictly worse. The whole-branch review that preceded the round could not
+have caught it, because the defect did not exist yet.
+
+Scope this to the fix diff. It is cheap, and it targets exactly where the risk concentrates.
 
 ## Phase C — Your review
 
