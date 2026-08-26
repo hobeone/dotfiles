@@ -34,6 +34,9 @@ self-contained:
 - the unified diff (or the exact command to regenerate it, plus the target)
 - the repo instruction files read in Phase 0 — paste the governing rules, do not
   just name the file; Angle J is worthless without them
+- when Go is detected, the target Go version and the relevant sections of
+  `reference/go_rules.md` pasted directly into the prompt (Angles D, G, K, L in
+  Phase 1; verifiers in Phase 2)
 - that angle's mandate, verbatim from below
 - the required output shape: a JSON array of candidates with `file`, `line`,
   `summary`, `failure_scenario`
@@ -107,6 +110,19 @@ ls **/CLAUDE.md **/AGENTS.md 2>/dev/null   # a directory's file governs only fil
 cat ~/.claude/CLAUDE.md 2>/dev/null
 ```
 
+### Language & Environment Telemetry (Go Detection)
+
+Inspect whether the diff touches `.go` files or `go.mod`:
+
+```bash
+# Check if Go files or module manifests are touched in diff
+git diff --name-only <base>..<head> | grep -E '\.go$|go\.mod$'
+```
+
+If Go is detected:
+1. **Target Go Version**: Check `go.mod` in the repository root or module/submodule directories for the `go <version>` directive (e.g. `go 1.22`). Fallback to `go version` from the local environment if `go.mod` is absent.
+2. **Load Go Reference Rules**: Read `~/.gemini/skills/deep-pr-review/reference/go_rules.md` (or `reference/go_rules.md`). The relevant sections of this catalog MUST be dynamically injected into subagent prompts in Phase 1 (Angles D, G, K, L), Phase 2 (verifiers), and Phase 4 (remediation prompts).
+
 Treat this diff as the review scope. Read the **enclosing function** for every
 hunk — bugs in unchanged lines of a touched function are in scope, because the
 PR re-exposes or fails to fix them.
@@ -124,6 +140,11 @@ When dispatching each angle subagent, include these explicit rules in its prompt
 - **Exact SHA Inspection**: Do NOT inspect files in the local working tree if it differs from the PR head. Always inspect code using `git show <headRefOid>:<path>` or `git diff <base>..<headRefOid>` to avoid testing against stale base code.
 - **Loop Invariants & Sparse Iteration**: When proposing index substitutions (e.g., replacing a tracking variable `prev` with `slice[i-1]`), you MUST audit all `continue`, `break`, and conditional filter branches in the loop to verify the index invariant holds under sparse or filtered iterations.
 - **Callback & Closure Re-entrancy**: When evaluating lazy resolvers, callbacks, or closures, check whether the callee invokes them under a lock (`RLock`/`Lock`) that could deadlock or re-acquire locks.
+- **Go Dynamic Rule Injection**: When Go code is detected in Phase 0, the orchestrator MUST inject the target Go version and the relevant sections of `reference/go_rules.md` into the prompts for:
+  - **Angle D (language-pitfall specialist)**: Inject Go Pitfalls & Correctness Bugs from Section 1 (typed `nil` in interface returns, goroutine leaks & unbuffered channel deadlocks, context misuse & missing cancels, HTTP response body / resource leaks, `defer` in loops, unbounded `io.ReadAll`, map/slice aliasing & data races, version-aware loopvar capture).
+  - **Angle G (simplification & modern idioms)**: Inject Modern Go Standard Library Adoption & Anti-Pattern Pruning from Section 2 (Go 1.21+ `slices`/`maps`/`cmp`/`clear`/`min`/`max`/`sync.OnceValue`, Go 1.22 routing / `math/rand/v2`, Go 1.23 `iter`, 1:1 producer interfaces, getter/setter bloat, redundant nil slice checks, pointers to reference types).
+  - **Angle K (concurrency & state lifecycle)**: Inject Go Concurrency & State Lifecycle from Section 3 (lock copying / `copylocks`, `sync.WaitGroup` `Add(1)` placement, `sync.Once` re-entrancy deadlock, mixed atomic/non-atomic access).
+  - **Angle L (signal loss & error-path accounting)**: Inject Go Error Ergonomics from Section 4 (%w vs %v error tree preservation, `errors.Is`/`errors.As` over equality/type assertions, error variable shadowing with `:=`).
 
 Do **not** let one angle's conclusions suppress another's — if two angles flag
 the same line for different reasons, record both. That independence is the
@@ -159,6 +180,8 @@ args, late-binding closures; Go nil-map write, range-var capture, `defer` in a
 loop, unbuffered-channel deadlock, `err` shadowing; SQL injection; timezone/DST
 drift; float equality. Flag any instance the diff introduces.
 
+*When reviewing Go code, `reference/go_rules.md` (Section 1) is the governing authority for language pitfalls (typed `nil` in interfaces, goroutine leaks, context misuse, resource leaks, map/slice aliasing, version-aware loopvar capture).*
+
 ### Angle E — wrapper/proxy correctness
 When the PR adds or modifies a type that wraps another (cache, proxy, decorator,
 adapter): check that every method routes to the wrapped instance and not back
@@ -179,6 +202,8 @@ Flag structural bloat that can be deleted or flattened without changing behavior
 - **State & Struct Minimization**: Fields, parameters, or return values that store derivable data which can be computed on demand without I/O or lock overhead.
 - **Signature & Call-Site Pruning**: Signatures that force callers to perform repetitive setup (e.g. passing eager strings when a lazy closure or direct domain object simplifies the call site).
 - **YAGNI / Single-Use Abstractions**: New helper functions, interfaces, or wrappers that have only one call site and obscure linear control flow without providing architectural boundary isolation. Name the simpler form that does the exact same job.
+
+*When reviewing Go code, `reference/go_rules.md` (Section 2) is the governing authority for modern standard library adoption (Go 1.21+ `slices`/`maps`/`cmp`/`clear`/`min`/`max`/`sync.OnceValue`, Go 1.22 routing, Go 1.23 `iter`) and anti-pattern pruning (1:1 producer interfaces, getter/setter bloat, redundant nil slice checks, pointers to reference types).*
 
 ### Angle H — efficiency
 Flag wasted work the diff introduces: redundant computation or repeated I/O,
@@ -208,10 +233,14 @@ Audit every map, cache, latch, or persistent record added or modified across all
 - **Eviction / Reset**: Is it cleared on job retry, cancellation, deletion, or queue purge? (A latch that survives a retry silently suppresses future alerts).
 - **Process Restart**: Does in-memory state desynchronize from SQLite/disk across restarts?
 
+*When reviewing Go code, `reference/go_rules.md` (Section 3) is the governing authority for concurrency and state lifecycle (lock copying / `copylocks`, `sync.WaitGroup` / `sync.Once` invariants, mixed atomic access).*
+
 ### Angle L — signal loss & error-path accounting
 Trace functions returning composite results (e.g. `([]PostAnomaly, error)`) across every early exit and `return nil, err` path:
 - Ask: If this branch exits early or fails halfway, what accumulated findings, metrics, partial writes, or cleanup steps are discarded?
 - Check whether callers assume an empty slice/zero value means "no anomaly occurred" rather than "failed before checking".
+
+*When reviewing Go code, `reference/go_rules.md` (Section 4) is the governing authority for error ergonomics (%w vs %v wrapping, `errors.Is`/`errors.As`, error shadowing with `:=`).*
 
 > Cleanup, altitude, and conventions candidates use the same shape; in
 > `failure_scenario`, state the concrete cost (what is duplicated, wasted,
@@ -254,6 +283,12 @@ handled in this diff (cite the guard); or pure style with no observable effect.
 **Verification Guardrails (Mandatory for Phase 2 Subagents):**
 - **Exact SHA Inspection**: Do NOT verify findings against the local working branch if it differs from the PR head. Use `git show <headRefOid>:<path>` or `git diff <base>..<headRefOid>` to ensure verification reflects the actual PR code.
 - **Loop & Index Refactoring Check**: If a finding proposes index arithmetic substitutions (e.g., replacing a tracking variable like `prev` with `slice[i-1]`), verify whether any `continue`, `break`, or conditional filter in the loop can cause `i-1` to point to a skipped or unexamined element. If sparse iterations break the invariant, REFUTE the finding.
+- **Go Verification Guardrails (Inject Section 5 of `reference/go_rules.md`)**: When verifying Go findings, inject Section 5 of `reference/go_rules.md` into verifier subagent prompts to enforce the Go decision matrix:
+  - *Loop variable capture*: Check `go.mod` for target Go version. If `>= 1.22` (and no `noloopvar`), REFUTE (Go 1.22 per-iteration loop variables guarantee isolation). If `< 1.22`, CONFIRM.
+  - *Typed `nil` interface return*: Check static return type vs concrete variable type. If return type is `error` or interface AND concrete variable is `*T(nil)`, CONFIRM. If declared as interface `var err error = nil` or literal `return nil`, REFUTE.
+  - *Channel send deadlock*: Audit `select` for `default:` clauses, buffer capacities vs sender counts, and `case <-ctx.Done():` guards before confirming deadlocks.
+  - *Lock copy (`copylocks`)*: Confirm if struct containing mutex/waitgroup is passed by value or has a value receiver; refute if pointer receiver/reference throughout.
+  - *Unwrapped error (`%v` vs `%w`)*: Confirm if error is returned from public/internal API function to caller; mark plausible/nitpick if purely internal log string.
 
 Keep CONFIRMED and PLAUSIBLE. Drop REFUTED. Do not drop on uncertainty.
 
@@ -317,6 +352,12 @@ Write each finding into a JSON array at `/tmp/deep-pr-review-findings.json`:
 `line` is the **last** line of the anchored range and must be a line the diff
 touches on the RIGHT side, or GitHub rejects the comment. `start_line` is
 optional; omit it for a single-line anchor.
+
+### Go AI Remediation Prompt Guidelines (from `reference/go_rules.md` Section 6)
+When authoring the `🤖 Prompt for AI Agents` in CodeRabbit comments for Go findings, adhere to Section 6 conventions:
+- **Idiomatic Go Naming**: Use 1–2 letter receiver names matching the type name (`s *Server`, `c *Client`, `r *Reader`). Keep acronyms consistent in casing (`ServeHTTP`, `APIClient`, `userID`, `URL`). Use MixedCaps (PascalCase for exported, camelCase for unexported; avoid snake_case).
+- **Table-Driven Tests**: Remediation prompts for tests must generate idiomatic Go table-driven tests with `t.Parallel()`, mark test helpers with `t.Helper()`, and use `t.Cleanup()` for resource teardown.
+- **Standard Error Wrapping Format**: Enforce error wrapping as `fmt.Errorf("<action> <target>: %w", err)` (lowercase active verb/participle, no capitalized start, no trailing punctuation/newlines).
 
 ---
 
