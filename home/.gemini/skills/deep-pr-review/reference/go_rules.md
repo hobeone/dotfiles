@@ -599,7 +599,28 @@ fmt.Errorf("<action> <target>: %w", err)
 
 ## 7. Cross-Skill References
 
-When deeper reference material, architectural patterns, or specialized audit checklists are required during a review pass or when generating remediation prompts, consult these companion skills (optional extensions from `samber/cc-skills-golang` located under `~/.gemini/skills/`):
+When deeper reference material, architectural patterns, or specialized audit checklists are required during a review pass or when generating remediation prompts, consult these companion skills.
+
+### 7.0 Selective Installation (Context-Efficient)
+To avoid context window pollution from unused framework skills, install only these 10 curated skills:
+
+```bash
+# Via dotfiles helper script (with optional pruning of unneeded skills):
+./scripts/install_go_skills.sh --prune
+
+# Or directly via skills CLI:
+npx skills add samber/cc-skills-golang -g -y \
+  --skill golang-safety \
+  --skill golang-concurrency \
+  --skill golang-error-handling \
+  --skill golang-modernize \
+  --skill golang-context \
+  --skill golang-structs-interfaces \
+  --skill golang-testing \
+  --skill golang-performance \
+  --skill golang-security \
+  --skill golang-lint
+```
 
 ### 7.1 Core Review & Analysis Skills
 - **Safety & Defensive Coding**: `~/.gemini/skills/golang-safety`

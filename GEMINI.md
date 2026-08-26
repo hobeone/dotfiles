@@ -19,6 +19,7 @@ This project is a modular and modernized dotfiles repository designed to manage 
     *   `scripts/install_go.sh`: Standalone script for installing/upgrading Go.
     *   `scripts/gnome_settings.sh`: Configures GNOME desktop preferences via `gsettings`.
     *   `scripts/install_keyboard.sh`: Sets up a systemd sleep hook for hardware-specific keyboard actions.
+    *   `scripts/install_go_skills.sh`: Installs and prunes curated Go review/remediation skills.
 *   **`packages/`**: OS-specific package lists (`apt.txt`, `brew.txt`, etc.).
 
 ### 2. Shell Configuration (Zsh)
