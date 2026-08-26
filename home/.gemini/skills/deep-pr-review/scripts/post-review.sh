@@ -59,7 +59,11 @@ trap 'rm -rf "$work"' EXIT
 # comment anchors outside the diff, so findings are partitioned up front rather
 # than discovered by a failed POST.
 # ---------------------------------------------------------------------------
-gh pr diff "$pr" --repo "$repo" > "$work/diff.txt"
+if ! gh pr diff "$pr" --repo "$repo" > "$work/diff.txt" 2>/dev/null || ! grep -q "^+++ " "$work/diff.txt"; then
+  base_sha=$(gh api "repos/$repo/pulls/$pr" --jq .base.sha)
+  git fetch origin "$base_sha" "$head_sha" 2>/dev/null || true
+  git diff "$base_sha...$head_sha" > "$work/diff.txt"
+fi
 
 awk '
   /^\+\+\+ / {
