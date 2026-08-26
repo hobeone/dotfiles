@@ -145,6 +145,7 @@ When dispatching each angle subagent, include these explicit rules in its prompt
   - **Angle G (simplification & modern idioms)**: Inject Modern Go Standard Library Adoption & Anti-Pattern Pruning from Section 2 (Go 1.21+ `slices`/`maps`/`cmp`/`clear`/`min`/`max`/`sync.OnceValue`, Go 1.22 routing / `math/rand/v2`, Go 1.23 `iter`, 1:1 producer interfaces, getter/setter bloat, redundant nil slice checks, pointers to reference types).
   - **Angle K (concurrency & state lifecycle)**: Inject Go Concurrency & State Lifecycle from Section 3 (lock copying / `copylocks`, `sync.WaitGroup` `Add(1)` placement, `sync.Once` re-entrancy deadlock, mixed atomic/non-atomic access).
   - **Angle L (signal loss & error-path accounting)**: Inject Go Error Ergonomics from Section 4 (%w vs %v error tree preservation, `errors.Is`/`errors.As` over equality/type assertions, error variable shadowing with `:=`).
+  - **Companion Skills Discovery**: When deeper investigation is needed, subagents may reference the companion skill catalog in Section 7 (e.g., `golang-safety` for Angle D, `golang-modernize` for Angle G, `golang-concurrency` for Angle K, `golang-error-handling` for Angle L).
 
 Do **not** let one angle's conclusions suppress another's — if two angles flag
 the same line for different reasons, record both. That independence is the
@@ -353,11 +354,12 @@ Write each finding into a JSON array at `/tmp/deep-pr-review-findings.json`:
 touches on the RIGHT side, or GitHub rejects the comment. `start_line` is
 optional; omit it for a single-line anchor.
 
-### Go AI Remediation Prompt Guidelines (from `reference/go_rules.md` Section 6)
-When authoring the `🤖 Prompt for AI Agents` in CodeRabbit comments for Go findings, adhere to Section 6 conventions:
+### Go AI Remediation Prompt Guidelines (from `reference/go_rules.md` Sections 6 & 7)
+When authoring the `🤖 Prompt for AI Agents` in CodeRabbit comments for Go findings, adhere to Section 6 conventions and consult Section 7 companion skills:
 - **Idiomatic Go Naming**: Use 1–2 letter receiver names matching the type name (`s *Server`, `c *Client`, `r *Reader`). Keep acronyms consistent in casing (`ServeHTTP`, `APIClient`, `userID`, `URL`). Use MixedCaps (PascalCase for exported, camelCase for unexported; avoid snake_case).
-- **Table-Driven Tests**: Remediation prompts for tests must generate idiomatic Go table-driven tests with `t.Parallel()`, mark test helpers with `t.Helper()`, and use `t.Cleanup()` for resource teardown.
+- **Table-Driven Tests**: Remediation prompts for tests must generate idiomatic Go table-driven tests with `t.Parallel()`, mark test helpers with `t.Helper()`, and use `t.Cleanup()` for resource teardown (consult `golang-testing` for leak detection with `goleak`).
 - **Standard Error Wrapping Format**: Enforce error wrapping as `fmt.Errorf("<action> <target>: %w", err)` (lowercase active verb/participle, no capitalized start, no trailing punctuation/newlines).
+- **Security & Concurrency Defenses**: For security findings, cite standard boundary checks or `os.Root` (consult `golang-security`); for concurrency, ensure clean context exit paths (consult `golang-concurrency`).
 
 ---
 
