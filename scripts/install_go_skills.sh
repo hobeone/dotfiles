@@ -150,13 +150,16 @@ done
 log_info "Installing ${#CURATED_SKILLS[@]} curated Go review and remediation skills via npx skills..."
 npx -y skills add samber/cc-skills-golang -g -y "${SKILL_ARGS[@]}" >/dev/null 2>&1 || true
 
-# Ensure curated skills are properly linked in ~/.gemini/skills if created in ~/.agents/skills
-for skill in "${CURATED_SKILLS[@]}"; do
-  source_dir="$HOME/.agents/skills/$skill"
-  dest_link="$HOME/.gemini/skills/$skill"
-  if [[ -d "$source_dir" && ! -e "$dest_link" ]]; then
-    ln -s "$source_dir" "$dest_link"
-  fi
+# Ensure curated skills are properly linked in both ~/.gemini/skills and ~/.claude/skills
+for base_dir in "$HOME/.gemini/skills" "$HOME/.claude/skills"; do
+  mkdir -p "$base_dir"
+  for skill in "${CURATED_SKILLS[@]}"; do
+    source_dir="$HOME/.agents/skills/$skill"
+    dest_link="$base_dir/$skill"
+    if [[ -d "$source_dir" && ! -e "$dest_link" ]]; then
+      ln -s "$source_dir" "$dest_link"
+    fi
+  done
 done
 
 log_success "Curated Go skills ready."
