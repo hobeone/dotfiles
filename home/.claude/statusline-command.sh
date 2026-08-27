@@ -363,7 +363,7 @@ if [ -n "$git_branch" ]; then
 fi
 printf '  🤖 %s%s%s' "$(model_color)" "$model_name" "$(rst)"
 if [ -n "$model_version" ] && [ "$model_version" != "null" ]; then
-  printf '  🏷️ %s%s%s' "$(version_color)" "$model_version" "$(rst)"
+  printf '  🔖 %s%s%s' "$(version_color)" "$model_version" "$(rst)"
 fi
 if [ -n "$cc_version" ] && [ "$cc_version" != "null" ]; then
   printf '  📟 %sv%s%s' "$(cc_version_color)" "$cc_version" "$(rst)"
@@ -423,7 +423,7 @@ if [ -n "$five_hour_pct" ]; then
   five_hour_disp=$(fmt_pct "$five_hour_pct")
   five_hour_bar=$(progress_bar "$five_hour_int" 10)
   reset_str=$(fmt_reset_countdown "$five_hour_reset")
-  line4="⏱️  $(quota_color "$five_hour_int")5h: ${five_hour_disp}% [${five_hour_bar}]$(rst)"
+  line4="⏰ $(quota_color "$five_hour_int")5h: ${five_hour_disp}% [${five_hour_bar}]$(rst)"
   [ -n "$reset_str" ] && line4="$line4 $(style_color)(resets ${reset_str})$(rst)"
 fi
 if [ -n "$seven_day_pct" ]; then
