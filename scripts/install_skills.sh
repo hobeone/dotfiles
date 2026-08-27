@@ -82,14 +82,19 @@ install_superpowers() {
   log_info "Configuring Superpowers plugin..."
 
   # Gemini CLI / Antigravity plugin
-  local gemini_superpowers="$HOME/.gemini/config/plugins/superpowers"
-  if [[ -d "$gemini_superpowers/.git" ]]; then
-    log_info "Updating Gemini Superpowers plugin..."
-    execute git -C "$gemini_superpowers" pull --ff-only || log_warn "Failed to update Gemini Superpowers"
+  if command -v agy >/dev/null 2>&1; then
+    log_info "Installing / updating Superpowers plugin via agy CLI..."
+    execute agy plugin install https://github.com/obra/superpowers >/dev/null 2>&1 || true
   else
-    log_info "Cloning Superpowers plugin for Gemini CLI..."
-    execute mkdir -p "$(dirname "$gemini_superpowers")"
-    execute git clone https://github.com/obra/superpowers.git "$gemini_superpowers"
+    local gemini_superpowers="$HOME/.gemini/config/plugins/superpowers"
+    if [[ -d "$gemini_superpowers/.git" ]]; then
+      log_info "Updating Gemini Superpowers plugin..."
+      execute git -C "$gemini_superpowers" pull --ff-only || log_warn "Failed to update Gemini Superpowers"
+    else
+      log_info "Cloning Superpowers plugin for Gemini CLI..."
+      execute mkdir -p "$(dirname "$gemini_superpowers")"
+      execute git clone https://github.com/obra/superpowers.git "$gemini_superpowers"
+    fi
   fi
 
   # Claude Code plugin
