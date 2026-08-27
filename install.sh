@@ -9,6 +9,7 @@ DRY_RUN=false
 VERBOSE=false
 INSTALL_DESKTOP=false
 INSTALL_CLAUDE=false
+INSTALL_SKILLS=false
 
 usage() {
     cat <<EOF
@@ -19,6 +20,7 @@ Options:
     -v, --verbose   Verbose output. Show commands being executed.
     -d, --desktop   Desktop mode.  Install X11 desktop packages.
     -c, --claude    Claude mode. Install Claude CLI configurations.
+    -s, --skills    Skills mode. Install agent plugins and curated external skills.
     -h, --help      Show this help message and exit.
 
 EOF
@@ -31,6 +33,7 @@ while [[ $# -gt 0 ]]; do
         -v|--verbose) VERBOSE=true; shift ;;
         -d|--desktop) INSTALL_DESKTOP=true; shift ;;
         -c|--claude)  INSTALL_CLAUDE=true; shift ;;
+        -s|--skills)  INSTALL_SKILLS=true; shift ;;
         -h|--help)    usage; exit 0 ;;
         *)            echo "Unknown option: $1" >&2; usage; exit 1 ;;
     esac
@@ -537,14 +540,19 @@ install_claude_skills() {
         done
     fi
 
-    # 2. Symlink public skills from ~/.agents/skills/
+    # 2. Symlink public skills from ~/.agents/skills/ (skipping uncurated Go framework skills)
     local agents_skills="$HOME/.agents/skills"
+    local uncurated_go=" golang-benchmark golang-cli golang-code-style golang-continuous-integration golang-database golang-data-structures golang-dependency-injection golang-dependency-management golang-design-patterns golang-documentation golang-google-wire golang-gopls golang-graphql golang-grpc golang-how-to golang-naming golang-observability golang-pkg-go-dev golang-popular-libraries golang-project-layout golang-refactoring golang-samber-do golang-samber-hot golang-samber-lo golang-samber-mo golang-samber-oops golang-samber-ro golang-samber-slog golang-spf13-cobra golang-spf13-viper golang-stay-updated golang-stretchr-testify golang-swagger golang-troubleshooting golang-uber-dig golang-uber-fx "
     if [[ -d "$agents_skills" ]]; then
         for src in "$agents_skills"/*/; do
             [[ -d "$src" ]] || continue
             local name
             name="$(basename "$src")"
             local dest="$skills_dest/$name"
+            # Skip uncurated Go skills to prevent system prompt bloat
+            if [[ "$uncurated_go" =~ [[:space:]]"$name"[[:space:]] ]]; then
+                continue
+            fi
             # Don't overwrite a dotfiles skill with the same name
             if [[ -e "$dest" || -L "$dest" ]]; then
                 continue
@@ -693,6 +701,15 @@ main() {
 
     # 8. Ensure Local Files Exist
     ensure_local_files
+
+    # 9. Install and sync agent plugins and curated skills (with -s flag)
+    if $INSTALL_SKILLS; then
+        local skill_args=()
+        if $DRY_RUN; then
+            skill_args+=("--dry-run")
+        fi
+        execute "$DOTFILES_DIR/scripts/install_skills.sh" "${skill_args[@]}"
+    fi
 
     log_info "Dotfiles installation complete!"
 }

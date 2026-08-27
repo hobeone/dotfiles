@@ -64,18 +64,6 @@
         "source": "github",
         "repo": "wshobson/agents"
       }
-    },
-    "development-skills": {
-      "source": {
-        "source": "github",
-        "repo": "ultimatile/development-skills"
-      }
-    },
-    "antigravity-for-claude-code": {
-      "source": {
-        "source": "github",
-        "repo": "yuting0624/antigravity-for-claude-code"
-      }
     }
   },
   "effortLevel": "medium",

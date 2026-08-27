@@ -12,13 +12,14 @@ This project is a modular and modernized dotfiles repository designed to manage 
 
 ### 1. Installation & Management
 *   **`install.sh`**: The main entry point. It handles git hook setup, OS detection, package installation, submodule initialization, font installation, and symlinking via GNU Stow.
-    *   **Usage:** `./install.sh [-v] [-n] [-d] [-c]` (Verbose / Dry-run / Desktop / Claude-mode).
+    *   **Usage:** `./install.sh [-v] [-n] [-d] [-c] [-s]` (Verbose / Dry-run / Desktop / Claude-mode / Skills-mode).
 *   **`.githooks/`**: Tracked directory for git hooks. The `pre-commit` hook automatically sorts and deduplicates package lists in `packages/`.
 *   **`scripts/`**: Contains specialized helper scripts:
     *   `scripts/update.sh`: Synchronizes all submodules and updates Oh My Zsh.
     *   `scripts/install_go.sh`: Standalone script for installing/upgrading Go.
     *   `scripts/gnome_settings.sh`: Configures GNOME desktop preferences via `gsettings`.
     *   `scripts/install_keyboard.sh`: Sets up a systemd sleep hook for hardware-specific keyboard actions.
+    *   `scripts/install_skills.sh`: Installs superpowers, quaere, svelte, tailwind, and curated Go skills across Gemini CLI and Claude Code.
     *   `scripts/install_go_skills.sh`: Installs and prunes curated Go review/remediation skills.
 *   **`packages/`**: OS-specific package lists (`apt.txt`, `brew.txt`, etc.).
 

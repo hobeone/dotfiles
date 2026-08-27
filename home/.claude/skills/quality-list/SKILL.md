@@ -43,7 +43,7 @@ Listed in canonical reading order. Reference items by slug (e.g., `behavior-cove
 - [public-api-surface](items/public-api-surface.md) — mechanical — lens: altitude
 - [efficiency-waste](items/efficiency-waste.md) — mechanical — lens: efficiency
 
-Language-specific addenda live alongside this file as `lang-<language>.md` and supplement specific items with triggers and mitigation idioms (current examples: `lang-cpp.md`, `lang-rust.md`). An addendum section **realizes** an item concretely; it never **bounds** the item: its triggers and N/A criteria scope only that realization, and a diff outside the realization's constructs remains subject to the base item's conditions.
+Language-specific addenda live alongside this file as `lang-<language>.md` and supplement specific items with triggers and mitigation idioms (current example: `lang-go.md`). An addendum section **realizes** an item concretely; it never **bounds** the item: its triggers and N/A criteria scope only that realization, and a diff outside the realization's constructs remains subject to the base item's conditions.
 
 ## Lenses
 
