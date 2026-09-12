@@ -101,7 +101,7 @@ Every commit message MUST follow this structure:
 
 **Body** (optional) — one blank line after description. Explains *why*. Does not restate the diff. Wrap at 72 characters.
 
-**Footers** (optional) — `Token: value` per line after a blank line. Token uses hyphens not spaces. Always include `Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>` on AI-assisted commits.
+**Footers** (optional) — `Token: value` per line after a blank line. Token uses hyphens not spaces.
 
 **Breaking changes** — use `!` before the colon and/or a `BREAKING CHANGE:` footer (token MUST be uppercase):
 ```
