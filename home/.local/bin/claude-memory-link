@@ -1,0 +1,63 @@
+#!/bin/bash
+# Wire a project's Claude memory directory into the shared Go pool, and
+# optionally point a secondary checkout at a primary repo's pool.
+#
+#   claude-memory-link <repo-path>                 # join the shared pool
+#   claude-memory-link <repo-path> --same-as <dir> # secondary checkout of <dir>
+#
+# Both are idempotent. Run from anywhere.
+set -euo pipefail
+
+PROJECTS="$HOME/.claude/projects"
+SHARED_REL="../../../memory-shared/go"
+SHARED_ABS="$HOME/.claude/memory-shared/go"
+
+slug_for() { readlink -f "$1" | sed 's|/|-|g'; }
+
+usage() { sed -n '2,9p' "$0" | sed 's/^# \?//'; exit 1; }
+
+[ $# -ge 1 ] || usage
+target=$1; shift
+[ -d "$target" ] || { echo "no such directory: $target" >&2; exit 1; }
+
+dir="$PROJECTS/$(slug_for "$target")/memory"
+
+if [ "${1:-}" = "--same-as" ]; then
+  [ $# -eq 2 ] || usage
+  primary="$PROJECTS/$(slug_for "$2")/memory"
+  [ -d "$primary" ] || { echo "primary has no memory dir: $primary" >&2; exit 1; }
+  if [ -d "$dir" ] && [ ! -L "$dir" ]; then
+    n=$(find "$dir" -maxdepth 1 -name '*.md' ! -name MEMORY.md | wc -l)
+    [ "$n" -gt 0 ] && { echo "refusing: $dir holds $n memories; merge them into the primary first" >&2; exit 1; }
+    rm -rf "$dir"
+  fi
+  mkdir -p "$(dirname "$dir")"
+  ln -sfn "$(basename "$(dirname "$primary")")/memory" "$dir"
+  # relative link needs to be a sibling hop, so rewrite it explicitly
+  ln -sfn "../$(basename "$(dirname "$primary")")/memory" "$dir"
+  echo "$dir -> $(readlink "$dir")"
+  exit 0
+fi
+
+mkdir -p "$dir"
+[ -d "$SHARED_ABS" ] || { echo "shared pool missing: $SHARED_ABS" >&2; exit 1; }
+if [ -L "$dir" ]; then
+  echo "$dir is a checkout symlink; it inherits the primary's shared/ link"
+  exit 0
+fi
+ln -sfn "$SHARED_REL" "$dir/shared"
+[ -f "$dir/MEMORY.md" ] || printf '# Memory Index\n\n' > "$dir/MEMORY.md"
+if ! grep -q 'shared/MEMORY-shared.md' "$dir/MEMORY.md"; then
+  cat >> "$dir/MEMORY.md" <<'EOF'
+
+## Shared — all Go repos
+
+Cross-cutting lessons (how to work, Go/tooling facts, GitHub & CI behaviour) live in
+one pool, reachable here as `shared/`. **Read [the shared index](shared/MEMORY-shared.md)
+alongside this file** — it is the other half of what is known.
+
+When a new lesson is not specific to THIS repo, write it to `shared/` and index it there,
+not here.
+EOF
+fi
+echo "$dir/shared -> $(readlink "$dir/shared") ($(find "$dir/shared/" -name '*.md' | wc -l) files)"

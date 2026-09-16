@@ -114,6 +114,34 @@ Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
 
 **Never** use ad-hoc prefixes like `Step X.Y:`, `Fix:`, or `Refactor:`. The description MUST be lowercase (except proper nouns and acronyms).
 
+## Memory is shared across the Go repos
+
+Cross-cutting memories live in one pool at `~/.claude/memory-shared/go/`, symlinked into
+every Go project's memory directory as `shared/`. Read `shared/MEMORY-shared.md` alongside
+the project's own `MEMORY.md` — it is the other half of what is known, and the project index
+points at it.
+
+**When a lesson is not specific to one repo, write it to `shared/` and index it there.** The
+test is whether the lesson would still be true in a different repo, not whether it was learned
+in this one — a repo name inside the body is fine as evidence. Repo-specific facts (this
+codebase's invariants, its CI setup, its scripts) stay in the project's own pool.
+
+All checkouts of one repo share a pool: the secondary `gonzbd` checkouts symlink their memory
+directory to the primary. Worktrees already resolve to the parent repo automatically.
+
+### Working agreements these repos have repeatedly proved
+
+Recorded here rather than only as memories because missing them is expensive and recall is not
+guaranteed. Each has a fuller memory in `shared/`.
+
+- **A green test is not evidence until you have seen it red.** Revert the fix, or delete the
+  mechanism, and confirm THIS test fails — while writing it, not as a later audit. A test can
+  pass via the wrong code path, and a fixture that absorbs the failure (a `sync.Once` where a
+  count is needed) cannot express it at all.
+- **Verify your own confident claims with fresh context.** Claims about library behaviour,
+  "no test covers this", and subagent enumerations have each been wrong and were cheap to check.
+- **A count or a "no other" claim gets re-derived, never relayed** — including your own.
+
 ## Reflection
 
 After significant work: share what caused friction, where you were redirected (indicates missing guidance), and what's missing. Publish insights to event bus (`gotcha_discovered`, `pattern_found`, `improvement_suggested`). When an Insight (★) is a reusable gotcha or cross-session pattern — not just a local code explanation — publish it too.
