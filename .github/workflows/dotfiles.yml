@@ -40,6 +40,15 @@ jobs:
             home/.claude/hooks/*.sh \
             home/.claude/statusline-command.sh
 
+      - name: Run shellcheck on shared skill scripts and script tests
+        run: |
+          shellcheck -x \
+            skills-shared/*/scripts/*.sh \
+            tests/test_skills_shared.sh \
+            tests/test_post_review.sh \
+            tests/test_deep_pr_review_method.sh \
+            tests/fixtures/post_review/gh
+
   syntax:
     name: Syntax check
     runs-on: ubuntu-latest
@@ -54,6 +63,21 @@ jobs:
 
       - name: Check vimrc syntax
         run: vim -u NONE -e -c "source home/.vimrc" -c "qa!" 2>&1 || true
+
+  skills:
+    name: Shared skill tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Skills-shared pattern
+        run: bash tests/test_skills_shared.sh
+
+      - name: deep-pr-review method structure
+        run: bash tests/test_deep_pr_review_method.sh
+
+      - name: post-review.sh behavior
+        run: bash tests/test_post_review.sh
 
   structure:
     name: Verify structure
