@@ -16,7 +16,7 @@ Linking entries individually (not one `core/` link) keeps paths like
 
 ## Rules
 
-- **No harness vocabulary in the core.** No tool names (`run_subagent`,
+- **No harness vocabulary in the core.** No tool names (`invoke_subagent`,
   `view_file`, `AskUserQuestion`, ...) and no harness home paths. Write a
   `⟨verb⟩` instead, and cite companion skills by name.
 - **Adapters bind every verb the core uses, and nothing else.** One

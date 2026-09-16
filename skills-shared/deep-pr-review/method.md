@@ -502,12 +502,15 @@ comment.
 
 The script posts **one** review (event `COMMENT` — never `APPROVE` or
 `REQUEST_CHANGES`) with all inline comments attached, plus an optional separate
-walkthrough issue comment. Run `--dry-run` first and show the user the rendered
-payload, and confirm with ⟨ask-user⟩. Once they confirm — unless they already
-said to post — immediately re-run the Eligibility checks. If any now stops the
-review (closed, converted to draft, a marker at this head from a concurrent
-run), stop without posting; otherwise run the same command without `--dry-run`
-to post for real.
+walkthrough issue comment. Post in this order:
+
+1. Run with `--dry-run` and show the user the rendered payload.
+2. Confirm with ⟨ask-user⟩. Skip this step only if the user already said to
+   post.
+3. Re-run the Eligibility checks. This step is never skipped, whichever way
+   step 2 went. If any check now stops the review (closed, converted to draft,
+   a marker at this head from a concurrent run), stop without posting.
+4. Run the same command without `--dry-run` to post for real.
 
 The script validates every anchor against the diff **before** posting, because
 GitHub rejects the entire review if any one comment falls outside a hunk. A

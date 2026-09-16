@@ -161,7 +161,7 @@ Their `go_rules.md` paths are unchanged.
 
 | Verb | agy | Claude Code |
 |---|---|---|
-| `⟨dispatch-parallel⟩` | one `run_subagent` call, all entries, `TypeName: "self"` | multiple `Agent` calls in a single message, `subagent_type: "general-purpose"`, explicit `model` |
+| `⟨dispatch-parallel⟩` | one `invoke_subagent` call, all entries, `TypeName: "self"` | multiple `Agent` calls in a single message, `subagent_type: "general-purpose"`, explicit `model` |
 | `⟨read-at-sha⟩` | `run_command` `git show <sha>:<path>` | `Bash` `git show <sha>:<path>` |
 | `⟨run⟩` | `run_command` | `Bash` |
 | `⟨ask-user⟩` | `ask_question` | `AskUserQuestion` |

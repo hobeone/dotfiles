@@ -13,7 +13,7 @@ follow it, applying the bindings below wherever it writes a `⟨verb⟩`.
 
 | Verb | Binding |
 |---|---|
-| `⟨dispatch-parallel⟩` | One `run_subagent` call carrying every entry (entries in one call launch concurrently), `TypeName: "self"`, `Model` per routing below. |
+| `⟨dispatch-parallel⟩` | One `invoke_subagent` call carrying every entry (entries in one call launch concurrently), `TypeName: "self"`, `Model` per routing below. |
 | `⟨read-at-sha⟩` | `run_command`: `git show <sha>:<path>` |
 | `⟨run⟩` | `run_command` |
 | `⟨ask-user⟩` | `ask_question` |
@@ -47,5 +47,5 @@ Probed against this install — `agy agents` lists no custom types, and
 
 Read the tool's live schema before calling — field names above are what this
 install accepted, not a contract. Each subagent returns its own conversation ID;
-if one hangs, the subagent-management tool can `list` and `kill` it without
+if one hangs, `manage_subagents` can `list` and `kill` it without
 losing the others.
