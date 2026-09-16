@@ -8,7 +8,7 @@
     "allow": [],
     "defaultMode": "auto"
   },
-  "model": "opus",
+  "model": "opus[1m]",
   "hooks": {
     "UserPromptSubmit": [
       {
@@ -47,14 +47,14 @@
     "claude-md-management@claude-plugins-official": true,
     "skill-creator@claude-plugins-official": true,
     "claude-code-setup@claude-plugins-official": true,
-    "agent-sdk-dev@claude-plugins-official": true,
+    "agent-sdk-dev@claude-plugins-official": false,
     "explanatory-output-style@claude-plugins-official": true,
     "gopls-lsp@claude-plugins-official": true,
     "pyright-lsp@claude-plugins-official": false,
     "typescript-lsp@claude-plugins-official": true,
     "python-development@claude-code-workflows": false,
     "frontend-design@claude-plugins-official": true,
-    "clangd-lsp@claude-plugins-official": true,
+    "clangd-lsp@claude-plugins-official": false,
     "code-review@claude-plugins-official": true,
     "github@claude-plugins-official": true
   },
@@ -63,6 +63,18 @@
       "source": {
         "source": "github",
         "repo": "wshobson/agents"
+      }
+    },
+    "development-skills": {
+      "source": {
+        "source": "github",
+        "repo": "ultimatile/development-skills"
+      }
+    },
+    "antigravity-for-claude-code": {
+      "source": {
+        "source": "github",
+        "repo": "yuting0624/antigravity-for-claude-code"
       }
     }
   },
@@ -73,6 +85,8 @@
   "verbose": true,
   "autoCompactEnabled": true,
   "fileCheckpointingEnabled": true,
+  "remoteControlAtStartup": false,
+  "agentPushNotifEnabled": true,
   "autoMode": {
     "environment": [
       "### Org-wide",
