@@ -1,29 +1,29 @@
 ---
 name: deep-pr-review
-description: Use when asked to deeply review a pull request, run a CodeRabbit-style review, review a diff before merge, or produce severity-ranked PR findings. Runs a 12-angle recall-biased review and posts findings as a GitHub review in CodeRabbit's comment format.
+description: Use when asked to deeply review a pull request, run a CodeRabbit-style review, review a diff before merge, or produce severity-ranked PR findings. Runs an architectural approach gate followed by a 12-angle recall-biased review, posting findings as a GitHub review.
 ---
 
 # Deep PR Review
 
-A recall-biased, multi-angle code review that ends as a **GitHub pull request
-review** formatted the way CodeRabbit formats one: a walkthrough comment, a
-review body with an actionable-comment count, and one inline comment per
-finding carrying a machine-consumable fix prompt.
+A recall-biased, multi-angle code review that begins with an **Approach & Architecture Gate** to ensure the fundamental design is sound, and ends as a **GitHub pull request review** formatted the way CodeRabbit formats one: a walkthrough comment, a review body with an actionable-comment count, and one inline comment per finding carrying a machine-consumable fix prompt.
 
 The finding methodology is ported from Claude Code's `/code-review xhigh`:
 
 ```
-Phase 0  gather the diff                                     sequential
-Phase 1  12 finder angles, ≤8 candidates each                FAN OUT — 12 subagents
-Phase 2  dedup + 1-vote 3-state verify (recall-biased)        FAN OUT — 1 subagent per candidate
-Phase 3  gap sweep — fresh pass for what Phase 1 missed       sequential (needs the deduped list)
-Phase 4  render in CodeRabbit format                          sequential
-Phase 5  post as a single GitHub review                       sequential
+Phase 0  gather the diff & repo telemetry                     sequential
+Phase 1  Approach & Architecture Gate (Altitude Audit)       sequential (or 1 'flash' subagent)
+         ├── If FLAWED_APPROACH ──► Post Architectural Review & HALT
+         └── If SOUND_APPROACH  ──► Proceed to Line-Level Review
+Phase 2  12 finder angles, ≤8 candidates each                FAN OUT — 12 subagents
+Phase 3  dedup + 1-vote 3-state verify (recall-biased)        FAN OUT — 1 subagent per candidate
+Phase 4  gap sweep — fresh pass for what Phase 2 missed       sequential (needs the deduped list)
+Phase 5  render in CodeRabbit format                          sequential
+Phase 6  post as a single GitHub review                       sequential
 ```
 
-## Fan-out
+## Fan-out & Model Routing
 
-Phases 1 and 2 are embarrassingly parallel and are the whole cost of this
+Phases 2 and 3 are embarrassingly parallel and are the whole cost of this
 review. Run each as **one `run_subagent` call carrying every entry** — entries
 in a single call launch concurrently, so twelve angles cost one angle's wall-clock.
 Twelve separate calls run them in series and defeat the point.
@@ -36,7 +36,7 @@ self-contained:
   just name the file; Angle J is worthless without them
 - when Go is detected, the target Go version and the relevant sections of
   `reference/go_rules.md` pasted directly into the prompt (Angles D, G, K, L in
-  Phase 1; verifiers in Phase 2)
+  Phase 2; verifiers in Phase 3)
 - that angle's mandate, verbatim from below
 - the required output shape: a JSON array of candidates with `file`, `line`,
   `summary`, `failure_scenario`
@@ -45,9 +45,8 @@ Model routing, per entry:
 
 | Entries | Model | Why |
 |---|---|---|
-| Angles A–E, K, L (correctness) | `pro` | a missed bug here is unrecoverable — no later phase re-finds it |
-| Angles F–J (cleanup, altitude, conventions) | `flash` | pattern-matching against rules you already pasted in |
-| Phase 2 verifiers | `pro` | this is the judgment call that decides what ships |
+| All Phases (Gate, Angles, Verifiers) | `flash` | Gemini 3.8 Flash on high reasoning outperforms 3.1 Pro while executing significantly faster and cheaper |
+| Mechanical / Rule Pattern-Matching (Angles F–J) | `flash` (or `flash_lite`) | fast pattern-matching against provided rules |
 
 ### Verified call shape
 
@@ -58,7 +57,7 @@ Probed against this install — `agy agents` lists no custom types, and
 {
   "Subagents": [
     { "TypeName": "self", "Role": "Angle A — line-by-line diff scan",
-      "Model": "pro",   "Prompt": "<self-contained angle prompt>" },
+      "Model": "flash", "Prompt": "<self-contained angle prompt>" },
     { "TypeName": "self", "Role": "Angle F — reuse",
       "Model": "flash", "Prompt": "<self-contained angle prompt>" }
   ]
@@ -121,7 +120,7 @@ git diff --name-only <base>..<head> | grep -E '\.go$|go\.mod$'
 
 If Go is detected:
 1. **Target Go Version**: Check `go.mod` in the repository root or module/submodule directories for the `go <version>` directive (e.g. `go 1.22`). Fallback to `go version` from the local environment if `go.mod` is absent.
-2. **Load Go Reference Rules**: Read `~/.gemini/skills/deep-pr-review/reference/go_rules.md` (or `reference/go_rules.md`). The relevant sections of this catalog MUST be dynamically injected into subagent prompts in Phase 1 (Angles D, G, K, L), Phase 2 (verifiers), and Phase 4 (remediation prompts).
+2. **Load Go Reference Rules**: Read `~/.gemini/skills/deep-pr-review/reference/go_rules.md` (or `reference/go_rules.md`). The relevant sections of this catalog MUST be dynamically injected into subagent prompts in Phase 2 (Angles D, G, K, L), Phase 3 (verifiers), and Phase 5 (remediation prompts).
 
 Treat this diff as the review scope. Read the **enclosing function** for every
 hunk — bugs in unchanged lines of a touched function are in scope, because the
@@ -129,7 +128,40 @@ PR re-exposes or fails to fix them.
 
 ---
 
-## Phase 1 — Find candidates (12 angles, up to 8 each)
+## Phase 1 — Approach & Architecture Gate (Altitude Audit)
+
+Before dispatching 12 subagents to audit lines, evaluate the PR's fundamental architecture against the 5 Core Inquiries:
+
+1. **Root Cause vs. Symptom Treatment**:
+   Is the PR addressing the root cause, or building scaffolding (sweepers, fallbacks, defensive error-swallowing) around an unhandled defect, leaky caller, or un-detached context?
+2. **System Altitude & Lifecycle Match**:
+   Does the mechanism fit the runtime model (e.g. 24/7 daemon vs CLI)? Are runtime failures or state leaks being deferred to restart/reboot cycles?
+3. **State Ownership & Layering Boundaries**:
+   Does it uphold Single Ownership (Rule 2), or does it scatter persistence across layers and leak low-level transaction plumbing (`Execer`, `*sql.Tx`) into domain interfaces?
+4. **Primitive & Relational Alternatives**:
+   Could database primitives (declarative set-based SQL, foreign keys, cascades) or standard library features eliminate the custom code entirely?
+5. **Cosmetic & Metric Contortion**:
+   Is the architecture being degraded or made procedural just to satisfy artificial constraints (e.g. preserving a hand-counted documentation table or avoiding a grep match)?
+
+### Gate Decision:
+
+#### Outcome A: FLAWED_APPROACH (Halt & Report)
+If the approach has fundamental architectural flaws:
+1. **HALT execution immediately.** Do NOT run Phases 2, 3, or 4.
+2. Render an **Architectural Review** report:
+   - **Verdict**: Clear assessment of why the approach is flawed.
+   - **Core Architectural Flaws**: Detailed critique with code citations and concrete failure scenarios.
+   - **Alternative Designs**: Concrete, viable alternative architectures.
+   - **Recommendation**: Step-by-step path to redesign.
+3. Post as an issue comment on the PR (or print to terminal if no PR), and notify the user.
+
+#### Outcome B: SOUND_APPROACH (Proceed)
+If the approach is sound and viable:
+Record a 1-paragraph architecture endorsement for inclusion in the final review walkthrough, and proceed immediately to Phase 2.
+
+---
+
+## Phase 2 — Find candidates (12 angles, up to 8 each)
 
 One `run_subagent` call, twelve entries, one entry per angle below. Each returns up
 to 8 candidates; each candidate needs `file`, `line`, a one-line `summary`, and
@@ -151,7 +183,7 @@ Do **not** let one angle's conclusions suppress another's — if two angles flag
 the same line for different reasons, record both. That independence is the
 reason the angles are separate subagents rather than one long prompt.
 
-Pass every candidate with a nameable failure scenario through to Phase 2.
+Pass every candidate with a nameable failure scenario through to Phase 3.
 Finders that silently drop half-believed candidates bypass the verify step and
 are the dominant cause of misses.
 
@@ -251,7 +283,7 @@ Trace functions returning composite results (e.g. `([]PostAnomaly, error)`) acro
 
 ---
 
-## Phase 2 — Dedup and verify (1 vote, 3 states, recall-biased)
+## Phase 3 — Dedup and verify (1 vote, 3 states, recall-biased)
 
 Dedup near-duplicates yourself first — same defect, same location, same reason
 → keep the one with the most concrete failure scenario. Deduping before the
@@ -281,7 +313,7 @@ that lost an anchor. These are PLAUSIBLE.
 actual line); provably impossible (type/constant/invariant — show it); already
 handled in this diff (cite the guard); or pure style with no observable effect.
 
-**Verification Guardrails (Mandatory for Phase 2 Subagents):**
+**Verification Guardrails (Mandatory for Phase 3 Subagents):**
 - **Exact SHA Inspection**: Do NOT verify findings against the local working branch if it differs from the PR head. Use `git show <headRefOid>:<path>` or `git diff <base>..<headRefOid>` to ensure verification reflects the actual PR code.
 - **Loop & Index Refactoring Check**: If a finding proposes index arithmetic substitutions (e.g., replacing a tracking variable like `prev` with `slice[i-1]`), verify whether any `continue`, `break`, or conditional filter in the loop can cause `i-1` to point to a skipped or unexamined element. If sparse iterations break the invariant, REFUTE the finding.
 - **Go Verification Guardrails (Inject Section 5 of `reference/go_rules.md`)**: When verifying Go findings, inject Section 5 of `reference/go_rules.md` into verifier subagent prompts to enforce the Go decision matrix:
@@ -295,10 +327,10 @@ Keep CONFIRMED and PLAUSIBLE. Drop REFUTED. Do not drop on uncertainty.
 
 ---
 
-## Phase 3 — Sweep for gaps
+## Phase 4 — Sweep for gaps
 
 Sequential, in this context — this phase reads the verified list, so it cannot
-start until Phase 2 has joined.
+start until Phase 3 has joined.
 
 Take one more pass as a fresh reviewer who has the deduplicated list. Re-read
 the diff and enclosing functions looking **ONLY** for defects not already
@@ -312,11 +344,11 @@ Focus on what the first pass tends to miss:
 - config defaults flipped
 
 Surface up to 8 additional candidates, each naming a defect not already on the
-list. Run them through Phase 2. If nothing is new, return nothing — do not pad.
+list. Run them through Phase 3. If nothing is new, return nothing — do not pad.
 
 ---
 
-## Phase 4 — Render in CodeRabbit format
+## Phase 5 — Render in CodeRabbit format
 
 Cap the output at **15 findings**, ranked most-severe first. Correctness before
 cleanup. If more than 15 survive, keep the 15 most severe and say in the review
@@ -363,7 +395,7 @@ When authoring the `🤖 Prompt for AI Agents` in CodeRabbit comments for Go fin
 
 ---
 
-## Phase 5 — Post
+## Phase 6 — Post
 
 ```bash
 ~/.gemini/skills/deep-pr-review/scripts/post-review.sh \
@@ -371,7 +403,7 @@ When authoring the `🤖 Prompt for AI Agents` in CodeRabbit comments for Go fin
   [--walkthrough /tmp/walkthrough.md] [--repo OWNER/NAME] [--dry-run]
 ```
 
-Write the walkthrough (Phase 4, `reference/format.md`) to `/tmp/walkthrough.md`
+Write the walkthrough (Phase 5, `reference/format.md`) to `/tmp/walkthrough.md`
 first; the script posts it as a separate issue comment before the review.
 
 The script posts **one** review (event `COMMENT` — never `APPROVE` or
@@ -385,7 +417,7 @@ finding whose line is not commentable is moved into the review body under
 `## Additional comments (not anchorable)` rather than dropped, and a multi-line
 anchor whose `start_line` is outside the diff degrades to a single-line comment.
 
-**No PR?** If the target is a branch or the working tree, skip Phase 5 entirely
+**No PR?** If the target is a branch or the working tree, skip Phase 6 entirely
 and print the walkthrough, review body, and each rendered finding to the
 terminal in the same format. Do not open a PR to have somewhere to post.
 
