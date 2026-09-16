@@ -1,0 +1,11 @@
+[
+  {"path": "a.go", "line": 2, "category": "🐛 Correctness & Logic", "severity": "🟠 Major",
+   "effort": "🧹 Quick fix", "verdict": "CONFIRMED", "title": "Inline one.",
+   "body": "Body one.", "agent_prompt": "Fix A."},
+  {"path": "a.go", "line": 40, "category": "🐛 Correctness & Logic", "severity": "🟡 Minor",
+   "effort": "🧹 Quick fix", "verdict": "PLAUSIBLE", "title": "Orphan one.",
+   "body": "Body two.", "agent_prompt": "Fix orphan."},
+  {"path": "a.go", "line": 3, "start_line": 99, "category": "🧹 Maintainability",
+   "severity": "🔵 Nitpick", "effort": "🧹 Quick fix", "verdict": "CONFIRMED",
+   "title": "Degrades to single line.", "body": "Body three.", "agent_prompt": "Fix B."}
+]

@@ -1,0 +1,8 @@
+diff --git a/a.go b/a.go
+--- a/a.go
++++ b/a.go
+@@ -1,2 +1,4 @@
+ package a
++func A() {}
++func B() {}
+ // end

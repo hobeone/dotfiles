@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# Stub gh for post-review.sh tests. Logs every call; serves canned output.
+printf '%s\n' "$*" >> "$STUB_LOG"
+# shellcheck disable=SC2016 # literal markdown backticks in case statement
+case "$*" in
+  "api repos/o/r/pulls/7 --jq .head.sha") echo "$STUB_HEAD" ;;
+  "api repos/o/r/pulls/7 --jq .base.sha") echo base000 ;;
+  "pr diff 7 --repo o/r") cat "$STUB_DIFF" ;;
+  "pr view 7 --repo o/r --json files --jq"*) echo '* `a.go`' ;;
+  "api repos/o/r/pulls/7/reviews"*) echo https://example.test/review ;;
+  "api repos/o/r/issues/7/comments"*) echo https://example.test/comment ;;
+  *) echo "stub gh: unexpected: $*" >&2; exit 99 ;;
+esac
