@@ -163,7 +163,8 @@ Confirm, and the resulting queue/durability disposition.
 ## Review body template
 
 ````markdown
-**Actionable comments posted: {n}**
+<!-- deep-pr-review head:{head_sha} -->
+**Actionable comments posted: {n_inline} inline + {n_orphan} in body**
 
 <details>
 <summary>🤖 Prompt for all review comments with AI agents</summary>

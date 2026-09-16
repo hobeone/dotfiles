@@ -59,14 +59,29 @@ surfacing. Do not drop a candidate for being "speculative."
 
 ## Phase 0 — Eligibility
 
-PR targets only. **Local mode** — a branch or working-tree target, or an
-invocation by another skill that asks for local mode — skips this phase and
-Post, and prints the rendered output instead.
+Target resolution, in order: an explicit PR number → an explicit branch or path
+→ the current branch's PR → the working tree.
+
+```bash
+gh pr view --json number --jq .number   # resolve the current branch's PR, if any
+```
+
+**Local mode** — a branch or working-tree target, or an invocation by another
+skill that asks for local mode — follows from that resolution: it skips this
+phase and Post, and prints the rendered output instead.
+
+The rest of this phase applies to PR targets only, continuing with the
+resolved `<N>`.
 
 ```bash
 gh pr view <N> --json state,isDraft,author,headRefOid,files \
   --jq '{state, isDraft, bot: .author.is_bot, head: .headRefOid, files: [.files[].path]}'
 ```
+
+When the target PR is not in the current directory's repo, pass
+`--repo OWNER/NAME` to `gh pr view` and substitute OWNER/NAME for
+`{owner}/{repo}` in `gh api` paths (and pass `--repo` to `post-review.sh` in
+Post).
 
 Stop, telling the user why, when any holds:
 
@@ -78,8 +93,8 @@ Stop, telling the user why, when any holds:
 - Already reviewed at this head:
 
   ```bash
-  marker='.[] | select(.body // "" | test("<!-- deep-pr-review head:[0-9a-f]+ -->"))
-          | (.body | capture("deep-pr-review head:(?<sha>[0-9a-f]+)").sha) + " " + .html_url'
+  marker='.[] | select(.body // "" | test("\\A<!-- deep-pr-review head:[0-9a-f]{7,40} -->"))
+          | (.body | capture("\\A<!-- deep-pr-review head:(?<sha>[0-9a-f]{7,40}) -->").sha) + " " + .html_url'
   gh api "repos/{owner}/{repo}/pulls/<N>/reviews" --paginate --jq "$marker"
   gh api "repos/{owner}/{repo}/issues/<N>/comments" --paginate --jq "$marker"
   ```
@@ -96,8 +111,7 @@ Record `head` as `expected_head` for Post.
 
 ## Phase 1 — Gather
 
-Target resolution, in order: an explicit PR number → an explicit branch or path
-→ the current branch's PR → the working tree.
+Using the target already resolved in Eligibility:
 
 ```bash
 # PR target
@@ -128,6 +142,7 @@ Inspect whether the diff touches `.go` files or `go.mod`:
 ```bash
 # Check if Go files or module manifests are touched in diff
 git diff --name-only <base>..<head> | grep -E '\.go$|go\.mod$'
+git diff --name-only HEAD | grep -E '\.go$|go\.mod$'   # working-tree targets (uncommitted changes)
 ```
 
 If Go is detected:
@@ -188,7 +203,7 @@ When dispatching each angle subagent, include these explicit rules in its prompt
 - **Exact SHA Inspection**: Do NOT inspect files in the local working tree if it differs from the PR head. Always inspect code with ⟨read-at-sha⟩ at `<headRefOid>`, or `git diff <base>..<headRefOid>`, to avoid testing against stale base code.
 - **Loop Invariants & Sparse Iteration**: When proposing index substitutions (e.g., replacing a tracking variable `prev` with `slice[i-1]`), you MUST audit all `continue`, `break`, and conditional filter branches in the loop to verify the index invariant holds under sparse or filtered iterations.
 - **Callback & Closure Re-entrancy**: When evaluating lazy resolvers, callbacks, or closures, check whether the callee invokes them under a lock (`RLock`/`Lock`) that could deadlock or re-acquire locks.
-- **Go Dynamic Rule Injection**: When Go code is detected in Gather, the orchestrator MUST inject the target Go version and the relevant sections of `reference/go_rules.md` into the prompts for:
+- **Go Dynamic Rule Injection**: When Go code is detected in Gather, the orchestrator MUST inject the target Go version and the relevant sections of `⟨skill-dir⟩/reference/go_rules.md` into the prompts for:
   - **Angle D (language-pitfall specialist)**: Inject Go Pitfalls & Correctness Bugs from Section 1 (typed `nil` in interface returns, goroutine leaks & unbuffered channel deadlocks, context misuse & missing cancels, HTTP response body / resource leaks, `defer` in loops, unbounded `io.ReadAll`, map/slice aliasing & data races, version-aware loopvar capture).
   - **Angle G (simplification & modern idioms)**: Inject Modern Go Standard Library Adoption & Anti-Pattern Pruning from Section 2 (Go 1.21+ `slices`/`maps`/`cmp`/`clear`/`min`/`max`/`sync.OnceValue`, Go 1.22 routing / `math/rand/v2`, Go 1.23 `iter`, 1:1 producer interfaces, getter/setter bloat, redundant nil slice checks, pointers to reference types).
   - **Angle K (concurrency & state lifecycle)**: Inject Go Concurrency & State Lifecycle from Section 3 (lock copying / `copylocks`, `sync.WaitGroup` `Add(1)` placement, `sync.Once` re-entrancy deadlock, mixed atomic/non-atomic access).
@@ -229,7 +244,7 @@ args, late-binding closures; Go nil-map write, range-var capture, `defer` in a
 loop, unbuffered-channel deadlock, `err` shadowing; SQL injection; timezone/DST
 drift; float equality. Flag any instance the diff introduces.
 
-*When reviewing Go code, `reference/go_rules.md` (Section 1) is the governing authority for language pitfalls (typed `nil` in interfaces, goroutine leaks, context misuse, resource leaks, map/slice aliasing, version-aware loopvar capture).*
+*When reviewing Go code, `⟨skill-dir⟩/reference/go_rules.md` (Section 1) is the governing authority for language pitfalls (typed `nil` in interfaces, goroutine leaks, context misuse, resource leaks, map/slice aliasing, version-aware loopvar capture).*
 
 ### Angle E — wrapper/proxy correctness
 When the PR adds or modifies a type that wraps another (cache, proxy, decorator,
@@ -252,7 +267,7 @@ Flag structural bloat that can be deleted or flattened without changing behavior
 - **Signature & Call-Site Pruning**: Signatures that force callers to perform repetitive setup (e.g. passing eager strings when a lazy closure or direct domain object simplifies the call site).
 - **YAGNI / Single-Use Abstractions**: New helper functions, interfaces, or wrappers that have only one call site and obscure linear control flow without providing architectural boundary isolation. Name the simpler form that does the exact same job.
 
-*When reviewing Go code, `reference/go_rules.md` (Section 2) is the governing authority for modern standard library adoption (Go 1.21+ `slices`/`maps`/`cmp`/`clear`/`min`/`max`/`sync.OnceValue`, Go 1.22 routing, Go 1.23 `iter`) and anti-pattern pruning (1:1 producer interfaces, getter/setter bloat, redundant nil slice checks, pointers to reference types).*
+*When reviewing Go code, `⟨skill-dir⟩/reference/go_rules.md` (Section 2) is the governing authority for modern standard library adoption (Go 1.21+ `slices`/`maps`/`cmp`/`clear`/`min`/`max`/`sync.OnceValue`, Go 1.22 routing, Go 1.23 `iter`) and anti-pattern pruning (1:1 producer interfaces, getter/setter bloat, redundant nil slice checks, pointers to reference types).*
 
 ### Angle H — efficiency
 Flag wasted work the diff introduces: redundant computation or repeated I/O,
@@ -282,14 +297,14 @@ Audit every map, cache, latch, or persistent record added or modified across all
 - **Eviction / Reset**: Is it cleared on job retry, cancellation, deletion, or queue purge? (A latch that survives a retry silently suppresses future alerts).
 - **Process Restart**: Does in-memory state desynchronize from SQLite/disk across restarts?
 
-*When reviewing Go code, `reference/go_rules.md` (Section 3) is the governing authority for concurrency and state lifecycle (lock copying / `copylocks`, `sync.WaitGroup` / `sync.Once` invariants, mixed atomic access).*
+*When reviewing Go code, `⟨skill-dir⟩/reference/go_rules.md` (Section 3) is the governing authority for concurrency and state lifecycle (lock copying / `copylocks`, `sync.WaitGroup` / `sync.Once` invariants, mixed atomic access).*
 
 ### Angle L — signal loss & error-path accounting
 Trace functions returning composite results (e.g. `([]PostAnomaly, error)`) across every early exit and `return nil, err` path:
 - Ask: If this branch exits early or fails halfway, what accumulated findings, metrics, partial writes, or cleanup steps are discarded?
 - Check whether callers assume an empty slice/zero value means "no anomaly occurred" rather than "failed before checking".
 
-*When reviewing Go code, `reference/go_rules.md` (Section 4) is the governing authority for error ergonomics (%w vs %v wrapping, `errors.Is`/`errors.As`, error shadowing with `:=`).*
+*When reviewing Go code, `⟨skill-dir⟩/reference/go_rules.md` (Section 4) is the governing authority for error ergonomics (%w vs %v wrapping, `errors.Is`/`errors.As`, error shadowing with `:=`).*
 
 ### Angle M — history and blame
 For each changed range, read its history at the base commit:
@@ -298,6 +313,11 @@ For each changed range, read its history at the base commit:
 git log -L <start>,<end>:<path> --format='%h %s' -n 20 <base>
 git blame -L <start>,<end> <base> -- <path>
 ```
+
+`<start>,<end>` is the OLD-side range of each hunk (`@@ -a,b`: `start=a`,
+`end=a+b-1`), since both commands run at `<base>`. Skip files the diff adds —
+they have no history at `<base>`. For branch targets, `<base>` is the merge
+base; for working-tree targets, `<base>` is `HEAD`.
 
 Flag a change that reverts or weakens a deliberate earlier fix: a guard, retry,
 lock, or check whose introducing commit message names the bug it prevented.
@@ -317,6 +337,9 @@ gh api "repos/{owner}/{repo}/pulls/<n>/reviews" --jq '.[] | select(.body != "") 
 Flag feedback that applies again to the new code: quote the original comment,
 link its `html_url`, and name the new line that repeats the objected-to pattern.
 Return nothing when the repo has no GitHub remote.
+
+When the target PR is not in the current directory's repo, substitute
+OWNER/NAME for `{owner}/{repo}` in each `gh api` path above.
 
 ### Angle O — code-comment compliance
 Read comments in and adjacent to every changed function that state a contract —
@@ -368,7 +391,7 @@ handled in this diff (cite the guard); or pure style with no observable effect.
 **Verification Guardrails (Mandatory for Verify Subagents):**
 - **Exact SHA Inspection**: Do NOT verify findings against the local working branch if it differs from the PR head. Use ⟨read-at-sha⟩ at `<headRefOid>` or `git diff <base>..<headRefOid>` to ensure verification reflects the actual PR code.
 - **Loop & Index Refactoring Check**: If a finding proposes index arithmetic substitutions (e.g., replacing a tracking variable like `prev` with `slice[i-1]`), verify whether any `continue`, `break`, or conditional filter in the loop can cause `i-1` to point to a skipped or unexamined element. If sparse iterations break the invariant, REFUTE the finding.
-- **Go Verification Guardrails (Inject Section 5 of `reference/go_rules.md`)**: When verifying Go findings, inject Section 5 of `reference/go_rules.md` into verifier subagent prompts to enforce the Go decision matrix:
+- **Go Verification Guardrails (Inject Section 5 of `⟨skill-dir⟩/reference/go_rules.md`)**: When verifying Go findings, inject Section 5 of `⟨skill-dir⟩/reference/go_rules.md` into verifier subagent prompts to enforce the Go decision matrix:
   - *Loop variable capture*: Check `go.mod` for target Go version. If `>= 1.22` (and no `noloopvar`), REFUTE (Go 1.22 per-iteration loop variables guarantee isolation). If `< 1.22`, CONFIRM.
   - *Typed `nil` interface return*: Check static return type vs concrete variable type. If return type is `error` or interface AND concrete variable is `*T(nil)`, CONFIRM. If declared as interface `var err error = nil` or literal `return nil`, REFUTE.
   - *Channel send deadlock*: Audit `select` for `default:` clauses, buffer capacities vs sender counts, and `case <-ctx.Done():` guards before confirming deadlocks.
@@ -445,7 +468,7 @@ Write each finding into a JSON array at `<run-dir>/findings.json`:
 touches on the RIGHT side, or GitHub rejects the comment. `start_line` is
 optional; omit it for a single-line anchor.
 
-### Go AI Remediation Prompt Guidelines (from `reference/go_rules.md` Sections 6 & 7)
+### Go AI Remediation Prompt Guidelines (from `⟨skill-dir⟩/reference/go_rules.md` Sections 6 & 7)
 When authoring the `🤖 Prompt for AI Agents` in CodeRabbit comments for Go findings, adhere to Section 6 conventions and consult Section 7 companion skills:
 - **Idiomatic Go Naming**: Use 1–2 letter receiver names matching the type name (`s *Server`, `c *Client`, `r *Reader`). Keep acronyms consistent in casing (`ServeHTTP`, `APIClient`, `userID`, `URL`). Use MixedCaps (PascalCase for exported, camelCase for unexported; avoid snake_case).
 - **Table-Driven Tests**: Remediation prompts for tests must generate idiomatic Go table-driven tests with `t.Parallel()`, mark test helpers with `t.Helper()`, and use `t.Cleanup()` for resource teardown (consult `golang-testing` for leak detection with `goleak`).
@@ -455,10 +478,6 @@ When authoring the `🤖 Prompt for AI Agents` in CodeRabbit comments for Go fin
 ---
 
 ## Phase 7 — Post
-
-Immediately before posting, re-run the Eligibility checks. If any now stops the
-review (closed, converted to draft, a marker at this head from a concurrent run),
-stop without posting.
 
 ```bash
 ⟨skill-dir⟩/scripts/post-review.sh \
@@ -484,7 +503,11 @@ comment.
 The script posts **one** review (event `COMMENT` — never `APPROVE` or
 `REQUEST_CHANGES`) with all inline comments attached, plus an optional separate
 walkthrough issue comment. Run `--dry-run` first and show the user the rendered
-payload, and confirm with ⟨ask-user⟩; post only after they confirm, unless they already said to post.
+payload, and confirm with ⟨ask-user⟩. Once they confirm — unless they already
+said to post — immediately re-run the Eligibility checks. If any now stops the
+review (closed, converted to draft, a marker at this head from a concurrent
+run), stop without posting; otherwise run the same command without `--dry-run`
+to post for real.
 
 The script validates every anchor against the diff **before** posting, because
 GitHub rejects the entire review if any one comment falls outside a hunk. A
@@ -510,5 +533,5 @@ terminal in the same format. Do not open a PR to have somewhere to post.
 - State the verdict (CONFIRMED / PLAUSIBLE) on every posted finding so the
   reader knows which ones are certain.
 - If zero findings survive, post the review body saying
-  `**Actionable comments posted: 0**` with a one-paragraph note on what was
+  `**Actionable comments posted: 0 inline + 0 in body**` with a one-paragraph note on what was
   checked. Do not pad with nitpicks.
