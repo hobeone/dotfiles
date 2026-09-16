@@ -1,6 +1,6 @@
 # Go Review Rules & Pitfall Catalog
 
-Authoritative reference for reviewing Go codebases. Used by `deep-pr-review` finders (Phases 1 & 3), verifiers (Phase 2), and prompt generators (Phase 4).
+Authoritative reference for reviewing Go codebases. Used by `deep-pr-review` finders (Find), verifiers (Verify), and prompt generators (Render).
 
 ---
 
@@ -514,9 +514,9 @@ func Execute(cmd string) (err error) {
 
 ---
 
-## 5. Phase 2 Verifier Guardrails (Go Refutations & Confirmations)
+## 5. Verify-Phase Guardrails (Go Refutations & Confirmations)
 
-When acting as a Phase 2 Verifier on Go findings, follow these strict validation rules:
+When acting as a Verify-phase verifier on Go findings, follow these strict validation rules:
 
 | Finding Category | Verification Check | Decision Rule |
 |---|---|---|
@@ -528,7 +528,7 @@ When acting as a Phase 2 Verifier on Go findings, follow these strict validation
 
 ---
 
-## 6. Phase 4 AI Remediation Prompt Conventions
+## 6. Render-Phase AI Remediation Prompt Conventions
 
 When writing `🤖 Prompt for AI Agents` in CodeRabbit comments for Go findings, adhere to these conventions:
 

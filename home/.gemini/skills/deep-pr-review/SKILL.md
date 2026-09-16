@@ -1,6 +1,6 @@
 ---
 name: deep-pr-review
-description: Use when asked to deeply review a pull request, run a CodeRabbit-style review, review a diff before merge, or produce severity-ranked PR findings. Runs an architectural approach gate followed by a recall-biased multi-angle review, posting findings as a GitHub review.
+description: Use when asked to deeply review a pull request, run a CodeRabbit-style review, review a diff before merge, or produce severity-ranked PR findings. Runs eligibility checks and an architectural approach gate followed by a 15-angle recall-biased review, posting findings as a GitHub review.
 ---
 
 # Deep PR Review (agy adapter)
@@ -18,14 +18,16 @@ follow it, applying the bindings below wherever it writes a `⟨verb⟩`.
 | `⟨run⟩` | `run_command` |
 | `⟨ask-user⟩` | `ask_question` |
 | `⟨skill-dir⟩` | `~/.gemini/skills/deep-pr-review` |
+| `⟨run-dir⟩` | Once per review: `run_command` `mktemp -d "${TMPDIR:-/tmp}/deep-pr-review.XXXXXX"`; reuse the printed path. |
 | `⟨user-instructions⟩` | `~/.gemini/GEMINI.md` and `~/.claude/CLAUDE.md` |
 
 ## Model routing
 
-| Entries | Model | Why |
+| Role | Model | Why |
 |---|---|---|
-| All Phases (Gate, Angles, Verifiers) | `flash` | Gemini 3.8 Flash on high reasoning outperforms 3.1 Pro while executing significantly faster and cheaper |
-| Mechanical / Rule Pattern-Matching (Angles F–J) | `flash` (or `flash_lite`) | fast pattern-matching against provided rules |
+| Architecture Gate, Finders A–I and K–O, Verifiers | `flash` | Gemini 3.8 Flash on high reasoning outperforms 3.1 Pro while executing significantly faster and cheaper |
+| Finder J (conventions) | `flash_lite` | quote-the-rule / quote-the-line matching |
+| Gap Sweep | main context | needs the deduplicated list |
 
 ## Verified call shape
 

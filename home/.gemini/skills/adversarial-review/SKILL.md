@@ -9,7 +9,7 @@ An end-to-end local review and remediation loop that couples aggressive adversar
 
 The workflow follows a two-phase Red Team / Blue Team pattern:
 
-1. **Red Team (`deep-pr-review` subagent)**: Attacks the code without deference, running a 12-angle recall-biased review, 1-vote verification, and gap sweep to surface concrete defects, security vulnerabilities, concurrency bugs, and edge-case failures. Verified findings are saved to `/tmp/adversarial-review-findings.json`.
+1. **Red Team (`deep-pr-review` subagent)**: Attacks the code without deference, running a 15-angle recall-biased review, 1-vote verification, and gap sweep to surface concrete defects, security vulnerabilities, concurrency bugs, and edge-case failures. Verified findings are saved to `/tmp/adversarial-review-findings.json`.
 2. **Blue Team (Main orchestrator under `superpowers:receiving-code-review`)**: Skeptically audits every finding against codebase reality, rejects hallucinations, YAGNI additions, or out-of-context nitpicks, publishes a triage table, and drives prioritized Red-Green TDD remediation for accepted findings.
 
 ```
@@ -74,7 +74,7 @@ Use `invoke_subagent` to spawn a fresh-context reviewer:
   - The unified diff or exact git commands to inspect the target.
   - Project rules and guidelines from repo configuration files.
   - If Go is detected: target Go version and the text of `~/.gemini/skills/deep-pr-review/reference/go_rules.md`.
-  - Mandate to execute the 12-angle review, 1-vote verification, and gap sweep per `deep-pr-review`:
+  - Mandate to execute the 15-angle review, 1-vote verification, and gap sweep per `deep-pr-review`:
     - Angle A: Line-by-line diff scan (correctness, off-by-ones, null/nil pointers)
     - Angle B: Caller & contract audit (signature changes, assumption drift)
     - Angle C: Failure modes & edge cases (boundary values, error branches)
@@ -87,7 +87,7 @@ Use `invoke_subagent` to spawn a fresh-context reviewer:
     - Angle J: Repo instructions & standards (CLAUDE.md / GEMINI.md compliance)
     - Angle K: Concurrency & lifecycle (goroutine leaks, race conditions, locks)
     - Angle L: Error ergonomics & telemetry (wrapping, context propagation)
-  - Run in **local mode**: skip GitHub posting (Phase 5 of `deep-pr-review`).
+  - Run in **local mode**: skips the Eligibility and Post phases of `deep-pr-review`.
   - Output contract: write verified findings to `/tmp/adversarial-review-findings.json`.
 
 ### 2. Output Schema (`/tmp/adversarial-review-findings.json`)

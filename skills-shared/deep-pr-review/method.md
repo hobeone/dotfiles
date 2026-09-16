@@ -9,33 +9,34 @@ A recall-biased, multi-angle code review that begins with an **Approach & Archit
 The finding methodology is ported from Claude Code's `/code-review xhigh`:
 
 ```
-Phase 0  gather the diff & repo telemetry                     sequential
-Phase 1  Approach & Architecture Gate (Altitude Audit)       sequential (or 1 subagent)
+Phase 0  Eligibility — skip closed/draft/trivial/already-reviewed  sequential (PR targets only)
+Phase 1  Gather — diff, instructions, Go telemetry, expected head   sequential
+Phase 2  Architecture Gate (Altitude Audit)                         sequential (or 1 subagent)
          ├── If FLAWED_APPROACH ──► Post Architectural Review & HALT
-         └── If SOUND_APPROACH  ──► Proceed to Line-Level Review
-Phase 2  12 finder angles, ≤8 candidates each                FAN OUT — 12 subagents
-Phase 3  dedup + 1-vote 3-state verify (recall-biased)        FAN OUT — 1 subagent per candidate
-Phase 4  gap sweep — fresh pass for what Phase 2 missed       sequential (needs the deduped list)
-Phase 5  render in CodeRabbit format                          sequential
-Phase 6  post as a single GitHub review                       sequential
+         └── If SOUND_APPROACH  ──► Proceed to Find
+Phase 3  Find — 15 angles, ≤8 candidates each                       FAN OUT — 15 subagents
+Phase 4  Verify — dedup + 1-vote 3-state verify (recall-biased)     FAN OUT — 1 subagent per candidate
+Phase 5  Gap Sweep — fresh pass, then Verify its candidates          sequential, then FAN OUT
+Phase 6  Render in CodeRabbit format                                sequential
+Phase 7  Post as a single GitHub review                             sequential
 ```
 
 ## Fan-out
 
-Phases 2 and 3 are embarrassingly parallel and are the whole cost of this
+Find and Verify are embarrassingly parallel and are the whole cost of this
 review. Run each as **a single ⟨dispatch-parallel⟩ carrying every entry**, so
-twelve angles cost one angle's wall-clock. Dispatching entries one at a time
+fifteen angles cost one angle's wall-clock. Dispatching entries one at a time
 runs them in series and defeats the point.
 
 Subagents do **not** share your context. Every entry's prompt must be
 self-contained:
 
 - the unified diff (or the exact command to regenerate it, plus the target)
-- the repo instruction files read in Phase 0 — paste the governing rules, do not
+- the repo instruction files read in Gather — paste the governing rules, do not
   just name the file; Angle J is worthless without them
 - when Go is detected, the target Go version and the relevant sections of
   `⟨skill-dir⟩/reference/go_rules.md` pasted directly into the prompt (Angles D, G, K, L in
-  Phase 2; verifiers in Phase 3)
+  Find; verifiers in Verify)
 - that angle's mandate, verbatim from below
 - the required output shape: a JSON array of candidates with `file`, `line`,
   `summary`, `failure_scenario`
@@ -45,7 +46,7 @@ Model routing per role is set by the adapter.
 **If ⟨dispatch-parallel⟩ is unavailable or refused**, do not error: work every angle
 yourself, in sequence, in this context. Do not skip angles for lack of fan-out.
 Then say so in the review body's Method line — a sequential run is a different
-review from a twelve-angle fan-out, and the reader must not be misled about which
+review from a fifteen-angle fan-out, and the reader must not be misled about which
 one produced the findings.
 
 **Do not modify the branch.** This skill only reads and comments. If the user
@@ -56,7 +57,44 @@ surfacing. Do not drop a candidate for being "speculative."
 
 ---
 
-## Phase 0 — Gather the diff
+## Phase 0 — Eligibility
+
+PR targets only. **Local mode** — a branch or working-tree target, or an
+invocation by another skill that asks for local mode — skips this phase and
+Post, and prints the rendered output instead.
+
+```bash
+gh pr view <N> --json state,isDraft,author,headRefOid,files \
+  --jq '{state, isDraft, bot: .author.is_bot, head: .headRefOid, files: [.files[].path]}'
+```
+
+Stop, telling the user why, when any holds:
+
+- `state` is `CLOSED` or `MERGED`.
+- `isDraft` is true, unless the user named this PR explicitly.
+- Trivial: `bot` is true, or every path in `files` is a lockfile
+  (`go.sum`, `package-lock.json`, `pnpm-lock.yaml`, `yarn.lock`, `Cargo.lock`,
+  `uv.lock`, `poetry.lock`).
+- Already reviewed at this head:
+
+  ```bash
+  marker='.[] | select(.body // "" | test("<!-- deep-pr-review head:[0-9a-f]+ -->"))
+          | (.body | capture("deep-pr-review head:(?<sha>[0-9a-f]+)").sha) + " " + .html_url'
+  gh api "repos/{owner}/{repo}/pulls/<N>/reviews" --paginate --jq "$marker"
+  gh api "repos/{owner}/{repo}/issues/<N>/comments" --paginate --jq "$marker"
+  ```
+
+  Each output line is `<sha> <url>`.
+
+  A marker whose SHA equals `head` → stop with "already reviewed at <sha>",
+  linking the review. A marker with an older SHA → continue with a full review;
+  the walkthrough's first paragraph links that prior review.
+
+Record `head` as `expected_head` for Post.
+
+---
+
+## Phase 1 — Gather
 
 Target resolution, in order: an explicit PR number → an explicit branch or path
 → the current branch's PR → the working tree.
@@ -94,7 +132,7 @@ git diff --name-only <base>..<head> | grep -E '\.go$|go\.mod$'
 
 If Go is detected:
 1. **Target Go Version**: Check `go.mod` in the repository root or module/submodule directories for the `go <version>` directive (e.g. `go 1.22`). Fallback to `go version` from the local environment if `go.mod` is absent.
-2. **Load Go Reference Rules**: Read `⟨skill-dir⟩/reference/go_rules.md`. The relevant sections of this catalog MUST be dynamically injected into subagent prompts in Phase 2 (Angles D, G, K, L), Phase 3 (verifiers), and Phase 5 (remediation prompts).
+2. **Load Go Reference Rules**: Read `⟨skill-dir⟩/reference/go_rules.md`. The relevant sections of this catalog MUST be dynamically injected into subagent prompts in Find (Angles D, G, K, L), Verify (verifiers), and Render (remediation prompts).
 
 Treat this diff as the review scope. Read the **enclosing function** for every
 hunk — bugs in unchanged lines of a touched function are in scope, because the
@@ -102,9 +140,11 @@ PR re-exposes or fails to fix them.
 
 ---
 
-## Phase 1 — Approach & Architecture Gate (Altitude Audit)
+## Phase 2 — Architecture Gate
 
-Before dispatching 12 subagents to audit lines, evaluate the PR's fundamental architecture against the 5 Core Inquiries:
+Approach & Architecture Gate (Altitude Audit).
+
+Before dispatching 15 subagents to audit lines, evaluate the PR's fundamental architecture against the 5 Core Inquiries:
 
 1. **Root Cause vs. Symptom Treatment**:
    Is the PR addressing the root cause, or building scaffolding (sweepers, fallbacks, defensive error-swallowing) around an unhandled defect, leaky caller, or un-detached context?
@@ -121,7 +161,7 @@ Before dispatching 12 subagents to audit lines, evaluate the PR's fundamental ar
 
 #### Outcome A: FLAWED_APPROACH (Halt & Report)
 If the approach has fundamental architectural flaws:
-1. **HALT execution immediately.** Do NOT run Phases 2, 3, or 4.
+1. **HALT execution immediately.** Do NOT run Find, Verify, or Gap Sweep.
 2. Render an **Architectural Review** report:
    - **Verdict**: Clear assessment of why the approach is flawed.
    - **Core Architectural Flaws**: Detailed critique with code citations and concrete failure scenarios.
@@ -131,13 +171,15 @@ If the approach has fundamental architectural flaws:
 
 #### Outcome B: SOUND_APPROACH (Proceed)
 If the approach is sound and viable:
-Record a 1-paragraph architecture endorsement for inclusion in the final review walkthrough, and proceed immediately to Phase 2.
+Record a 1-paragraph architecture endorsement for inclusion in the final review walkthrough, and proceed immediately to Find.
 
 ---
 
-## Phase 2 — Find candidates (12 angles, up to 8 each)
+## Phase 3 — Find
 
-One ⟨dispatch-parallel⟩, twelve entries, one entry per angle below. Each returns up
+15 angles, up to 8 candidates each.
+
+One ⟨dispatch-parallel⟩, fifteen entries, one entry per angle below. Each returns up
 to 8 candidates; each candidate needs `file`, `line`, a one-line `summary`, and
 a concrete `failure_scenario`.
 
@@ -146,7 +188,7 @@ When dispatching each angle subagent, include these explicit rules in its prompt
 - **Exact SHA Inspection**: Do NOT inspect files in the local working tree if it differs from the PR head. Always inspect code with ⟨read-at-sha⟩ at `<headRefOid>`, or `git diff <base>..<headRefOid>`, to avoid testing against stale base code.
 - **Loop Invariants & Sparse Iteration**: When proposing index substitutions (e.g., replacing a tracking variable `prev` with `slice[i-1]`), you MUST audit all `continue`, `break`, and conditional filter branches in the loop to verify the index invariant holds under sparse or filtered iterations.
 - **Callback & Closure Re-entrancy**: When evaluating lazy resolvers, callbacks, or closures, check whether the callee invokes them under a lock (`RLock`/`Lock`) that could deadlock or re-acquire locks.
-- **Go Dynamic Rule Injection**: When Go code is detected in Phase 0, the orchestrator MUST inject the target Go version and the relevant sections of `reference/go_rules.md` into the prompts for:
+- **Go Dynamic Rule Injection**: When Go code is detected in Gather, the orchestrator MUST inject the target Go version and the relevant sections of `reference/go_rules.md` into the prompts for:
   - **Angle D (language-pitfall specialist)**: Inject Go Pitfalls & Correctness Bugs from Section 1 (typed `nil` in interface returns, goroutine leaks & unbuffered channel deadlocks, context misuse & missing cancels, HTTP response body / resource leaks, `defer` in loops, unbounded `io.ReadAll`, map/slice aliasing & data races, version-aware loopvar capture).
   - **Angle G (simplification & modern idioms)**: Inject Modern Go Standard Library Adoption & Anti-Pattern Pruning from Section 2 (Go 1.21+ `slices`/`maps`/`cmp`/`clear`/`min`/`max`/`sync.OnceValue`, Go 1.22 routing / `math/rand/v2`, Go 1.23 `iter`, 1:1 producer interfaces, getter/setter bloat, redundant nil slice checks, pointers to reference types).
   - **Angle K (concurrency & state lifecycle)**: Inject Go Concurrency & State Lifecycle from Section 3 (lock copying / `copylocks`, `sync.WaitGroup` `Add(1)` placement, `sync.Once` re-entrancy deadlock, mixed atomic/non-atomic access).
@@ -157,7 +199,7 @@ Do **not** let one angle's conclusions suppress another's — if two angles flag
 the same line for different reasons, record both. That independence is the
 reason the angles are separate subagents rather than one long prompt.
 
-Pass every candidate with a nameable failure scenario through to Phase 3.
+Pass every candidate with a nameable failure scenario through to Verify.
 Finders that silently drop half-believed candidates bypass the verify step and
 are the dominant cause of misses.
 
@@ -227,7 +269,7 @@ deep enough — prefer generalizing the underlying mechanism over adding special
 cases.
 
 ### Angle J — conventions (AGENTS.md / CLAUDE.md)
-Using the instruction files read in Phase 0, check the diff for clear violations
+Using the instruction files read in Gather, check the diff for clear violations
 of the rules they state. Only flag a violation when you can **quote the exact
 rule and the exact line that breaks it** — no style preferences, no vague
 "spirit of the doc" inferences. Name the file path and quote the rule in the
@@ -249,15 +291,51 @@ Trace functions returning composite results (e.g. `([]PostAnomaly, error)`) acro
 
 *When reviewing Go code, `reference/go_rules.md` (Section 4) is the governing authority for error ergonomics (%w vs %v wrapping, `errors.Is`/`errors.As`, error shadowing with `:=`).*
 
+### Angle M — history and blame
+For each changed range, read its history at the base commit:
+
+```bash
+git log -L <start>,<end>:<path> --format='%h %s' -n 20 <base>
+git blame -L <start>,<end> <base> -- <path>
+```
+
+Flag a change that reverts or weakens a deliberate earlier fix: a guard, retry,
+lock, or check whose introducing commit message names the bug it prevented.
+Cite the commit hash and quote its subject in `failure_scenario`.
+
+### Angle N — prior PR feedback
+For each file the diff touches, map its recent commits to merged PRs and read
+their review feedback (cap: 10 distinct PRs total):
+
+```bash
+git log --format=%H -n 20 <base> -- <path>
+gh api "repos/{owner}/{repo}/commits/<sha>/pulls" --jq '.[] | select(.merged_at) | .number'
+gh api "repos/{owner}/{repo}/pulls/<n>/comments" --paginate --jq '.[] | {path, line, body, html_url}'
+gh api "repos/{owner}/{repo}/pulls/<n>/reviews" --jq '.[] | select(.body != "") | {body, html_url}'
+```
+
+Flag feedback that applies again to the new code: quote the original comment,
+link its `html_url`, and name the new line that repeats the objected-to pattern.
+Return nothing when the repo has no GitHub remote.
+
+### Angle O — code-comment compliance
+Read comments in and adjacent to every changed function that state a contract —
+"caller holds mu", "must be idempotent", "never returns nil", doc-comment
+preconditions and postconditions. Flag changes that violate one, quoting the
+comment and the violating line.
+
 > Cleanup, altitude, and conventions candidates use the same shape; in
 > `failure_scenario`, state the concrete cost (what is duplicated, wasted,
 > harder to maintain, or which rule is broken) instead of a crash. **Correctness
-> bugs (Angles A–E, K, L) always outrank cleanup, altitude, and conventions
-> findings** when the output cap forces a cut.
+> bugs (Angles A–E, K, L, M, O) always outrank cleanup, altitude, and conventions
+> findings** when the output cap forces a cut. Angle N findings rank by the
+> category of the feedback they quote.
 
 ---
 
-## Phase 3 — Dedup and verify (1 vote, 3 states, recall-biased)
+## Phase 4 — Verify
+
+Dedup, then 1 vote, 3 states, recall-biased.
 
 Dedup near-duplicates yourself first — same defect, same location, same reason
 → keep the one with the most concrete failure scenario. Deduping before the
@@ -287,7 +365,7 @@ that lost an anchor. These are PLAUSIBLE.
 actual line); provably impossible (type/constant/invariant — show it); already
 handled in this diff (cite the guard); or pure style with no observable effect.
 
-**Verification Guardrails (Mandatory for Phase 3 Subagents):**
+**Verification Guardrails (Mandatory for Verify Subagents):**
 - **Exact SHA Inspection**: Do NOT verify findings against the local working branch if it differs from the PR head. Use ⟨read-at-sha⟩ at `<headRefOid>` or `git diff <base>..<headRefOid>` to ensure verification reflects the actual PR code.
 - **Loop & Index Refactoring Check**: If a finding proposes index arithmetic substitutions (e.g., replacing a tracking variable like `prev` with `slice[i-1]`), verify whether any `continue`, `break`, or conditional filter in the loop can cause `i-1` to point to a skipped or unexamined element. If sparse iterations break the invariant, REFUTE the finding.
 - **Go Verification Guardrails (Inject Section 5 of `reference/go_rules.md`)**: When verifying Go findings, inject Section 5 of `reference/go_rules.md` into verifier subagent prompts to enforce the Go decision matrix:
@@ -296,15 +374,18 @@ handled in this diff (cite the guard); or pure style with no observable effect.
   - *Channel send deadlock*: Audit `select` for `default:` clauses, buffer capacities vs sender counts, and `case <-ctx.Done():` guards before confirming deadlocks.
   - *Lock copy (`copylocks`)*: Confirm if struct containing mutex/waitgroup is passed by value or has a value receiver; refute if pointer receiver/reference throughout.
   - *Unwrapped error (`%v` vs `%w`)*: Confirm if error is returned from public/internal API function to caller; mark plausible/nitpick if purely internal log string.
+- **Prior-feedback findings (Angle N)**: CONFIRMED only when the pattern the
+  quoted comment objected to is present at the cited new line. Otherwise
+  REFUTED — quote the new line.
 
 Keep CONFIRMED and PLAUSIBLE. Drop REFUTED. Do not drop on uncertainty.
 
 ---
 
-## Phase 4 — Sweep for gaps
+## Phase 5 — Gap Sweep
 
 Sequential, in this context — this phase reads the verified list, so it cannot
-start until Phase 3 has joined.
+start until Verify has joined.
 
 Take one more pass as a fresh reviewer who has the deduplicated list. Re-read
 the diff and enclosing functions looking **ONLY** for defects not already
@@ -318,11 +399,13 @@ Focus on what the first pass tends to miss:
 - config defaults flipped
 
 Surface up to 8 additional candidates, each naming a defect not already on the
-list. Run them through Phase 3. If nothing is new, return nothing — do not pad.
+list. Verify them with a second ⟨dispatch-parallel⟩ under the Verify rules —
+one verifier per candidate — and merge the survivors into the list. If nothing
+is new, return nothing and skip the second round — do not pad.
 
 ---
 
-## Phase 5 — Render in CodeRabbit format
+## Phase 6 — Render
 
 Cap the output at **15 findings**, ranked most-severe first. Correctness before
 cleanup. If more than 15 survive, keep the 15 most severe and say in the review
@@ -333,7 +416,9 @@ severity / effort vocabularies, and a worked example lifted from a real
 CodeRabbit review. Follow it literally — the value of this format is that
 downstream agents can consume it.
 
-Write each finding into a JSON array at `/tmp/deep-pr-review-findings.json`:
+Create ⟨run-dir⟩ once for this review and write every artifact below into it.
+
+Write each finding into a JSON array at `<run-dir>/findings.json`:
 
 ```json
 [
@@ -369,16 +454,32 @@ When authoring the `🤖 Prompt for AI Agents` in CodeRabbit comments for Go fin
 
 ---
 
-## Phase 6 — Post
+## Phase 7 — Post
+
+Immediately before posting, re-run the Eligibility checks. If any now stops the
+review (closed, converted to draft, a marker at this head from a concurrent run),
+stop without posting.
 
 ```bash
 ⟨skill-dir⟩/scripts/post-review.sh \
-  <pr-number> /tmp/deep-pr-review-findings.json \
-  [--walkthrough /tmp/walkthrough.md] [--repo OWNER/NAME] [--dry-run]
+  <pr-number> <run-dir>/findings.json \
+  --expect-head <expected_head> \
+  [--walkthrough <run-dir>/walkthrough.md] [--repo OWNER/NAME] [--sequential] [--dry-run]
 ```
 
-Write the walkthrough (Phase 5, `reference/format.md`) to `/tmp/walkthrough.md`
+Write the walkthrough (Render, `reference/format.md`) to `<run-dir>/walkthrough.md`
 first; the script posts it as a separate issue comment before the review.
+
+`--expect-head` makes the script refuse if the PR head moved during the review —
+the anchors would land on different code. Re-run the review from Eligibility.
+
+Pass `--sequential` when ⟨dispatch-parallel⟩ was unavailable and the angles ran
+in this context; the review body's Method line then says so.
+
+The script writes `<!-- deep-pr-review head:<sha> -->` as the first line of the
+review body; Eligibility uses it to detect a prior review. When the Architecture
+Gate halts, put the same marker as the first line of the architectural review
+comment.
 
 The script posts **one** review (event `COMMENT` — never `APPROVE` or
 `REQUEST_CHANGES`) with all inline comments attached, plus an optional separate
@@ -391,7 +492,7 @@ finding whose line is not commentable is moved into the review body under
 `## Additional comments (not anchorable)` rather than dropped, and a multi-line
 anchor whose `start_line` is outside the diff degrades to a single-line comment.
 
-**No PR?** If the target is a branch or the working tree, skip Phase 6 entirely
+**No PR?** If the target is a branch or the working tree, skip Post entirely
 and print the walkthrough, review body, and each rendered finding to the
 terminal in the same format. Do not open a PR to have somewhere to post.
 

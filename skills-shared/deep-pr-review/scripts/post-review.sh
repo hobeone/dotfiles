@@ -187,9 +187,9 @@ n_orphan=$(wc -l < "$work/orphan.jsonl")
 
   printf '<details>\n<summary>ℹ️ Review info</summary>\n\n'
   if ((sequential)); then
-    printf '**Method**: 12-angle recall-biased review (7 correctness + 3 cleanup +\naltitude + conventions), 1-vote verify, gap sweep \u2014 run **sequentially in a\nsingle context**, not as a subagent fan-out.\n\n'
+    printf '**Method**: 15-angle recall-biased review (9 correctness + 3 cleanup +\naltitude + conventions + prior feedback), 1-vote verify, gap sweep \u2014 run\n**sequentially in a single context**, not as a subagent fan-out.\n\n'
   else
-    printf '**Method**: 12-angle recall-biased review (7 correctness + 3 cleanup +\naltitude + conventions) fanned out to concurrent subagents, 1-vote verify,\ngap sweep.\n\n'
+    printf '**Method**: 15-angle recall-biased review (9 correctness + 3 cleanup +\naltitude + conventions + prior feedback) fanned out to concurrent subagents,\n1-vote verify, gap sweep.\n\n'
   fi
   # shellcheck disable=SC2016 # literal markdown backticks
   printf '**Reviewed**: head `%s`\n\n' "$head_sha"
