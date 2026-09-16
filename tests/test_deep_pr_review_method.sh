@@ -28,5 +28,12 @@ if grep -nE '12-angle|12 analytical' "${callers[@]}"; then err "callers still sa
 # shellcheck disable=SC2016 # literal backticks in the pattern, no expansion intended
 if grep -nE 'Phase [0-9] of `deep-pr-review`' "${callers[@]}"; then err "callers cite deep-pr-review phases by number"; fi
 
+# Callers must not enumerate their own per-angle list (it drifts from
+# method.md's names); they must instead cite deep-pr-review's own Angles A-O.
+if hits=$(grep -nE '^[[:space:]]*[-*][[:space:]]*\**Angle [A-O]\b' "${callers[@]}"); then
+  err "callers enumerate a per-angle list instead of citing deep-pr-review's Angles A-O:"
+  printf '%s\n' "$hits"
+fi
+
 ((fail)) && exit 1
 echo PASS

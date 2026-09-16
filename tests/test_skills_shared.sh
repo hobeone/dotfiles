@@ -9,7 +9,7 @@ export LC_ALL=C
 fail=0
 err() { printf 'FAIL: %s\n' "$*"; fail=1; }
 
-forbidden='run_subagent|invoke_subagent|view_file|run_command|ask_question|AskUserQuestion|subagent_type|~/\.gemini|~/\.claude'
+forbidden='run_subagent|invoke_subagent|view_file|run_command|ask_question|AskUserQuestion|subagent_type|TypeName|~/\.gemini|~/\.claude'
 verb_re='⟨[a-z-]+⟩'
 
 shopt -s nullglob
@@ -29,7 +29,7 @@ for core in "${cores[@]}"; do
     printf '%s\n' "$hits"
   fi
 
-  used=$(grep -ohE "$verb_re" "$core/method.md" | sort -u)
+  used=$(grep -rIohE "$verb_re" "$core" | sort -u)
   adapters=0
   for harness in .claude .gemini; do
     adir=home/$harness/skills/$name
@@ -42,9 +42,17 @@ for core in "${cores[@]}"; do
         err "$link is not a symlink"
         continue
       fi
+      target=$(readlink "$link")
+      [[ $target != /* ]] || err "$link target '$target' is not relative"
       want=$(realpath "$entry")
       got=$(realpath "$link" 2>/dev/null || true)
       [[ $got == "$want" ]] || err "$link resolves to '$got', want '$want'"
+    done
+
+    for link in "$adir"/*; do
+      [[ -L $link ]] || continue
+      base=${link##*/}
+      [[ -e $core/$base ]] || err "$link is a symlink with no matching top-level entry in $core"
     done
 
     if [[ ! -f $adir/SKILL.md ]]; then
