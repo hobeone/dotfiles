@@ -74,19 +74,8 @@ Use `invoke_subagent` to spawn a fresh-context reviewer:
   - The unified diff or exact git commands to inspect the target.
   - Project rules and guidelines from repo configuration files.
   - If Go is detected: target Go version and the text of `~/.gemini/skills/deep-pr-review/reference/go_rules.md`.
-  - Mandate to execute the 15-angle review, 1-vote verification, and gap sweep per `deep-pr-review`:
-    - Angle A: Line-by-line diff scan (correctness, off-by-ones, null/nil pointers)
-    - Angle B: Caller & contract audit (signature changes, assumption drift)
-    - Angle C: Failure modes & edge cases (boundary values, error branches)
-    - Angle D: Language pitfalls (lifecycle, closures, type assertions)
-    - Angle E: Performance & allocations (hot paths, leaks, complexity)
-    - Angle F: Reuse & existing helpers (reinvented wheels)
-    - Angle G: Modern idioms & standard library (cleanups, modern stdlib functions)
-    - Angle H: Altitude & architecture (layer violations, abstractions)
-    - Angle I: Conventions & naming (style, idiomatic naming)
-    - Angle J: Repo instructions & standards (CLAUDE.md / GEMINI.md compliance)
-    - Angle K: Concurrency & lifecycle (goroutine leaks, race conditions, locks)
-    - Angle L: Error ergonomics & telemetry (wrapping, context propagation)
+  - Mandate to run every angle in `deep-pr-review`'s Find phase (Angles A–O, as
+    defined in its `method.md`), plus 1-vote verification and the gap sweep.
   - Run in **local mode**: skips the Eligibility and Post phases of `deep-pr-review`.
   - Output contract: write verified findings to `/tmp/adversarial-review-findings.json`.
 

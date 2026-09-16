@@ -139,19 +139,9 @@ Invoke the reviewer using `invoke_subagent`:
   - Provide the exact git diff command or unified diff corresponding to the target scope.
   - If Go is detected, supply the target Go version and `~/.gemini/skills/deep-pr-review/reference/go_rules.md`.
   - Include relevant repo rules from `GEMINI.md` or `CLAUDE.md`.
-  - Mandate execution of the 15-angle review, 1-vote verification, and gap sweep per `deep-pr-review`:
-    - Angle A: Line-by-line diff scan (correctness, bounds, nil/null pointers)
-    - Angle B: Caller & contract audit (signature changes, assumptions)
-    - Angle C: Failure modes & edge cases (boundaries, error branches)
-    - Angle D: Language pitfalls (goroutine/closure binding, type assertions)
-    - Angle E: Performance & allocations (hot paths, leaks, complexity)
-    - Angle F: Reuse & existing helpers (reinvented wheels)
-    - Angle G: Modern idioms & stdlib (clean modern stdlib replacements)
-    - Angle H: Altitude & architecture (layer violations, abstractions)
-    - Angle I: Conventions & naming (idiomatic naming, clarity)
-    - Angle J: Repo standards & rules (`GEMINI.md`/`CLAUDE.md` compliance)
-    - Angle K: Concurrency & lifecycle (goroutine leaks, race conditions, locks)
-    - Angle L: Error ergonomics & telemetry (wrapping, context propagation)
+  - Mandate execution of every angle in `deep-pr-review`'s Find phase (Angles
+    A–O, as defined in its `method.md`), plus 1-vote verification and the gap
+    sweep.
   - Run in **local mode**: do NOT post to GitHub.
   - **Output destination**: Write verified findings to `/tmp/adversarial-review-loop-findings.json`. If 0 defects are found, write an empty JSON array `[]`.
 
