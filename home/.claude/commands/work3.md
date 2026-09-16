@@ -167,6 +167,12 @@ gate resumable (see *Check for active session*), and it is written when the deci
 rather than reconstructed later from a transcript. On the `adhoc` path it is held with the other
 artifacts and posted once the issue exists in Phase A2.
 
+**State each rejection as a claim, not as a preference.** `solution-space` Step 3 records why each
+loser lost; this gate adds that the reason must be checkable. Cite what it rests on — a complexity
+number, a measurement, a stated constraint — the way Step 2 already requires the adjudication to
+name a specific field. A reason phrased as taste ("heavier", "fits the existing types better")
+gives Phase A2's adjudication reviewer nothing to check, and the rejection goes unexamined.
+
 ### The rejected-premise fork
 
 **When the premise verdict was `rejected`**, this fork is presented *before* the route runs (see
@@ -254,9 +260,10 @@ Step 1. Copying that text into this file would drift the first time either file 
 - Step 3.4 is the mandatory reachability check. No deviation.
 - Step 3.5 — **the one deviation.** Its item 1 is a mandatory *offer* to the user; `/work3` runs it
   as a **mandatory automatic loop** instead, because Phase A2 sits before the autonomy boundary but
-  the offer itself is not a decision worth the user's turn. The soundness reviewer and
-  `quality-lenses` in `plan` mode run together, findings are applied, and the pass repeats until
-  clean or three rounds elapse. **Three rounds without convergence escalates to the user.**
+  the offer itself is not a decision worth the user's turn. The soundness reviewer,
+  `quality-lenses` in `plan` mode, and the adjudication reviewer below run together, findings are
+  applied, and the pass repeats until clean or three rounds elapse. **Three rounds without
+  convergence escalates to the user.**
   Everything else in 3.5 — its triage categories, its per-premise iteration counting, its
   "the plan that exits this step is the contract" rule — runs unchanged.
 
@@ -274,6 +281,42 @@ Step 1. Copying that text into this file would drift the first time either file 
   nobody has read. Ask specifically what the corrected shape now fails to cover, since a correction
   that closes the reported hole while leaving an adjacent one open looks identical to a complete fix
   from inside the round that produced it.
+
+  **A `quality-lenses` finding that proposes widening scope on a factual claim about existing code
+  behavior gets a one-shot independent verification of that specific claim before it is applied.**
+  The altitude lens in particular argues from premises like "caller X never supplies a deadline" or
+  "helper Y already bounds this" — and the finding is only as good as that premise. Read the cited
+  file/function yourself (or dispatch a fresh-context check) and confirm the claim before folding
+  the correction into the plan, the same discipline `quaere-evidence`/`quaere-grounding` already
+  apply elsewhere to a cited fact. A scope-widening correction whose premise was never checked can
+  survive an entire plan-review round and only surface later, in Phase 0.5, once the code it was
+  wrong about is already read closely — costing a revert instead of a rejected finding.
+
+  **One reviewer in the loop reads the Gate 1 adjudication instead of the plan.** Every other
+  reviewer in Phase A2 takes the chosen direction as a premise, because the plan encodes it — so
+  they can only ask whether it is executed correctly. Nothing else re-reads the argument that
+  *rejected* the other candidates.
+
+  Dispatched in the same message as the soundness reviewer and `quality-lenses`. Fresh context,
+  text only, no repo access. Its input is the `solution-space` comparison — the sketches, the one
+  chosen, and the stated reason each loser was rejected; on the `architectural` route, brainstorming's
+  approaches and the same rejection reasons. Its single question:
+
+  > Does any rejection reason establish something *weaker* than the conclusion drawn from it?
+  > Name the gap between what the reason proves and what it was used to justify.
+
+  It is **not** asked which candidate is best. That is a fourth opinion on a decision Gate 1 has
+  closed; this reviewer checks the reasoning, not the choice.
+
+  A finding routes like an altitude finding: re-open the direction, re-enter Phase A1, reset the
+  iteration counter. **It runs once per adjudication, not once per round** — its input does not
+  change while the direction stands, so it fires again only when a finding re-opens the direction.
+  Skip it when only one candidate was ever on the table, and report it as skipped rather than clean.
+
+  **When an objection to the approach lands late, size the alternative before deferring it.**
+  Deferring assumes a re-implementation costs more than living with the objection, which holds only
+  while the alternative is larger. When it is smaller, deferring is the expensive option.
+
 - Step 5 is the post-to-GitHub step (`gh-body-check` + `gh-post`), run once the plan is approved
   below. Its Step 5.1 is where an `adhoc` run's tracking issue is created; any artifacts held from
   Gate 1 (the `solution-space` comparison, the auditor's evidence or counter-proposal) are posted
@@ -463,6 +506,27 @@ as the total while an entire eight-finding review, three of them Major, sat unre
 
 A count that does not match what you triaged is a stop, not a rounding error.
 
+**The count is stated, not merely taken.** Open every triage — and every claim that there is
+nothing to triage — with a one-line ledger naming all three numbers and what happened to each ID:
+
+```
+Feedback ledger, PR #N: inline 8 (6 theirs / 2 mine) · reviews 2 · conversation 1 → 9 to triage
+```
+
+An unrun count and a zero count produce identical prose otherwise, so the rule above is
+unenforceable without this line: *"I reviewed the feedback"* reads the same whether the three
+commands ran or not. The ledger is what makes the omission visible — to the user in the moment, and
+to you when a later round's numbers do not reconcile with an earlier round's. **"No outstanding
+feedback" is a claim about three endpoint counts; without the ledger it is a claim about whichever
+one you happened to look at.**
+
+**A reviewer's own summary is not a count.** CodeRabbit's PR-level review body, a `gh pr view`
+comment list, the GitHub UI's "Files changed" badge — each renders a *subset* and none announces
+that it is one. Counting means the three `--paginate` commands above and nothing else. This is the
+`head` hazard's quieter twin, and it is the one that actually fired: a run answered the two findings
+named in a review summary, declared the PR ready, and left six inline findings — three Major —
+unread on an endpoint it never queried. Nothing was truncated; the wrong source was counted.
+
 **2. Re-review the fix commits, not the branch.** After each round of fixes lands, review
 `git diff <round-start>..HEAD` — the fixes themselves — before declaring the round done. A fix that
 lands cleanly can introduce a new defect in the code it just touched, and that is a different
@@ -480,7 +544,10 @@ Scope this to the fix diff. It is cheap, and it targets exactly where the risk c
 
 Run `/pr-review remote` feeding `receiving-code-review`. **Phase C's wait and Gate 3 are one
 checkpoint, not two**: when `/pr-review remote` reports no unaddressed feedback, the merge
-question is asked in the same breath rather than as a separate turn. This removes one
+question is asked in the same breath rather than as a separate turn. **That report is only
+admissible with the feedback ledger beside it** (rule 1 above) — "no unaddressed feedback" is the
+exact sentence an uncounted round produces, so the merge question and the three endpoint counts
+travel together or neither does. This removes one
 *design-driven* stop — the bare "review is done, shall I ask about merging?" — and is not a claim
 that Gate 3 is the only post-boundary stop; the enumeration under Gate 2 is authoritative. When
 `/pr-review remote` *does* return feedback, its per-finding triage stops for the user first, and
