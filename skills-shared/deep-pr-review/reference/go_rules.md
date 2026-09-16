@@ -623,25 +623,25 @@ npx skills add samber/cc-skills-golang -g -y \
 ```
 
 ### 7.1 Core Review & Analysis Skills
-- **Safety & Defensive Coding**: `~/.gemini/skills/golang-safety`
+- **Safety & Defensive Coding**: `golang-safety`
   - Deep-dive into nil safety, interface tuple internals `(type, value)`, numeric overflow, slice aliasing under `append`, and defensive copying.
-- **Concurrency & Goroutine Lifecycle**: `~/.gemini/skills/golang-concurrency`
+- **Concurrency & Goroutine Lifecycle**: `golang-concurrency`
   - Structured concurrency, channel direction and ownership, `errgroup` vs `sync.WaitGroup`, worker pool patterns, and leak-free shutdown.
-- **Error Handling & Inspection**: `~/.gemini/skills/golang-error-handling`
+- **Error Handling & Inspection**: `golang-error-handling`
   - The single-handling rule (log or return, never both), `%w` error trees, `errors.Is`/`errors.As`/`errors.Join`, and panic/recover boundaries.
-- **Modernization & Language Features**: `~/.gemini/skills/golang-modernize`
+- **Modernization & Language Features**: `golang-modernize`
   - Go version matrix (Go 1.21–1.26), standard library replacements (`slices`, `maps`, `cmp.Or`, `min`/`max`/`clear`, `sync.OnceValue`, `iter.Seq`), and deprecation migrations.
-- **Context Lifecycle & Deadlines**: `~/.gemini/skills/golang-context`
+- **Context Lifecycle & Deadlines**: `golang-context`
   - Context propagation rules, request boundary management, cancellation cascades, `context.WithoutCancel`, and avoiding struct-held contexts.
-- **Structs & Interface Design**: `~/.gemini/skills/golang-structs-interfaces`
+- **Structs & Interface Design**: `golang-structs-interfaces`
   - "Accept interfaces, return structs", interface segregation (1–3 methods max), consumer-defined interfaces, struct embedding pitfalls, and receiver consistency.
 
 ### 7.2 Testing, Security & Remediation Skills
-- **Table-Driven Testing & Leak Detection**: `~/.gemini/skills/golang-testing`
+- **Table-Driven Testing & Leak Detection**: `golang-testing`
   - Table-driven test construction, `t.Parallel()` subtest scoping, `t.Helper()` stack annotations, `t.Cleanup()` teardowns, and `goleak` goroutine leak assertions.
-- **Performance & Allocation Optimization**: `~/.gemini/skills/golang-performance`
+- **Performance & Allocation Optimization**: `golang-performance`
   - Heap allocation profiling, slice/map preallocation, `sync.Pool` reuse, and avoiding closure memory retention on long-lived objects.
-- **Security & Vulnerability Prevention**: `~/.gemini/skills/golang-security`
+- **Security & Vulnerability Prevention**: `golang-security`
   - Path traversal defense (`os.Root` in Go 1.24+, `filepath.Localize`, or `filepath.Rel` boundary validation), constant-time crypto comparisons (`subtle.ConstantTimeCompare`), SQL/command injection, and safe deserialization.
-- **Static Analysis & Linting**: `~/.gemini/skills/golang-lint`
+- **Static Analysis & Linting**: `golang-lint`
   - `golangci-lint`, `govet`, and `staticcheck` rule configuration and pre-flight diagnostics.

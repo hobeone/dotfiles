@@ -78,6 +78,7 @@ form:
 | `⟨ask-user⟩` | Ask the user a question and wait |
 | `⟨skill-dir⟩` | The adapter's installed skill directory |
 | `⟨run-dir⟩` | This run's private temp directory |
+| `⟨user-instructions⟩` | The user's global instruction file(s) to read during Gather |
 
 Each adapter's SKILL.md contains one **Harness mapping** table that binds every verb, plus model routing
 per role. Adding a verb to `method.md` without binding it in every adapter fails the test suite.
@@ -166,6 +167,7 @@ Their `go_rules.md` paths are unchanged.
 | `⟨ask-user⟩` | `ask_question` | `AskUserQuestion` |
 | `⟨skill-dir⟩` | `~/.gemini/skills/deep-pr-review` | `~/.claude/skills/deep-pr-review` |
 | `⟨run-dir⟩` | `mktemp -d "${TMPDIR:-/tmp}/deep-pr-review.XXXXXX"` | same command |
+| `⟨user-instructions⟩` | `~/.gemini/GEMINI.md` and `~/.claude/CLAUDE.md` | `~/.claude/CLAUDE.md` |
 
 Claude uses `Agent` fan-out, not the `Workflow` tool, because `Workflow` requires explicit user opt-in
 per session.
