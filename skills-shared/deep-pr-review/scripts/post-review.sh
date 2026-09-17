@@ -57,8 +57,12 @@ if [[ -z $repo ]]; then
   repo=$(gh repo view --json nameWithOwner --jq .nameWithOwner)
 fi
 
-head_sha=$(gh api "repos/$repo/pulls/$pr" --jq .head.sha)
+# One call fetches both the head SHA and the PR's authoritative changed-file
+# count, used below to detect a truncated diff.
+IFS=$'\t' read -r head_sha changed_files \
+  < <(gh api "repos/$repo/pulls/$pr" --jq '[.head.sha, .changed_files] | @tsv')
 [[ -n $head_sha ]] || die "could not resolve head SHA for $repo#$pr"
+[[ -n $changed_files ]] || die "could not resolve changed_files for $repo#$pr"
 
 # --expect-head guards against the PR head moving between the review's Gather
 # phase — where the caller recorded expected_head — and this Post step, not
@@ -89,38 +93,41 @@ if ! gh pr diff "$pr" --repo "$repo" > "$work/diff.txt" 2>"$work/diff.err" || ! 
 fi
 
 # ---------------------------------------------------------------------------
-# Every path in the PR's file list must appear in the diff, or the diff was
-# truncated (gh pr diff has a size limit) and findings for the missing files
-# would silently be dropped to the review body instead of anchored inline.
+# The diff must account for every file the PR changed, or it was truncated
+# (gh pr diff has a size limit) and findings for the missing files would
+# silently be dropped to the review body instead of anchored inline.
+#
+# Every changed file yields exactly one `diff --git` header, regardless of
+# kind — a pure rename, a binary file, a mode change, or a quoted/space path
+# all emit one, even when they emit no `---`/`+++` lines at all (rename,
+# binary) or emit them in a form a path-string comparison can't match
+# (quoted non-ASCII, space-suffixed TAB). Comparing header counts against the
+# PR's authoritative changed_files is robust where the old path-list
+# comparison false-refused all of those cases.
 # ---------------------------------------------------------------------------
-mapfile -t pr_files < <(gh pr view "$pr" --repo "$repo" --json files --jq '.files[].path')
-
-awk '
-  /^--- / { a_path = substr($0, 5); sub(/^[a-z]\//, "", a_path); next }
-  /^\+\+\+ / {
-    path = substr($0, 5)
-    if (path == "/dev/null") { print a_path; next }   # deleted file: present via its old path
-    sub(/^[a-z]\//, "", path)
-    print path
-    next
-  }
-' "$work/diff.txt" | sort -u > "$work/present.txt"
-
-missing=()
-for path in "${pr_files[@]}"; do
-  grep -qxF "$path" "$work/present.txt" || missing+=("$path")
-done
-if ((${#missing[@]})); then
-  first=$(IFS=', '; echo "${missing[*]:0:3}")
-  die "diff is missing ${#missing[@]} PR file(s) ($first); refusing to post — re-run"
+actual=$(grep -c '^diff --git ' "$work/diff.txt")
+if [[ $actual != "$changed_files" ]]; then
+  die "diff has $actual of $changed_files changed files; refusing to post — re-run"
 fi
+
+# "Files selected for processing" list for the review body. The paginated
+# REST endpoint has no 100-file cap, unlike `gh pr view --json files`
+# (cli/cli#14354: a 150-file PR reports only 100 there).
+# shellcheck disable=SC2016 # literal markdown backticks in the jq program, no expansion intended
+mapfile -t pr_files_lines \
+  < <(gh api "repos/$repo/pulls/$pr/files" --paginate --jq '.[] | "* `" + .filename + "`"')
 
 awk '
   /^\+\+\+ / {
     # "+++ b/path", or "+++ /dev/null" for a deleted file (nothing to comment on).
     path = substr($0, 5)
     if (path == "/dev/null") { path = ""; next }
+    sub(/\t$/, "", path)                  # git appends a TAB after a path containing a space
+    if (path ~ /^".*"$/) { gsub(/^"|"$/, "", path) }  # git double-quotes a special/non-ASCII path
     sub(/^[a-z]\//, "", path)     # strip the b/ prefix git emits
+    # A non-ASCII path stays C-escaped (octal, e.g. \303\251) after unquoting,
+    # so it will not textually match a finding path; it safely degrades to
+    # the review body instead of anchoring inline.
     next
   }
   /^@@ / {
@@ -236,8 +243,7 @@ n_orphan=$(wc -l < "$work/orphan.jsonl")
   # shellcheck disable=SC2016 # literal markdown backticks
   printf '**Reviewed**: head `%s`\n\n' "$head_sha"
   printf '<details>\n<summary>📒 Files selected for processing</summary>\n\n'
-  # shellcheck disable=SC2016 # literal markdown backticks
-  printf '* `%s`\n' "${pr_files[@]}"
+  printf '%s\n' "${pr_files_lines[@]}"
   printf '\n</details>\n\n</details>\n'
 } > "$work/body.md"
 

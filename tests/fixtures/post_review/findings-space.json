@@ -1,0 +1,5 @@
+[
+  {"path": "has space.txt", "line": 2, "category": "🐛 Correctness & Logic", "severity": "🟡 Minor",
+   "effort": "🧹 Quick fix", "verdict": "PLAUSIBLE", "title": "Space path finding.",
+   "body": "Body.", "agent_prompt": "Fix space path."}
+]

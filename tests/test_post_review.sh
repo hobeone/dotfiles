@@ -8,7 +8,7 @@ fx=tests/fixtures/post_review
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 
-export PATH="$PWD/$fx:$PATH" STUB_LOG=$work/gh.log STUB_DIFF=$fx/diff.txt STUB_HEAD=abc123
+export PATH="$PWD/$fx:$PATH" STUB_LOG=$work/gh.log STUB_DIFF=$fx/diff.txt STUB_HEAD=abc123 STUB_CHANGED_FILES=3
 fail=0
 err() { printf 'FAIL: %s\n' "$*"; fail=1; }
 
@@ -82,14 +82,37 @@ reviews_ln=$(grep -n 'pulls/7/reviews' "$STUB_LOG" | head -1 | cut -d: -f1)
 [[ -n $comments_ln && -n $reviews_ln && $comments_ln -lt $reviews_ln ]] \
   || err "walkthrough comment not posted before the review"
 
-# G3b — truncation guard: a diff missing a PR-listed file refuses to post.
+# A1 — truncation guard: fewer `diff --git` headers than the PR's
+# authoritative changed_files count refuses to post (run WITHOUT --dry-run,
+# and confirm nothing was posted — a dry run alone can't prove that).
 : > "$STUB_LOG"
-if out=$(STUB_DIFF="$fx/diff-truncated.txt" "$script" 7 "$fx/findings.json" --repo o/r --dry-run 2>&1); then
+if out=$(STUB_DIFF="$fx/diff-truncated.txt" "$script" 7 "$fx/findings.json" --repo o/r 2>&1); then
   err "truncated diff exited 0"
 fi
-grep -qF 'diff is missing 1 PR file(s) (b.go); refusing to post — re-run' <<<"$out" \
+grep -qF 'diff has 2 of 3 changed files; refusing to post — re-run' <<<"$out" \
   || err "missing truncation-guard message: $out"
 if grep -q '/reviews\|/comments' "$STUB_LOG"; then err "truncated diff posted despite guard"; fi
+
+# A1 — the count-based guard tolerates diff shapes the old path-list guard
+# false-refused: a pure rename, a binary add, a path with a space (with the
+# trailing TAB git emits), and a quoted non-ASCII path. Each yields exactly
+# one `diff --git` header and nothing the old `---`/`+++` path comparison
+# could match on (rename and binary emit neither line at all).
+: > "$STUB_LOG"
+out_edge=$(STUB_DIFF="$fx/diff-edge-cases.txt" STUB_CHANGED_FILES=4 \
+  "$script" 7 "$fx/findings.json" --repo o/r --dry-run 2>&1) \
+  || err "edge-case diff (rename/binary/space/quoted path) refused: $out_edge"
+
+# A3 — a finding on a space-containing path anchors inline: the awk that
+# builds valid.tsv must strip the trailing TAB git emits after such a path
+# before comparing it to the finding's path.
+out_space=$(STUB_DIFF="$fx/diff-edge-cases.txt" STUB_CHANGED_FILES=4 \
+  "$script" 7 "$fx/findings-space.json" --repo o/r --dry-run 2>&1) \
+  || err "space-path finding dry run failed: $out_space"
+payload_space=$(awk 'f; /^## Review payload$/ {f=1}' <<<"$out_space")
+jq -e '[.comments[] | select(.path == "has space.txt" and .line == 2)] | length == 1' \
+  <<<"$payload_space" >/dev/null \
+  || err "has space.txt line 2 not inline: $payload_space"
 
 # G3c — half-posted state: review POST fails after the walkthrough succeeded.
 : > "$STUB_LOG"
