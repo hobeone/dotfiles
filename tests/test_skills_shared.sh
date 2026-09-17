@@ -42,6 +42,17 @@ for core in "${cores[@]}"; do
 
   check_absent_r "$name: harness tokens in neutral core" "$forbidden" "$core"
 
+  token_out=$(grep -rIohE '⟨[^⟩]*⟩' "$core" 2>&1)
+  token_rc=$?
+  if ((token_rc == 2)); then
+    err "$name: grep failed scanning core for verb tokens: $token_out"
+  elif ((token_rc == 0)); then
+    while IFS= read -r tok; do
+      [[ -z $tok ]] && continue
+      [[ $tok =~ ^⟨[a-z][a-z-]*⟩$ ]] || err "$name: malformed verb token: $tok"
+    done < <(sort -u <<<"$token_out")
+  fi
+
   used_out=$(grep -rIohE "$verb_re" "$core" 2>&1)
   used_rc=$?
   if ((used_rc == 2)); then

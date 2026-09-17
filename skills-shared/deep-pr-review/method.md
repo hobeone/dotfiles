@@ -1,8 +1,8 @@
 # Deep PR Review — Method
 
 Harness-neutral. An adapter `SKILL.md` loads this file and binds every
-`⟨VERB⟩` used below to its own tools and models. Run every shell command in
-this document with ⟨run⟩.
+angle-bracketed verb used below to its own tools and models. Run every shell
+command in this document with ⟨run⟩.
 
 A recall-biased, multi-angle code review that begins with an **Approach & Architecture Gate** to ensure the fundamental design is sound, and ends as a **GitHub pull request review** formatted the way CodeRabbit formats one: a walkthrough comment, a review body with an actionable-comment count, and one inline comment per finding carrying a machine-consumable fix prompt.
 
