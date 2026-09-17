@@ -103,7 +103,7 @@ The findings array must follow the CodeRabbit format:
     "path": "path/to/file.ext",
     "line": 142,
     "start_line": 138,
-    "category": "🔒 Security Defenses",
+    "category": "🔒 Security",
     "severity": "🔴 Critical",
     "verdict": "CONFIRMED",
     "title": "Short descriptive title of the defect",

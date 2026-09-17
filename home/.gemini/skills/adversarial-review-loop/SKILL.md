@@ -160,7 +160,7 @@ The findings array follows the CodeRabbit format:
     "path": "pkg/auth/session.go",
     "line": 84,
     "start_line": 80,
-    "category": "🔒 Security Defenses",
+    "category": "🔒 Security",
     "severity": "🔴 Critical",
     "verdict": "CONFIRMED",
     "title": "Unvalidated token expiry enables session replay",

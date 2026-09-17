@@ -118,5 +118,28 @@ check_absent "callers enumerate a per-angle list instead of citing deep-pr-revie
 check_absent "callers hard-code /tmp/ instead of a per-run mktemp -d directory" \
   '/tmp/' "${callers[@]}"
 
+# D — caller example schemas must use format.md's Category vocabulary, never
+# a value of their own invention. Derive the allowed set from format.md's
+# Category table instead of hardcoding it, so the two never drift apart.
+fmt=$core/reference/format.md
+assert_exists "$fmt"
+# shellcheck disable=SC2016 # literal backticks in the sed pattern, no expansion intended
+mapfile -t allowed_categories < <(awk '
+  /^### Category/ { f=1; next }
+  /^### / { f=0 }
+  f && /^\| `/ { print }
+' "$fmt" | sed -E 's/^\| `([^`]*)`.*/\1/')
+((${#allowed_categories[@]})) || err "could not derive any category from $fmt"
+
+for f in "${callers[@]}"; do
+  while IFS= read -r cat; do
+    ok=0
+    for a in "${allowed_categories[@]}"; do
+      [[ $cat == "$a" ]] && { ok=1; break; }
+    done
+    ((ok)) || err "$f: category '$cat' is not in format.md's Category vocabulary"
+  done < <(grep -oE '"category": *"[^"]*"' "$f" | sed -E 's/^"category": *"([^"]*)"$/\1/')
+done
+
 ((fail)) && exit 1
 echo PASS
