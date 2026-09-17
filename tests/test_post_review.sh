@@ -24,8 +24,15 @@ jq -e '[.comments[] | select(.path == "a.go" and .line == 2)] | length == 1' <<<
   || err "a.go line 2 not inline"
 jq -e '[.comments[] | select(.path == "b.go" and .line == 2)] | length == 1' <<<"$payload" >/dev/null \
   || err "b.go line 2 not inline"
-jq -e '[.comments[] | select(.line == 3)][0] | has("start_line") | not' <<<"$payload" >/dev/null \
+# B1: the degrade filter must actually require a line-3 comment to exist, not
+# just tolerate its absence — `[...][0]` on an empty array is `null`, and
+# `null | has("start_line") | not` is true, so a payload with NO line-3
+# comment at all vacuously "passes". Assert exactly one line-3 comment exists
+# AND lacks start_line.
+jq -e '[.comments[] | select(.line == 3)] | length == 1 and (.[0] | has("start_line") | not)' <<<"$payload" >/dev/null \
   || err "out-of-diff start_line did not degrade to single-line"
+jq -e '[.comments[] | select(.line == 3)] | length == 1 and (.[0] | has("start_line") | not)' <<<'{"comments":[]}' >/dev/null \
+  && err "degrade filter must not vacuously pass when no line-3 comment exists"
 jq -e '.commit_id == "abc123" and .event == "COMMENT"' <<<"$payload" >/dev/null || err "commit_id/event wrong"
 
 body=$(jq -r .body <<<"$payload")
