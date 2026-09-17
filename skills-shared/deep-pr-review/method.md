@@ -142,9 +142,10 @@ Then read the repo instructions that govern the changed files, because Angle J
 depends on them:
 
 ```bash
-cat AGENTS.md CLAUDE.md GEMINI.md 2>/dev/null
-ls **/CLAUDE.md **/AGENTS.md **/GEMINI.md 2>/dev/null   # a directory's file governs only files at or below it
+git ls-files '*CLAUDE.md' '*AGENTS.md' '*GEMINI.md'   # a directory's file governs only files at or below it
 ```
+
+Read each listed file that governs a changed path.
 
 Also read ⟨user-instructions⟩.
 

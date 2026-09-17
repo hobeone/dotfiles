@@ -64,6 +64,10 @@ grep -q -- '--expect-head' "$m" || err "method.md does not use --expect-head"
 grep -q -- '--sequential' "$m" || err "method.md does not document --sequential"
 grep -qF '<!-- deep-pr-review head:' "$m" || err "method.md does not describe the head marker"
 
+# C — instruction-file discovery must use `git ls-files`, not a `**/` glob
+# (the glob silently misses nested paths under shells without globstar).
+check_absent "method.md uses a \`**/\` glob for instruction-file discovery" '\*\*/' "$m"
+
 adapters=(home/.claude/skills/deep-pr-review/SKILL.md home/.gemini/skills/deep-pr-review/SKILL.md)
 callers=(home/.gemini/skills/adversarial-review/SKILL.md home/.gemini/skills/adversarial-review-loop/SKILL.md)
 assert_exists "${adapters[@]}" "${callers[@]}"
