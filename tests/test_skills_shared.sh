@@ -12,6 +12,22 @@ err() { printf 'FAIL: %s\n' "$*"; fail=1; }
 forbidden='run_subagent|invoke_subagent|view_file|run_command|ask_question|AskUserQuestion|subagent_type|TypeName|~/\.gemini|~/\.claude'
 verb_re='⟨[a-z-]+⟩'
 
+# check_absent_r DESC PATTERN DIR — passes when PATTERN matches nothing under
+# DIR (grep exit 1, "no match" is success here). Fails loudly on an actual
+# grep error (exit 2 — a missing/unreadable path, not "no match") instead of
+# treating it as a pass, and fails with the hits when PATTERN does match.
+check_absent_r() {
+  local desc=$1 pattern=$2 dir=$3 out rc
+  [[ -e $dir ]] || { err "missing: $dir"; return; }
+  out=$(grep -rnE "$pattern" "$dir" 2>&1)
+  rc=$?
+  if ((rc == 2)); then
+    err "grep failed on $desc: $out"
+  elif ((rc == 0)); then
+    err "$desc:"$'\n'"$out"
+  fi
+}
+
 shopt -s nullglob
 cores=(skills-shared/*/)
 ((${#cores[@]})) || err "no shared skills under skills-shared/"
@@ -24,12 +40,17 @@ for core in "${cores[@]}"; do
     continue
   fi
 
-  if hits=$(grep -rnE "$forbidden" "$core"); then
-    err "$name: harness tokens in neutral core:"
-    printf '%s\n' "$hits"
+  check_absent_r "$name: harness tokens in neutral core" "$forbidden" "$core"
+
+  used_out=$(grep -rIohE "$verb_re" "$core" 2>&1)
+  used_rc=$?
+  if ((used_rc == 2)); then
+    err "$name: grep failed scanning core for verbs: $used_out"
+    used=""
+  else
+    used=$(sort -u <<<"$used_out")
   fi
 
-  used=$(grep -rIohE "$verb_re" "$core" | sort -u)
   adapters=0
   for harness in .claude .gemini; do
     adir=home/$harness/skills/$name
@@ -60,10 +81,22 @@ for core in "${cores[@]}"; do
       continue
     fi
     bound=$(grep -oE "^\| \`$verb_re\`" "$adir/SKILL.md" | grep -oE "$verb_re" | sort -u)
-    missing=$(comm -23 <(printf '%s\n' "$used") <(printf '%s\n' "$bound") | sed '/^$/d')
-    dead=$(comm -13 <(printf '%s\n' "$used") <(printf '%s\n' "$bound") | sed '/^$/d')
-    [[ -z $missing ]] || err "$adir/SKILL.md does not bind: $(tr '\n' ' ' <<<"$missing")"
-    [[ -z $dead ]] || err "$adir/SKILL.md binds unused verbs: $(tr '\n' ' ' <<<"$dead")"
+
+    if [[ -z $used ]]; then
+      # A core that uses no verbs legitimately has an adapter with no
+      # "## Harness mapping" rows — that is not a failure by itself. It is
+      # only a failure when the adapter binds verbs nothing in the core
+      # asked for.
+      if [[ -n $bound ]]; then
+        n=$(wc -l <<<"$bound")
+        err "$name: no verbs used but $adir/SKILL.md binds $n: $(tr '\n' ' ' <<<"$bound")"
+      fi
+    else
+      missing=$(comm -23 <(printf '%s\n' "$used") <(printf '%s\n' "$bound") | sed '/^$/d')
+      dead=$(comm -13 <(printf '%s\n' "$used") <(printf '%s\n' "$bound") | sed '/^$/d')
+      [[ -z $missing ]] || err "$adir/SKILL.md does not bind: $(tr '\n' ' ' <<<"$missing")"
+      [[ -z $dead ]] || err "$adir/SKILL.md binds unused verbs: $(tr '\n' ' ' <<<"$dead")"
+    fi
   done
   ((adapters)) || err "$name: no adapter under home/.claude/skills or home/.gemini/skills"
 done

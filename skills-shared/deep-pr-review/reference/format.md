@@ -190,10 +190,10 @@ In `@{file}`:
 verify, gap sweep. State "run sequentially in a single context" instead when
 the fan-out did not run — `post-review.sh --sequential` emits that wording.
 
-**Reviewed**: `{base_sha}` → `{head_sha}`
+**Reviewed**: head `{head_sha}`
 
 <details>
-<summary>📒 Files selected for processing ({n})</summary>
+<summary>📒 Files selected for processing</summary>
 
 * `{path}`
 * `{path}`
@@ -202,6 +202,15 @@ the fan-out did not run — `post-review.sh --sequential` emits that wording.
 
 </details>
 ````
+
+List any angle that failed outright (not "no findings" — an actual `gh api`
+error, e.g. Angle N hitting an auth or rate-limit failure rather than "no
+GitHub remote") as its own line inside the `ℹ️ Review info` block, right after
+**Reviewed**, one per failed angle, omitted entirely when none failed:
+
+```
+**Angle failures**: Angle N — <error>
+```
 
 Add a `## Additional comments (not anchorable)` section to the body for any
 finding whose line GitHub refused, so nothing is silently dropped. Add a

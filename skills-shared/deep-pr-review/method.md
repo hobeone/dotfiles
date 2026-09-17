@@ -70,13 +70,17 @@ gh pr view [<N>] --json number,title,body,state,isDraft,author,headRefOid,baseRe
 ```
 
 Pass `<N>` for an explicit PR number; omit it to resolve the current branch's
-PR. A non-zero exit (or a "no pull requests found" error) means there is no
-PR for this target.
+PR. Only when `<N>` was **omitted** AND the command's stderr contains
+`no pull requests found` is there no PR for this branch — that combination
+alone means local mode. Any other failure is a lookup failure, not "no PR":
+an explicit `<N>` that does not resolve, an auth error, a network error, a
+rate limit, or a wrong `--repo` all stop the review — report gh's exact error
+to the user and do not fall back to local mode on it.
 
 **Local mode** — a branch or working-tree target, an invocation by another
-skill that asks for local mode, or the "no PR" result above — follows from
-that resolution: it skips this phase and Post, and prints the rendered output
-instead.
+skill that asks for local mode, or the "no PR for this branch" result above —
+follows from that resolution: it skips this phase and Post, and prints the
+rendered output instead.
 
 The rest of this phase applies to PR targets only, continuing with the
 resolved `<N>` and the JSON already fetched above — do not call `gh pr view`
@@ -362,7 +366,14 @@ condition, not only an output limit:
 
 Flag feedback that applies again to the new code: quote the original comment,
 link its `html_url`, and name the new line that repeats the objected-to pattern.
-Return nothing when the repo has no GitHub remote.
+
+No GitHub remote is a specific, detectable condition: `git remote -v` lists no
+`github.com` URL, or `gh repo view` reports the directory is not a GitHub
+repository. Only then return nothing for this angle — silently, it is not a
+failure. Any other `gh api` failure (auth, rate limit, permission) is not "no
+prior feedback": return no candidates for this angle, but report the failure
+so Render lists it in the review body's Review info section (see
+`**Angle failures**` in `reference/format.md`).
 
 When the target PR is not in the current directory's repo, substitute
 OWNER/NAME for `{owner}/{repo}` in each `gh api` path above.

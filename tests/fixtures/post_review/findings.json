@@ -7,5 +7,11 @@
    "body": "Body two.", "agent_prompt": "Fix orphan."},
   {"path": "a.go", "line": 3, "start_line": 99, "category": "🧹 Maintainability",
    "severity": "🔵 Nitpick", "effort": "🧹 Quick fix", "verdict": "CONFIRMED",
-   "title": "Degrades to single line.", "body": "Body three.", "agent_prompt": "Fix B."}
+   "title": "Degrades to single line.", "body": "Body three.", "agent_prompt": "Fix B."},
+  {"path": "b.go", "line": 2, "category": "🐛 Correctness & Logic", "severity": "🟠 Major",
+   "effort": "🧹 Quick fix", "verdict": "CONFIRMED", "title": "Inline in second file.",
+   "body": "Body four.", "agent_prompt": "Fix b.go."},
+  {"path": "old.go", "line": 1, "category": "🧹 Maintainability", "severity": "🟡 Minor",
+   "effort": "🧹 Quick fix", "verdict": "PLAUSIBLE", "title": "Deleted file finding.",
+   "body": "Body five.", "agent_prompt": "Note about old.go."}
 ]

@@ -6,8 +6,14 @@ case "$*" in
   "api repos/o/r/pulls/7 --jq .head.sha") echo "$STUB_HEAD" ;;
   "api repos/o/r/pulls/7 --jq .base.sha") echo base000 ;;
   "pr diff 7 --repo o/r") cat "$STUB_DIFF" ;;
-  "pr view 7 --repo o/r --json files --jq"*) echo '* `a.go`' ;;
-  "api repos/o/r/pulls/7/reviews"*) echo https://example.test/review ;;
+  "pr view 7 --repo o/r --json files --jq"*) printf 'a.go\nb.go\nold.go\n' ;;
+  "repo view --json nameWithOwner --jq .nameWithOwner") echo o/r ;;
+  "api repos/o/r/pulls/7/reviews"*)
+    if [[ -n ${STUB_FAIL_REVIEW:-} ]]; then
+      echo "stub gh: forced review failure" >&2
+      exit 1
+    fi
+    echo https://example.test/review ;;
   "api repos/o/r/issues/7/comments"*) echo https://example.test/comment ;;
   *) echo "stub gh: unexpected: $*" >&2; exit 99 ;;
 esac

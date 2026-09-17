@@ -60,8 +60,11 @@ fi
 head_sha=$(gh api "repos/$repo/pulls/$pr" --jq .head.sha)
 [[ -n $head_sha ]] || die "could not resolve head SHA for $repo#$pr"
 
-# Anchors were computed against expected_head; a push during the review would
-# attach comments to lines that no longer hold the reviewed code.
+# --expect-head guards against the PR head moving between the review's Gather
+# phase — where the caller recorded expected_head — and this Post step, not
+# only within this script's own run. Anchors were computed against
+# expected_head; a push in between would attach comments to lines that no
+# longer hold the reviewed code.
 if [[ -n $expect_head && $head_sha != "$expect_head" ]]; then
   die "PR head moved: expected $expect_head, live $head_sha; re-run the review"
 fi
@@ -74,10 +77,42 @@ trap 'rm -rf "$work"' EXIT
 # comment anchors outside the diff, so findings are partitioned up front rather
 # than discovered by a failed POST.
 # ---------------------------------------------------------------------------
-if ! gh pr diff "$pr" --repo "$repo" > "$work/diff.txt" 2>/dev/null || ! grep -q "^+++ " "$work/diff.txt"; then
+if ! gh pr diff "$pr" --repo "$repo" > "$work/diff.txt" 2>"$work/diff.err" || ! grep -q "^+++ " "$work/diff.txt"; then
+  printf '%s: gh pr diff failed, falling back to git diff: %s\n' \
+    "${0##*/}" "$(cat "$work/diff.err" 2>/dev/null)" >&2
   base_sha=$(gh api "repos/$repo/pulls/$pr" --jq .base.sha)
+  # Tolerate a fetch failure here — the objects may already be present
+  # locally; if they are genuinely missing, the `git diff` below fails
+  # loudly under `set -e` instead of silently.
   git fetch origin "$base_sha" "$head_sha" 2>/dev/null || true
   git diff "$base_sha...$head_sha" > "$work/diff.txt"
+fi
+
+# ---------------------------------------------------------------------------
+# Every path in the PR's file list must appear in the diff, or the diff was
+# truncated (gh pr diff has a size limit) and findings for the missing files
+# would silently be dropped to the review body instead of anchored inline.
+# ---------------------------------------------------------------------------
+mapfile -t pr_files < <(gh pr view "$pr" --repo "$repo" --json files --jq '.files[].path')
+
+awk '
+  /^--- / { a_path = substr($0, 5); sub(/^[a-z]\//, "", a_path); next }
+  /^\+\+\+ / {
+    path = substr($0, 5)
+    if (path == "/dev/null") { print a_path; next }   # deleted file: present via its old path
+    sub(/^[a-z]\//, "", path)
+    print path
+    next
+  }
+' "$work/diff.txt" | sort -u > "$work/present.txt"
+
+missing=()
+for path in "${pr_files[@]}"; do
+  grep -qxF "$path" "$work/present.txt" || missing+=("$path")
+done
+if ((${#missing[@]})); then
+  first=$(IFS=', '; echo "${missing[*]:0:3}")
+  die "diff is missing ${#missing[@]} PR file(s) ($first); refusing to post — re-run"
 fi
 
 awk '
@@ -202,7 +237,7 @@ n_orphan=$(wc -l < "$work/orphan.jsonl")
   printf '**Reviewed**: head `%s`\n\n' "$head_sha"
   printf '<details>\n<summary>📒 Files selected for processing</summary>\n\n'
   # shellcheck disable=SC2016 # literal markdown backticks
-  gh pr view "$pr" --repo "$repo" --json files --jq '.files[] | "* `" + .path + "`"'
+  printf '* `%s`\n' "${pr_files[@]}"
   printf '\n</details>\n\n</details>\n'
 } > "$work/body.md"
 
@@ -223,10 +258,18 @@ if ((dry_run)); then
   exit 0
 fi
 
+walkthrough_url=""
 if [[ -n $walkthrough ]]; then
-  gh api "repos/$repo/issues/$pr/comments" -F "body=@$walkthrough" --jq .html_url
+  walkthrough_url=$(gh api "repos/$repo/issues/$pr/comments" -F "body=@$walkthrough" --jq .html_url)
+  printf '%s\n' "$walkthrough_url"
 fi
 
-gh api "repos/$repo/pulls/$pr/reviews" --input "$work/review.json" --jq '.html_url // .id'
+if ! review_url=$(gh api "repos/$repo/pulls/$pr/reviews" --input "$work/review.json" --jq '.html_url // .id'); then
+  if [[ -n $walkthrough_url ]]; then
+    die "walkthrough already posted at $walkthrough_url; review NOT posted — fix the error and re-run WITHOUT --walkthrough"
+  fi
+  die "posting the review failed"
+fi
+printf '%s\n' "$review_url"
 
 printf 'posted: %s inline, %s in body\n' "$n_inline" "$n_orphan" >&2

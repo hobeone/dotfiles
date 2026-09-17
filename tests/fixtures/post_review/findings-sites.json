@@ -1,0 +1,9 @@
+[
+  {"path": "a.go", "line": 2, "category": "🐛 Correctness & Logic", "severity": "🟠 Major",
+   "effort": "🧹 Quick fix", "verdict": "CONFIRMED", "title": "Multi-site finding.",
+   "body": "Body with two sites.", "agent_prompt": "Fix both sites.",
+   "sites": [
+     {"file": "a.go", "lines": "2-2", "note": "primary"},
+     {"file": "b.go", "lines": "2-2", "note": "sibling"}
+   ]}
+]
