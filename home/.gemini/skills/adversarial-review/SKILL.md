@@ -9,7 +9,7 @@ An end-to-end local review and remediation loop that couples aggressive adversar
 
 The workflow follows a two-phase Red Team / Blue Team pattern:
 
-1. **Red Team (`deep-pr-review` subagent)**: Attacks the code without deference, running a recall-biased review across every angle in `deep-pr-review`'s Find phase, 1-vote verification, and gap sweep to surface concrete defects, security vulnerabilities, concurrency bugs, and edge-case failures. Verified findings are saved to `/tmp/adversarial-review-findings.json`.
+1. **Red Team (`deep-pr-review` subagent)**: Attacks the code without deference, running a recall-biased review across every angle in `deep-pr-review`'s Find phase, 1-vote verification, and gap sweep to surface concrete defects, security vulnerabilities, concurrency bugs, and edge-case failures. Verified findings are saved to `<run-dir>/findings.json`, a per-run directory created in Phase 0.
 2. **Blue Team (Main orchestrator under `superpowers:receiving-code-review`)**: Skeptically audits every finding against codebase reality, rejects hallucinations, YAGNI additions, or out-of-context nitpicks, publishes a triage table, and drives prioritized Red-Green TDD remediation for accepted findings.
 
 ```
@@ -58,6 +58,20 @@ Inspect the target diff for language-specific rules:
   - Pass the Go version and rules to the Red Team subagent in Phase 1 (covering Section 2 angle mappings, Section 5 verification matrix, Section 6 AI remediation guidelines, and Section 7 companion skills).
 - **Other Languages**: Detect language conventions from project configuration files (`GEMINI.md`, `CLAUDE.md`, lint configs).
 
+### 3. Create Run Directory
+
+Create a per-run output directory once, before dispatching the Red Team
+subagent, so concurrent runs of this skill never clobber each other's
+findings:
+
+```bash
+run_command: mktemp -d "${TMPDIR:-/tmp}/adversarial-review.XXXXXX"
+```
+
+Record the printed path as `<run-dir>`. All findings for this run are written
+to `<run-dir>/findings.json`; pass that exact path to the Red Team subagent
+as its output destination.
+
 ---
 
 ## Phase 1 — Adversarial Review (Red Team Subagent)
@@ -77,9 +91,9 @@ Use `invoke_subagent` to spawn a fresh-context reviewer:
   - Mandate to run every angle in `deep-pr-review`'s Find phase (Angles A–O, as
     defined in its `method.md`), plus 1-vote verification and the gap sweep.
   - Run in **local mode**: skips the Eligibility and Post phases of `deep-pr-review`.
-  - Output contract: write verified findings to `/tmp/adversarial-review-findings.json`.
+  - Output contract: write verified findings to `<run-dir>/findings.json`.
 
-### 2. Output Schema (`/tmp/adversarial-review-findings.json`)
+### 2. Output Schema (`<run-dir>/findings.json`)
 
 The findings array must follow the CodeRabbit format:
 
@@ -113,7 +127,7 @@ The subagent reports back to the coordinator with the total finding count and a 
 
 ## Phase 2 — Skeptical Code Review Reception (`receiving-code-review`)
 
-The main orchestrator acts as the Blue Team, reading `/tmp/adversarial-review-findings.json` via `view_file` and evaluating each finding through the `superpowers:receiving-code-review` methodology.
+The main orchestrator acts as the Blue Team, reading `<run-dir>/findings.json` via `view_file` and evaluating each finding through the `superpowers:receiving-code-review` methodology.
 
 ### 1. Reception Discipline
 
@@ -206,3 +220,12 @@ Present the final status summary to the user:
   - Pushback count (defended with technical justification).
 - **Remediation History**: List of generated commits with descriptions.
 - **Verification Status**: Final test and validation suite outcome (`PASS` / `FAIL`).
+
+### 3. Cleanup
+
+After the findings have been fully consumed and the final report is ready,
+remove the run directory:
+
+```bash
+rm -rf <run-dir>
+```

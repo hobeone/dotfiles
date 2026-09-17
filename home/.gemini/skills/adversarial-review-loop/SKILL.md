@@ -11,7 +11,7 @@ An iterative, multi-turn Actor-Critic review and remediation system that couples
 
 The workflow executes an iterative feedback loop between two opposing roles:
 
-1. **The Critic (Red Team — `deep-pr-review` subagent)**: Attacks the codebase with recall-biased scrutiny across all of `deep-pr-review`'s Find-phase angles, 1-vote verification, and gap sweeps to identify security vulnerabilities, concurrency bugs, edge-case failures, and architectural regressions. Findings are written to `/tmp/adversarial-review-loop-findings.json`.
+1. **The Critic (Red Team — `deep-pr-review` subagent)**: Attacks the codebase with recall-biased scrutiny across all of `deep-pr-review`'s Find-phase angles, 1-vote verification, and gap sweeps to identify security vulnerabilities, concurrency bugs, edge-case failures, and architectural regressions. Findings are written to `<run-dir>/findings.json`, a per-run directory created in Phase 0.
 2. **The Actor (Blue Team — Orchestrator under `superpowers:receiving-code-review`)**: Skeptically audits each finding against live codebase reality, rejects hallucinations and YAGNI bloat without performative agreement, triages items into `ACCEPT` or `PUSHBACK`, and applies atomic Red-Green TDD fixes for accepted defects.
 3. **The Feedback Loop**: Each remediation turn produces new atomic commits, updating the target diff. The loop feeds the updated diff back into the Critic for a fresh evaluation round, verifying that fixes resolve issues without introducing secondary defects or regressions.
 
@@ -94,13 +94,18 @@ git ls-files --others --exclude-standard                  # Untracked files
 
 Read untracked files directly via `view_file` to ensure full context.
 
-### 2. Reset Loop State
+### 2. Create Run Directory
 
-Clean up any stale findings artifact from earlier runs:
+Create a per-run output directory once, before the first iteration, so
+concurrent runs of this skill never clobber each other's findings:
 
 ```bash
-rm -f /tmp/adversarial-review-loop-findings.json
+run_command: mktemp -d "${TMPDIR:-/tmp}/adversarial-review-loop.XXXXXX"
 ```
+
+Record the printed path as `<run-dir>`. Every iteration writes findings to
+`<run-dir>/findings.json`; pass that exact path to the Critic subagent as its
+output destination.
 
 ### 3. Language & Runtime Telemetry
 
@@ -143,9 +148,9 @@ Invoke the reviewer using `invoke_subagent`:
     A–O, as defined in its `method.md`), plus 1-vote verification and the gap
     sweep.
   - Run in **local mode**: do NOT post to GitHub.
-  - **Output destination**: Write verified findings to `/tmp/adversarial-review-loop-findings.json`. If 0 defects are found, write an empty JSON array `[]`.
+  - **Output destination**: Write verified findings to `<run-dir>/findings.json`. If 0 defects are found, write an empty JSON array `[]`.
 
-#### 2. Findings Schema (`/tmp/adversarial-review-loop-findings.json`)
+#### 2. Findings Schema (`<run-dir>/findings.json`)
 
 The findings array follows the CodeRabbit format:
 
@@ -175,7 +180,7 @@ The findings array follows the CodeRabbit format:
 
 #### 3. Immediate Convergence Check
 
-Read `/tmp/adversarial-review-loop-findings.json` using `view_file`.
+Read `<run-dir>/findings.json` using `view_file`.
 
 - **If findings count == 0**:
   - Record **Full Convergence** in the iteration log.
@@ -272,9 +277,9 @@ After remediating all accepted findings for this iteration:
    - Total Critic findings.
    - Number of `ACCEPT` (fixed).
    - Number of `PUSHBACK` (refuted).
-2. Clean `/tmp/adversarial-review-loop-findings.json`:
+2. Clean `<run-dir>/findings.json`:
    ```bash
-   rm -f /tmp/adversarial-review-loop-findings.json
+   rm -f <run-dir>/findings.json
    ```
 3. Check loop bounds:
    - Increment `iteration = iteration + 1`.
@@ -327,3 +332,11 @@ Conclude with a clear statement of final outcome:
 - **Termination Reason**: `Full Convergence (0 defects)` | `Consensus Pushback` | `Max Iterations Reached (<N>/<N>)`.
 - **Commits Produced**: List of all atomic remediation commits created during the loop.
 - **Verification Result**: Confirmation that the full test suite passed.
+
+### 5. Cleanup
+
+Once the summary above is final, remove the whole run directory:
+
+```bash
+rm -rf <run-dir>
+```

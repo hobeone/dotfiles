@@ -108,5 +108,11 @@ check_absent "callers cite deep-pr-review phases by number" \
 check_absent "callers enumerate a per-angle list instead of citing deep-pr-review's Angles A-O" \
   '^[[:space:]]*[-*][[:space:]]*\**Angle [A-O]\b' "${callers[@]}"
 
+# Concurrent runs of the same caller must not clobber each other's findings
+# file: no caller may hard-code /tmp/<name>-findings.json (or any other
+# fixed /tmp path). Each run must mktemp -d its own directory instead.
+check_absent "callers hard-code /tmp/ instead of a per-run mktemp -d directory" \
+  '/tmp/' "${callers[@]}"
+
 ((fail)) && exit 1
 echo PASS
