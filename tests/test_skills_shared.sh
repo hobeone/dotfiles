@@ -10,6 +10,10 @@ fail=0
 err() { printf 'FAIL: %s\n' "$*"; fail=1; }
 
 forbidden='run_subagent|invoke_subagent|view_file|run_command|ask_question|AskUserQuestion|subagent_type|TypeName|~/\.gemini|~/\.claude'
+# shellcheck disable=SC2016 # literal backticks in the pattern, no expansion intended
+forbidden_backticked='`(Bash|Read|Edit|Write|Agent|Workflow|Grep|Glob|WebFetch|WebSearch|TodoWrite|Skill|NotebookEdit|AskUserQuestion)`'
+forbidden_agy='code_search|find_by_name|grep_search|list_dir|manage_subagents|define_subagent|replace_file_content|multi_replace_file_content|write_to_file|read_url_content|search_web'
+forbidden="$forbidden|$forbidden_backticked|$forbidden_agy"
 verb_re='⟨[a-z-]+⟩'
 
 # check_absent_r DESC PATTERN DIR — passes when PATTERN matches nothing under
