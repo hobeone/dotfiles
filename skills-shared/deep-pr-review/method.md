@@ -25,7 +25,7 @@ Phase 7  Post as a single GitHub review                             sequential
 
 Find and Verify are embarrassingly parallel and are the whole cost of this
 review. Run each as **a single ⟨dispatch-parallel⟩ carrying every entry**, so
-fifteen angles cost one angle's wall-clock. Dispatching entries one at a time
+15 angles cost one angle's wall-clock. Dispatching entries one at a time
 runs them in series and defeats the point.
 
 Subagents do **not** share your context. Every entry's prompt must be
@@ -46,7 +46,7 @@ Model routing per role is set by the adapter.
 **If ⟨dispatch-parallel⟩ is unavailable or refused**, do not error: work every angle
 yourself, in sequence, in this context. Do not skip angles for lack of fan-out.
 Then say so in the review body's Method line — a sequential run is a different
-review from a fifteen-angle fan-out, and the reader must not be misled about which
+review from a 15-angle fan-out, and the reader must not be misled about which
 one produced the findings.
 
 **Do not modify the branch.** This skill only reads and comments. If the user
@@ -62,21 +62,26 @@ surfacing. Do not drop a candidate for being "speculative."
 Target resolution, in order: an explicit PR number → an explicit branch or path
 → the current branch's PR → the working tree.
 
+One call resolves the target and fetches everything both this phase and
+Gather need:
+
 ```bash
-gh pr view --json number --jq .number   # resolve the current branch's PR, if any
+gh pr view [<N>] --json number,title,body,state,isDraft,author,headRefOid,baseRefName,headRefName,files
 ```
 
-**Local mode** — a branch or working-tree target, or an invocation by another
-skill that asks for local mode — follows from that resolution: it skips this
-phase and Post, and prints the rendered output instead.
+Pass `<N>` for an explicit PR number; omit it to resolve the current branch's
+PR. A non-zero exit (or a "no pull requests found" error) means there is no
+PR for this target.
+
+**Local mode** — a branch or working-tree target, an invocation by another
+skill that asks for local mode, or the "no PR" result above — follows from
+that resolution: it skips this phase and Post, and prints the rendered output
+instead.
 
 The rest of this phase applies to PR targets only, continuing with the
-resolved `<N>`.
-
-```bash
-gh pr view <N> --json state,isDraft,author,headRefOid,files \
-  --jq '{state, isDraft, bot: .author.is_bot, head: .headRefOid, files: [.files[].path]}'
-```
+resolved `<N>` and the JSON already fetched above — do not call `gh pr view`
+again. Read `state`, `isDraft`, `author.is_bot`, `headRefOid`, and
+`files[].path` from it.
 
 When the target PR is not in the current directory's repo, pass
 `--repo OWNER/NAME` to `gh pr view` and substitute OWNER/NAME for
@@ -111,11 +116,13 @@ Record `head` as `expected_head` for Post.
 
 ## Phase 1 — Gather
 
-Using the target already resolved in Eligibility:
+Using the target already resolved in Eligibility. For a PR target, reuse the
+`gh pr view` JSON fetched there instead of re-querying it — `title`, `body`,
+`headRefOid` (as `expected_head`), `baseRefName`, `headRefName`, and `files`
+all come from that same call:
 
 ```bash
 # PR target
-gh pr view <N> --json number,title,body,headRefOid,baseRefName,headRefName,files
 gh pr diff <N>
 
 # Branch / working-tree target
@@ -194,7 +201,7 @@ Record a 1-paragraph architecture endorsement for inclusion in the final review 
 
 15 angles, up to 8 candidates each.
 
-One ⟨dispatch-parallel⟩, fifteen entries, one entry per angle below. Each returns up
+One ⟨dispatch-parallel⟩, 15 entries, one entry per angle below. Each returns up
 to 8 candidates; each candidate needs `file`, `line`, a one-line `summary`, and
 a concrete `failure_scenario`.
 
@@ -324,15 +331,34 @@ lock, or check whose introducing commit message names the bug it prevented.
 Cite the commit hash and quote its subject in `failure_scenario`.
 
 ### Angle N — prior PR feedback
-For each file the diff touches, map its recent commits to merged PRs and read
-their review feedback (cap: 10 distinct PRs total):
+Map the diff's recent commits to merged PRs and read their review feedback,
+stopping once 10 distinct merged PRs are collected — the cap is a stop
+condition, not only an output limit:
 
-```bash
-git log --format=%H -n 20 <base> -- <path>
-gh api "repos/{owner}/{repo}/commits/<sha>/pulls" --jq '.[] | select(.merged_at) | .number'
-gh api "repos/{owner}/{repo}/pulls/<n>/comments" --paginate --jq '.[] | {path, line, body, html_url}'
-gh api "repos/{owner}/{repo}/pulls/<n>/reviews" --jq '.[] | select(.body != "") | {body, html_url}'
-```
+1. Collect recent commit SHAs across **all** touched files first, and
+   de-duplicate them, newest first:
+
+   ```bash
+   git log --format=%H -n 20 <base> -- <path1> <path2> ...
+   ```
+
+   (one command covering every touched path; a union of per-file `git log`
+   lists works too, but de-duplicate before the next step either way.)
+
+2. Resolve each **distinct** SHA to merged PRs at most once, skipping a SHA
+   once its PR has already been seen. Stop issuing lookups as soon as 10
+   distinct merged PR numbers have been collected:
+
+   ```bash
+   gh api "repos/{owner}/{repo}/commits/<sha>/pulls" --jq '.[] | select(.merged_at) | .number'
+   ```
+
+3. Fetch each distinct PR's comments and reviews exactly once:
+
+   ```bash
+   gh api "repos/{owner}/{repo}/pulls/<n>/comments" --paginate --jq '.[] | {path, line, body, html_url}'
+   gh api "repos/{owner}/{repo}/pulls/<n>/reviews" --jq '.[] | select(.body != "") | {body, html_url}'
+   ```
 
 Flag feedback that applies again to the new code: quote the original comment,
 link its `html_url`, and name the new line that repeats the objected-to pattern.
@@ -508,8 +534,12 @@ walkthrough issue comment. Post in this order:
 2. Confirm with ⟨ask-user⟩. Skip this step only if the user already said to
    post.
 3. Re-run the Eligibility checks. This step is never skipped, whichever way
-   step 2 went. If any check now stops the review (closed, converted to draft,
-   a marker at this head from a concurrent run), stop without posting.
+   step 2 went. Unlike the initial pass in Eligibility, this re-check may
+   re-fetch only `state,isDraft,headRefOid` (via `gh pr view <N> --json
+   state,isDraft,headRefOid`) plus the marker queries — fresh data is the
+   point of re-running here, so no field is reused from the earlier call. If
+   any check now stops the review (closed, converted to draft, a marker at
+   this head from a concurrent run), stop without posting.
 4. Run the same command without `--dry-run` to post for real.
 
 The script validates every anchor against the diff **before** posting, because
