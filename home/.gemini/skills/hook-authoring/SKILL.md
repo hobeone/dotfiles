@@ -1,13 +1,13 @@
 ---
 name: hook-authoring
 description: |
-  Writing and modifying hooks, sidecars, and background scripts for Jetski / Antigravity 2.0.
+  Writing and modifying hooks, sidecars, and background scripts for Gemini CLI / Antigravity 2.0.
   Auto-applies when authoring scripts, sidecar definitions (<configDir>/sidecars/), or event hooks.
 ---
 
 # Hook & Sidecar Authoring Patterns
 
-This skill auto-applies when working with Jetski / Antigravity 2.0 hooks, sidecars, and background event scripts.
+This skill auto-applies when working with Gemini CLI / Antigravity 2.0 hooks, sidecars, and background event scripts.
 
 ## Antigravity Tool & Scripting Equivalents
 - **Read files**: `view_file`
@@ -20,7 +20,7 @@ This skill auto-applies when working with Jetski / Antigravity 2.0 hooks, sideca
 
 ## Background Sidecars Architecture
 
-In Antigravity 2.0 / Jetski:
+In Antigravity 2.0:
 - **Location**: `<configDir>/sidecars/<sidecar-id>/`
 - **Configuration**: `sidecar.json`
 - **Runtime Data**: `<appDataDir>/sidecar_data/<sidecar-id>/data/`

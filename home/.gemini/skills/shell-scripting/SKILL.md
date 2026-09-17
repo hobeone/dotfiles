@@ -12,7 +12,7 @@ description: |
 This skill auto-applies when writing shell scripts. Follow these conventions.
 
 ## Antigravity Tool Equivalents
-When applying this skill in Jetski / Antigravity 2.0:
+When applying this skill in Gemini CLI / Antigravity 2.0:
 - **Read files**: Use `view_file`
 - **Create files**: Use `write_to_file`
 - **Edit files**: Use `replace_file_content` (contiguous blocks) or `multi_replace_file_content`

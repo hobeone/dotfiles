@@ -98,7 +98,7 @@
       "**Protected IaC scopes**: IAM, RBAC, networking, quota, and node-pool resources; anything whose name or tag carries `prod` or `production` as a whole word or name segment",
       "### User-specific",
       "**Primary use of Claude Code**: software development (Go/Svelte Usenet binary newsreader, GoNZBD)",
-      "**Trusted repo**: hobeone/gonzbd (github.com), the working tree at /home/hobe/software/gonzbd/.claude/worktrees/refactor+375-assembler-accounting-owner, and its configured remote(s) — public repo, so only this repo's own work belongs there; confidential/secret material is never cleared into it regardless of visibility",
+      "**Trusted repo**: hobeone/gonzbd (github.com), working trees under ~/software/gonzbd/, and its configured remote(s) — public repo, so only this repo's own work belongs there; confidential/secret material is never cleared into it regardless of visibility",
       "**Org-specific CLIs**: None configured",
       "routine git/gh/go/npm/build-tooling operations under this repo's working tree are expected and low-risk per project conventions (PRs required, no direct push to main)"
     ]

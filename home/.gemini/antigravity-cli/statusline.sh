@@ -195,9 +195,23 @@ if [ -z "$CWD" ]; then
   CWD="${RAW_CWD:-$PROJECT_DIR}"
 fi
 
+LOCAL_RESOLVER="${HOME}/.gemini/antigravity-cli/vcs_resolve.local.sh"
+if [ -f "$LOCAL_RESOLVER" ]; then
+  # shellcheck source=/dev/null
+  . "$LOCAL_RESOLVER"
+fi
+
 for cand_dir in "$CWD" "$RAW_CWD" "$VCS_ROOT" "$PROJECT_DIR" "${PWD:-}"; do
   if [ -z "$cand_dir" ] || [ ! -d "$cand_dir" ]; then
     continue
+  fi
+
+  if command -v resolve_custom_workspace &>/dev/null; then
+    custom_ws=$(resolve_custom_workspace "$cand_dir" 2>/dev/null || true)
+    if [ -n "$custom_ws" ]; then
+      VCS_DETECTED="$custom_ws"
+      break
+    fi
   fi
 
   if command -v git &>/dev/null && git -C "$cand_dir" rev-parse --is-inside-work-tree &>/dev/null 2>&1; then
@@ -239,9 +253,6 @@ for cand_dir in "$CWD" "$RAW_CWD" "$VCS_ROOT" "$PROJECT_DIR" "${PWD:-}"; do
     break
   elif command -v jj &>/dev/null && jj -R "$cand_dir" root &>/dev/null 2>&1; then
     VCS_DETECTED=$(jj -R "$cand_dir" log --no-graph -r @ -T 'bookmarks' 2>/dev/null || true)
-    break
-  elif [[ "$cand_dir" =~ ^/google/src/cloud/[^/]+/([^/]+) ]]; then
-    VCS_DETECTED="${BASH_REMATCH[1]}"
     break
   fi
 done

@@ -296,29 +296,62 @@ ensure_local_files() {
         log_info "Created empty $bash_local"
     fi
 
-    # Gemini settings.json: merge defaults with live file to preserve local changes
-    local defaults="$DOTFILES_DIR/home/.gemini/antigravity-cli/settings.defaults.json"
-    local live="$HOME/.gemini/antigravity-cli/settings.json"
+    local ssh_local="$HOME/.ssh/config.local"
+    if [[ ! -f "$ssh_local" ]]; then
+        execute touch "$ssh_local"
+        log_info "Created empty $ssh_local"
+    fi
 
-    if [[ ! -f "$live" ]]; then
-        execute mkdir -p "$(dirname "$live")"
-        execute cp "$defaults" "$live"
-        log_info "Created $live from defaults"
-    else
-        if $DRY_RUN; then
-            log_info "[Dry-Run] Would merge settings defaults into $live"
+    local vcs_local="$HOME/.gemini/antigravity-cli/vcs_resolve.local.sh"
+    if [[ ! -f "$vcs_local" ]]; then
+        execute touch "$vcs_local"
+        log_info "Created empty $vcs_local"
+    fi
+
+    # Gemini CLI settings.json: merge defaults with live files to preserve local changes
+    local defaults="$DOTFILES_DIR/home/.gemini/antigravity-cli/settings.defaults.json"
+    local live_targets=("$HOME/.gemini/antigravity-cli/settings.json")
+
+    # Dynamically discover active client settings.json targets under ~/.gemini/
+    if [[ -d "$HOME/.gemini" ]]; then
+        local found_settings
+        while IFS= read -r found_settings; do
+            [[ -n "$found_settings" ]] || continue
+            local already_present=false
+            local existing
+            for existing in "${live_targets[@]}"; do
+                if [[ "$existing" == "$found_settings" ]]; then
+                    already_present=true
+                    break
+                fi
+            done
+            if ! $already_present; then
+                live_targets+=("$found_settings")
+            fi
+        done < <(find "$HOME/.gemini" -mindepth 2 -maxdepth 4 -name "settings.json" 2>/dev/null)
+    fi
+
+    for live in "${live_targets[@]}"; do
+        if [[ ! -f "$live" ]]; then
+            execute mkdir -p "$(dirname "$live")"
+            execute cp "$defaults" "$live"
+            log_info "Created $live from defaults"
         else
-            local tmp
-            tmp=$(mktemp)
-            if jq -s '.[0] * .[1]' "$live" "$defaults" > "$tmp" 2>/dev/null; then
-                execute mv "$tmp" "$live"
-                log_info "Merged settings defaults into $live"
+            if $DRY_RUN; then
+                log_info "[Dry-Run] Would merge settings defaults into $live"
             else
-                log_warn "Failed to merge settings defaults into $live using jq"
-                rm -f "$tmp"
+                local tmp
+                tmp=$(mktemp)
+                if jq -s '.[0] * .[1]' "$live" "$defaults" > "$tmp" 2>/dev/null; then
+                    execute mv "$tmp" "$live"
+                    log_info "Merged settings defaults into $live"
+                else
+                    log_warn "Failed to merge settings defaults into $live using jq"
+                    rm -f "$tmp"
+                fi
             fi
         fi
-    fi
+    done
 }
 
 # 5.1 Scan and Backup Pre-existing Stow Conflicts
@@ -343,7 +376,7 @@ find_stow_conflicts() {
         
         # Check against central ignores
         local ignored=false
-        local rel_path="${entry#$HOME_DIR/}"
+        local rel_path="${entry#"$HOME_DIR"/}"
         for pattern in "${STOW_IGNORES[@]}"; do
             if [[ "$rel_path" =~ $pattern ]]; then
                 ignored=true
@@ -356,10 +389,38 @@ find_stow_conflicts() {
         
         local target="$dst_dir/$name"
         
-        if [[ -e "$target" ]]; then
+        if [[ -e "$target" || -L "$target" ]]; then
             if [[ -L "$target" ]]; then
-                # Already a symlink, safe to skip
-                continue
+                if [[ ! -e "$target" ]]; then
+                    # Broken symlink! Back up to clear path for Stow
+                    log_info "Found broken symlink: $target. Backing up to $target.bak..."
+                    execute mkdir -p "$(dirname "$target.bak")"
+                    [[ -e "$target.bak" || -L "$target.bak" ]] && execute rm -rf "$target.bak"
+                    execute mv "$target" "$target.bak"
+                    continue
+                fi
+
+                local resolved_target resolved_entry link_dest
+                resolved_target=$(realpath "$target" 2>/dev/null || true)
+                resolved_entry=$(realpath "$entry" 2>/dev/null || true)
+                link_dest=$(readlink "$target" || true)
+
+                if [[ -n "$resolved_target" && "$resolved_target" == "$resolved_entry" ]]; then
+                    if [[ "$link_dest" == /* ]]; then
+                        # Absolute symlink pointing to repo - Stow ignores absolute symlinks and aborts with conflict
+                        log_info "Removing absolute symlink pointing to repo: $target (Stow will recreate as relative)"
+                        execute rm "$target"
+                    fi
+                    # Relative symlink pointing to repo is owned by Stow; safe to skip
+                    continue
+                else
+                    # Symlink points elsewhere: conflicting target
+                    log_info "Found conflicting symlink: $target -> $link_dest. Backing up to $target.bak..."
+                    execute mkdir -p "$(dirname "$target.bak")"
+                    [[ -e "$target.bak" || -L "$target.bak" ]] && execute rm -rf "$target.bak"
+                    execute mv "$target" "$target.bak"
+                    continue
+                fi
             elif [[ -d "$target" && -d "$entry" ]]; then
                 # Both are directories: Stow will descend, so we do too
                 find_stow_conflicts "$entry" "$target"
@@ -367,6 +428,7 @@ find_stow_conflicts() {
                 # Regular file conflict!
                 log_info "Found existing non-symlink target conflict: $target. Backing up to $target.bak..."
                 execute mkdir -p "$(dirname "$target.bak")"
+                [[ -e "$target.bak" || -L "$target.bak" ]] && execute rm -rf "$target.bak"
                 execute mv "$target" "$target.bak"
             fi
         fi
@@ -713,4 +775,6 @@ main() {
 
     log_info "Dotfiles installation complete!"
 }
-main "$@"
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    main "$@"
+fi

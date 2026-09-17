@@ -85,7 +85,7 @@ result and padding it with speculation costs the caller a triage round
 for nothing.
 ```
 
-`<REPO>` is the absolute path of the directory that *contains* the `skills/` directory — on this machine `/home/hobe/.claude`, so that `<REPO>/skills/quality-list/items/<slug>.md` resolves to a real file. It is not the skills directory itself; resolving it that way yields `.../skills/skills/...` and the agent reads nothing. Resolve it before dispatch and embed the resolved path — never the placeholder. A dispatched agent has no access to the conversation that assembled its prompt, so an unresolved `<REPO>` leaves it unable to find the item files it is told to read. Embed only the resolved paths and the target: **do not embed item body text**, since the agent reads the item files itself and that is what keeps main context free of rule text.
+`<REPO>` is the absolute path of the directory that *contains* the `skills/` directory — e.g. `~/.claude`, so that `<REPO>/skills/quality-list/items/<slug>.md` resolves to a real file. It is not the skills directory itself; resolving it that way yields `.../skills/skills/...` and the agent reads nothing. Resolve it before dispatch and embed the resolved path — never the placeholder. A dispatched agent has no access to the conversation that assembled its prompt, so an unresolved `<REPO>` leaves it unable to find the item files it is told to read. Embed only the resolved paths and the target: **do not embed item body text**, since the agent reads the item files itself and that is what keeps main context free of rule text.
 
 Per-lens framing to append to `<LENS>`, matching the lens's own angle:
 
