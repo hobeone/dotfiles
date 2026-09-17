@@ -80,7 +80,9 @@ to the user and do not fall back to local mode on it.
 **Local mode** — a branch or working-tree target, an invocation by another
 skill that asks for local mode, or the "no PR for this branch" result above —
 follows from that resolution: it skips this phase and Post, and prints the
-rendered output instead.
+rendered output instead. When the invoking skill supplied an output path,
+write the verified findings there instead of printing them (Phase 6 covers
+the schema); the rendered walkthrough/body may still be printed either way.
 
 The rest of this phase applies to PR targets only, continuing with the
 resolved `<N>` and the JSON already fetched above — do not call `gh pr view`
@@ -478,7 +480,10 @@ downstream agents can consume it.
 
 Create ⟨run-dir⟩ once for this review and write every artifact below into it.
 
-Write each finding into a JSON array at `<run-dir>/findings.json`:
+If the invoking skill supplied an output path (local mode only — see Phase 0),
+write the verified findings there, in the invoking skill's requested schema,
+or in the findings JSON below if it named none; do not also print them. Write
+each finding into a JSON array at `<run-dir>/findings.json`:
 
 ```json
 [
