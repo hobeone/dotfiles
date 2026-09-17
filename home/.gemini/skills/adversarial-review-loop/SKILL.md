@@ -11,7 +11,7 @@ An iterative, multi-turn Actor-Critic review and remediation system that couples
 
 The workflow executes an iterative feedback loop between two opposing roles:
 
-1. **The Critic (Red Team — `deep-pr-review` subagent)**: Attacks the codebase with recall-biased scrutiny across 15 analytical angles, 1-vote verification, and gap sweeps to identify security vulnerabilities, concurrency bugs, edge-case failures, and architectural regressions. Findings are written to `/tmp/adversarial-review-loop-findings.json`.
+1. **The Critic (Red Team — `deep-pr-review` subagent)**: Attacks the codebase with recall-biased scrutiny across all of `deep-pr-review`'s Find-phase angles, 1-vote verification, and gap sweeps to identify security vulnerabilities, concurrency bugs, edge-case failures, and architectural regressions. Findings are written to `/tmp/adversarial-review-loop-findings.json`.
 2. **The Actor (Blue Team — Orchestrator under `superpowers:receiving-code-review`)**: Skeptically audits each finding against live codebase reality, rejects hallucinations and YAGNI bloat without performative agreement, triages items into `ACCEPT` or `PUSHBACK`, and applies atomic Red-Green TDD fixes for accepted defects.
 3. **The Feedback Loop**: Each remediation turn produces new atomic commits, updating the target diff. The loop feeds the updated diff back into the Critic for a fresh evaluation round, verifying that fixes resolve issues without introducing secondary defects or regressions.
 
@@ -58,7 +58,7 @@ The loop terminates when any of the following three conditions is met:
 
 1. **Full Convergence (`findings.length == 0`)**:
    - The Critic identifies zero actionable defects in the current diff.
-   - Clean sweep across all 15 analytical review angles.
+   - Clean sweep across all of `deep-pr-review`'s Find-phase angles.
 2. **Consensus Pushback (All findings `PUSHBACK`)**:
    - The Critic returns findings, but the Actor refutes every item with technical justification adhering to `receiving-code-review` principles (e.g., invalid assumptions, non-issue guarded by existing system invariants, or YAGNI violations).
    - Because no findings are accepted, no code changes occur, preventing unproductive cycles.

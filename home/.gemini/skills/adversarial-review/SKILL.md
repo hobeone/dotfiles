@@ -9,7 +9,7 @@ An end-to-end local review and remediation loop that couples aggressive adversar
 
 The workflow follows a two-phase Red Team / Blue Team pattern:
 
-1. **Red Team (`deep-pr-review` subagent)**: Attacks the code without deference, running a 15-angle recall-biased review, 1-vote verification, and gap sweep to surface concrete defects, security vulnerabilities, concurrency bugs, and edge-case failures. Verified findings are saved to `/tmp/adversarial-review-findings.json`.
+1. **Red Team (`deep-pr-review` subagent)**: Attacks the code without deference, running a recall-biased review across every angle in `deep-pr-review`'s Find phase, 1-vote verification, and gap sweep to surface concrete defects, security vulnerabilities, concurrency bugs, and edge-case failures. Verified findings are saved to `/tmp/adversarial-review-findings.json`.
 2. **Blue Team (Main orchestrator under `superpowers:receiving-code-review`)**: Skeptically audits every finding against codebase reality, rejects hallucinations, YAGNI additions, or out-of-context nitpicks, publishes a triage table, and drives prioritized Red-Green TDD remediation for accepted findings.
 
 ```
