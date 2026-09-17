@@ -23,7 +23,34 @@ grep -q -- '--expect-head' "$m" || err "method.md does not use --expect-head"
 grep -q -- '--sequential' "$m" || err "method.md does not document --sequential"
 grep -qF '<!-- deep-pr-review head:' "$m" || err "method.md does not describe the head marker"
 
+adapters=(home/.claude/skills/deep-pr-review/SKILL.md home/.gemini/skills/deep-pr-review/SKILL.md)
 callers=(home/.gemini/skills/adversarial-review/SKILL.md home/.gemini/skills/adversarial-review-loop/SKILL.md)
+
+# The angle count must have exactly one owner: the number of "### Angle X —"
+# headings in method.md. Every digit-count reference to it (core files +
+# both adapters + both callers) must match that count, and callers must not
+# quote a count at all.
+angle_n=$(grep -c '^### Angle [A-Z] — ' "$m")
+mapfile -t core_files < <(find "$core" -type f)
+count_targets=("${core_files[@]}" "${adapters[@]}" "${callers[@]}")
+count_pattern='[0-9]+-angle|[0-9]+ angles|[0-9]+ analytical|[0-9]+ subagents|[0-9]+ entries'
+while IFS=: read -r file lineno match; do
+  num=$(grep -oE '[0-9]+' <<<"$match")
+  if [[ $num != "$angle_n" ]]; then
+    err "angle count mismatch in $file:$lineno ($match, expected $angle_n)"
+  fi
+done < <(grep -nroE "$count_pattern" "${count_targets[@]}")
+
+# Narrower than count_pattern's [0-9]+ subagents|entries (those legitimately
+# describe fan-out sizing elsewhere): callers must not quote an angle *count*
+# in any form, singular or plural. This intentionally does not match a bare
+# "<N> angle" used as a non-count noun phrase (e.g. "Section 2 angle
+# mappings" in go_rules.md cross-references), only counting phrasings.
+if hits=$(grep -nE '[0-9]+-angle|[0-9]+ angles|[0-9]+ analytical' "${callers[@]}"); then
+  err "callers must not quote an angle count at all:"
+  printf '%s\n' "$hits"
+fi
+
 if grep -nE '12-angle|12 analytical' "${callers[@]}"; then err "callers still say 12 angles"; fi
 # shellcheck disable=SC2016 # literal backticks in the pattern, no expansion intended
 if grep -nE 'Phase [0-9] of `deep-pr-review`' "${callers[@]}"; then err "callers cite deep-pr-review phases by number"; fi
