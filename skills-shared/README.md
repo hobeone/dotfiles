@@ -16,16 +16,30 @@ Linking entries individually (not one `core/` link) keeps paths like
 
 ## Rules
 
-- **No harness vocabulary in the core.** No tool names (`invoke_subagent`,
-  `view_file`, `AskUserQuestion`, ...) and no harness home paths. Write a
-  `⟨verb⟩` instead, and cite companion skills by name.
+- **No harness vocabulary in the core.** No Claude Code tool names, whether
+  bare (`invoke_subagent`, `AskUserQuestion`, ...) or backticked
+  (`` `Bash` ``, `` `Read` ``, `` `Edit` ``, `` `Write` ``, `` `Agent` ``,
+  `` `Workflow` ``, `` `Grep` ``, `` `Glob` ``, `` `WebFetch` ``,
+  `` `WebSearch` ``, `` `TodoWrite` ``, `` `Skill` ``, `` `NotebookEdit` ``,
+  `` `AskUserQuestion` ``); no agy tool names (`view_file`, `code_search`,
+  `find_by_name`, `grep_search`, `list_dir`, `manage_subagents`,
+  `define_subagent`, `replace_file_content`, `multi_replace_file_content`,
+  `write_to_file`, `read_url_content`, `search_web`, ...); and no harness home
+  paths. Write a `⟨verb⟩` instead, and cite companion skills by name.
+- **Verb tokens are well-formed.** Every `⟨...⟩` token in a core file must
+  match `⟨[a-z][a-z-]*⟩` — lowercase, hyphen-separated, no placeholders.
 - **Adapters bind every verb the core uses, and nothing else.** One
   `## Harness mapping` table whose rows start with `` | `⟨verb⟩` ``.
-- **Adapters hold no method.** Frontmatter, bindings, model routing, and
-  harness-only notes only.
+- **Adapters hold no method.** Every `## ` heading in an adapter `SKILL.md`
+  must be one of `Harness mapping`, `Model routing`, `Harness notes`,
+  `Verified call shape`; no `## Phase` or `### Angle` heading may appear.
 - **Callers cite phases by name**, never by number.
 
-`tests/test_skills_shared.sh` enforces the first two rules and the links.
+`tests/test_skills_shared.sh` enforces all of the above: both harness
+tool-name sets, verb-token well-formedness, verb binding in both directions
+(nothing missing, nothing unused), the allowed adapter headings, and that
+every adapter symlink resolves relative into the matching core entry with no
+stray adapter-only links.
 
 ## Migrating a forked skill
 
