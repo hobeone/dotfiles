@@ -92,7 +92,7 @@ Stop, telling the user why, when any holds:
 
 - `state` is `CLOSED` or `MERGED`.
 - `isDraft` is true, unless the user named this PR explicitly.
-- Trivial: `bot` is true, or every path in `files` is a lockfile
+- Trivial: `author.is_bot` is true, or every path in `files` is a lockfile
   (`go.sum`, `package-lock.json`, `pnpm-lock.yaml`, `yarn.lock`, `Cargo.lock`,
   `uv.lock`, `poetry.lock`).
 - Already reviewed at this head:
@@ -106,11 +106,11 @@ Stop, telling the user why, when any holds:
 
   Each output line is `<sha> <url>`.
 
-  A marker whose SHA equals `head` → stop with "already reviewed at <sha>",
+  A marker whose SHA equals `headRefOid` → stop with "already reviewed at <sha>",
   linking the review. A marker with an older SHA → continue with a full review;
   the walkthrough's first paragraph links that prior review.
 
-Record `head` as `expected_head` for Post.
+Record `headRefOid` as `expected_head` for Post.
 
 ---
 
