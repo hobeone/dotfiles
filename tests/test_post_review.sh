@@ -114,6 +114,16 @@ jq -e '[.comments[] | select(.path == "has space.txt" and .line == 2)] | length 
   <<<"$payload_space" >/dev/null \
   || err "has space.txt line 2 not inline: $payload_space"
 
+# A diff holding only a rename (or only binary files) has no `+++` line, yet
+# gh pr diff succeeded; it must not trigger the local git-diff fallback, which
+# fails when the script runs outside the PR's repository.
+: > "$STUB_LOG"
+out_ren=$(STUB_DIFF="$fx/diff-rename-only.txt" STUB_CHANGED_FILES=1 \
+  "$script" 7 "$fx/findings.json" --repo o/r --dry-run 2>&1) \
+  || err "rename-only diff failed: $out_ren"
+if grep -q 'falling back' <<<"$out_ren"; then err "rename-only diff took the git-diff fallback"; fi
+if grep -q -- '--jq .base.sha' "$STUB_LOG"; then err "rename-only diff fetched base sha for fallback"; fi
+
 # G3c — half-posted state: review POST fails after the walkthrough succeeded.
 : > "$STUB_LOG"
 if out=$(STUB_FAIL_REVIEW=1 "$script" 7 "$fx/findings.json" --repo o/r --walkthrough "$fx/walkthrough.md" 2>&1); then

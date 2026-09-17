@@ -81,7 +81,7 @@ trap 'rm -rf "$work"' EXIT
 # comment anchors outside the diff, so findings are partitioned up front rather
 # than discovered by a failed POST.
 # ---------------------------------------------------------------------------
-if ! gh pr diff "$pr" --repo "$repo" > "$work/diff.txt" 2>"$work/diff.err" || ! grep -q "^+++ " "$work/diff.txt"; then
+if ! gh pr diff "$pr" --repo "$repo" > "$work/diff.txt" 2>"$work/diff.err" || ! grep -q '^diff --git ' "$work/diff.txt"; then
   printf '%s: gh pr diff failed, falling back to git diff: %s\n' \
     "${0##*/}" "$(cat "$work/diff.err" 2>/dev/null)" >&2
   base_sha=$(gh api "repos/$repo/pulls/$pr" --jq .base.sha)

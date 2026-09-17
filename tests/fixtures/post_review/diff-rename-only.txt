@@ -1,0 +1,4 @@
+diff --git a/orig.go b/renamed.go
+similarity index 100%
+rename from orig.go
+rename to renamed.go
