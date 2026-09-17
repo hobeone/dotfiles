@@ -7,6 +7,13 @@
 #
 # Posts exactly one review with event=COMMENT. Never approves, never requests
 # changes, never edits the branch.
+#
+# The walkthrough comment is posted via `gh api repos/.../issues/.../comments`
+# rather than the repo's gh-post wrapper: it targets a plain issue-comment
+# endpoint gh-post does not wrap (the review itself goes to
+# pulls/.../reviews, which gh-post doesn't cover either), and both bodies are
+# pre-rendered CodeRabbit-format markup (<details>, tables, fenced prompts)
+# that gh-post's mdformat/hardwrap pass would rewrite and break.
 set -euo pipefail
 
 die() { printf '%s: %s\n' "${0##*/}" "$*" >&2; exit 1; }
