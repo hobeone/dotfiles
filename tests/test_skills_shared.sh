@@ -95,6 +95,26 @@ for core in "${cores[@]}"; do
       err "$adir: missing SKILL.md"
       continue
     fi
+
+    # Adapters hold no method: every "## " heading must be one of the four
+    # adapter-only sections, and no "## Phase"/"### Angle" heading (method
+    # content) may appear at all.
+    while IFS= read -r heading_line; do
+      [[ -z $heading_line ]] && continue
+      case ${heading_line#\#\# } in
+        "Harness mapping" | "Model routing" | "Harness notes" | "Verified call shape") ;;
+        *) err "$adir/SKILL.md: disallowed heading '$heading_line'" ;;
+      esac
+    done < <(grep -E '^## ' "$adir/SKILL.md")
+
+    method_out=$(grep -nE '^## Phase|^### Angle' "$adir/SKILL.md" 2>&1)
+    method_rc=$?
+    if ((method_rc == 2)); then
+      err "$name: grep failed scanning $adir/SKILL.md for method headings: $method_out"
+    elif ((method_rc == 0)); then
+      err "$adir/SKILL.md holds method (Phase/Angle heading):"$'\n'"$method_out"
+    fi
+
     bound=$(grep -oE "^\| \`$verb_re\`" "$adir/SKILL.md" | grep -oE "$verb_re" | sort -u)
 
     if [[ -z $used ]]; then
