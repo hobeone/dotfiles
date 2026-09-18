@@ -34,7 +34,7 @@ assert_eq() {
 
 assert_log_contains() {
   local label="$1" needle="$2"
-  if ! grep -q -- "$needle" "$MOCK_TMUX_LOG" 2>/dev/null; then
+  if ! grep -Fq -- "$needle" "$MOCK_TMUX_LOG" 2>/dev/null; then
     echo "FAIL: $label - log did not contain '$needle'"
     echo "Log content:"
     cat "$MOCK_TMUX_LOG" 2>/dev/null || true
@@ -53,14 +53,14 @@ INPUT_JSON=$(jq -n --arg cwd "$GIT_REPO" '{agent_state: "working", cwd: $cwd}')
 
 OUT=$(PATH="$TMP_DIR:$PATH" TMUX="/tmp/test,1,0" TMUX_PANE="%99" "$WINDOW_TITLE_BIN" <<< "$INPUT_JSON")
 assert_eq "Working stdout" "[AGY] ⏳ my-repo" "$OUT"
-assert_log_contains "Working tmux rename" "tmux rename-window -t @99 ⏳ my-repo"
+assert_log_contains "Working tmux rename" "tmux rename-window -t @99 [AGY] ⏳ my-repo"
 
 echo "=== Test 2: Git repo in idle state ==="
 > "$MOCK_TMUX_LOG"
 INPUT_JSON=$(jq -n --arg cwd "$GIT_REPO" '{agent_state: "idle", cwd: $cwd}')
 OUT=$(PATH="$TMP_DIR:$PATH" TMUX="/tmp/test,1,0" TMUX_PANE="%99" "$WINDOW_TITLE_BIN" <<< "$INPUT_JSON")
 assert_eq "Idle stdout" "[AGY] my-repo" "$OUT"
-assert_log_contains "Idle tmux rename" "tmux rename-window -t @99 my-repo"
+assert_log_contains "Idle tmux rename" "tmux rename-window -t @99 [AGY] my-repo"
 
 echo "=== Test 3: Local VCS Resolver Hook ==="
 > "$MOCK_TMUX_LOG"
@@ -80,7 +80,7 @@ CUSTOM_PATH="/some/mount/custom-monorepo/service-a"
 INPUT_JSON=$(jq -n --arg cwd "$CUSTOM_PATH" '{agent_state: "working", cwd: $cwd}')
 OUT=$(HOME="$FAKE_HOME" PATH="$TMP_DIR:$PATH" TMUX="/tmp/test,1,0" TMUX_PANE="%99" "$WINDOW_TITLE_BIN" <<< "$INPUT_JSON")
 assert_eq "Local hook stdout" "[AGY] ⏳ custom-ws" "$OUT"
-assert_log_contains "Local hook tmux rename" "tmux rename-window -t @99 ⏳ custom-ws"
+assert_log_contains "Local hook tmux rename" "tmux rename-window -t @99 [AGY] ⏳ custom-ws"
 
 echo "=== Test 4: Linked Git Worktree ==="
 > "$MOCK_TMUX_LOG"
@@ -95,7 +95,7 @@ git -C "$WT_PARENT" worktree add -q "$WT_DIR" -b feature-auth
 INPUT_JSON=$(jq -n --arg cwd "$WT_DIR" '{agent_state: "idle", cwd: $cwd}')
 OUT=$(PATH="$TMP_DIR:$PATH" TMUX="/tmp/test,1,0" TMUX_PANE="%99" "$WINDOW_TITLE_BIN" <<< "$INPUT_JSON")
 assert_eq "Worktree stdout" "[AGY] parent-repo (feature-auth)" "$OUT"
-assert_log_contains "Worktree tmux rename" "tmux rename-window -t @99 parent-repo (feature-auth)"
+assert_log_contains "Worktree tmux rename" "tmux rename-window -t @99 [AGY] parent-repo (feature-auth)"
 
 echo "=== Test 5: Plain directory without VCS ==="
 > "$MOCK_TMUX_LOG"
@@ -104,7 +104,7 @@ mkdir -p "$PLAIN_DIR"
 INPUT_JSON=$(jq -n --arg cwd "$PLAIN_DIR" '{agent_state: "working", cwd: $cwd}')
 OUT=$(PATH="$TMP_DIR:$PATH" TMUX="/tmp/test,1,0" TMUX_PANE="%99" "$WINDOW_TITLE_BIN" <<< "$INPUT_JSON")
 assert_eq "Plain dir stdout" "[AGY] ⏳ simple-folder" "$OUT"
-assert_log_contains "Plain dir tmux rename" "tmux rename-window -t @99 ⏳ simple-folder"
+assert_log_contains "Plain dir tmux rename" "tmux rename-window -t @99 [AGY] ⏳ simple-folder"
 
 echo "=== Test 6: Outside of TMUX ==="
 > "$MOCK_TMUX_LOG"
