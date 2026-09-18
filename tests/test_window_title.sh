@@ -59,8 +59,8 @@ echo "=== Test 2: Git repo in idle state ==="
 > "$MOCK_TMUX_LOG"
 INPUT_JSON=$(jq -n --arg cwd "$GIT_REPO" '{agent_state: "idle", cwd: $cwd}')
 OUT=$(PATH="$TMP_DIR:$PATH" TMUX="/tmp/test,1,0" TMUX_PANE="%99" "$WINDOW_TITLE_BIN" <<< "$INPUT_JSON")
-assert_eq "Idle stdout" "[AGY] my-repo" "$OUT"
-assert_log_contains "Idle tmux rename" "tmux rename-window -t @99 [AGY] my-repo"
+assert_eq "Idle stdout" "[AGY] ● my-repo" "$OUT"
+assert_log_contains "Idle tmux rename" "tmux rename-window -t @99 [AGY] ● my-repo"
 
 echo "=== Test 3: Local VCS Resolver Hook ==="
 > "$MOCK_TMUX_LOG"
@@ -94,8 +94,8 @@ WT_DIR="$WT_PARENT/.worktrees/feature-auth"
 git -C "$WT_PARENT" worktree add -q "$WT_DIR" -b feature-auth
 INPUT_JSON=$(jq -n --arg cwd "$WT_DIR" '{agent_state: "idle", cwd: $cwd}')
 OUT=$(PATH="$TMP_DIR:$PATH" TMUX="/tmp/test,1,0" TMUX_PANE="%99" "$WINDOW_TITLE_BIN" <<< "$INPUT_JSON")
-assert_eq "Worktree stdout" "[AGY] parent-repo (feature-auth)" "$OUT"
-assert_log_contains "Worktree tmux rename" "tmux rename-window -t @99 [AGY] parent-repo (feature-auth)"
+assert_eq "Worktree stdout" "[AGY] ● parent-repo (feature-auth)" "$OUT"
+assert_log_contains "Worktree tmux rename" "tmux rename-window -t @99 [AGY] ● parent-repo (feature-auth)"
 
 echo "=== Test 5: Plain directory without VCS ==="
 > "$MOCK_TMUX_LOG"

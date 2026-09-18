@@ -83,8 +83,8 @@ case "$AGENT_STATE" in
     TERM_TITLE="[AGY] ⏳ $PROJECT_NAME"
     ;;
   *)
-    TMUX_TITLE="[AGY] $PROJECT_NAME"
-    TERM_TITLE="[AGY] $PROJECT_NAME"
+    TMUX_TITLE="[AGY] ● $PROJECT_NAME"
+    TERM_TITLE="[AGY] ● $PROJECT_NAME"
     ;;
 esac
 
