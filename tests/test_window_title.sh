@@ -52,8 +52,8 @@ git -C "$GIT_REPO" init -q -b main
 INPUT_JSON=$(jq -n --arg cwd "$GIT_REPO" '{agent_state: "working", cwd: $cwd}')
 
 OUT=$(PATH="$TMP_DIR:$PATH" TMUX="/tmp/test,1,0" TMUX_PANE="%99" "$WINDOW_TITLE_BIN" <<< "$INPUT_JSON")
-assert_eq "Working stdout" "[AGY] ⏳ my-repo" "$OUT"
-assert_log_contains "Working tmux rename" "tmux rename-window -t @99 [AGY] ⏳ my-repo"
+assert_eq "Working stdout" "[AGY] ⏳my-repo" "$OUT"
+assert_log_contains "Working tmux rename" "tmux rename-window -t @99 [AGY] ⏳my-repo"
 
 echo "=== Test 2: Git repo in idle state ==="
 > "$MOCK_TMUX_LOG"
@@ -79,8 +79,8 @@ HOOK_EOF
 CUSTOM_PATH="/some/mount/custom-monorepo/service-a"
 INPUT_JSON=$(jq -n --arg cwd "$CUSTOM_PATH" '{agent_state: "working", cwd: $cwd}')
 OUT=$(HOME="$FAKE_HOME" PATH="$TMP_DIR:$PATH" TMUX="/tmp/test,1,0" TMUX_PANE="%99" "$WINDOW_TITLE_BIN" <<< "$INPUT_JSON")
-assert_eq "Local hook stdout" "[AGY] ⏳ custom-ws" "$OUT"
-assert_log_contains "Local hook tmux rename" "tmux rename-window -t @99 [AGY] ⏳ custom-ws"
+assert_eq "Local hook stdout" "[AGY] ⏳custom-ws" "$OUT"
+assert_log_contains "Local hook tmux rename" "tmux rename-window -t @99 [AGY] ⏳custom-ws"
 
 echo "=== Test 4: Linked Git Worktree ==="
 > "$MOCK_TMUX_LOG"
@@ -103,13 +103,13 @@ PLAIN_DIR="$TMP_DIR/simple-folder"
 mkdir -p "$PLAIN_DIR"
 INPUT_JSON=$(jq -n --arg cwd "$PLAIN_DIR" '{agent_state: "working", cwd: $cwd}')
 OUT=$(PATH="$TMP_DIR:$PATH" TMUX="/tmp/test,1,0" TMUX_PANE="%99" "$WINDOW_TITLE_BIN" <<< "$INPUT_JSON")
-assert_eq "Plain dir stdout" "[AGY] ⏳ simple-folder" "$OUT"
-assert_log_contains "Plain dir tmux rename" "tmux rename-window -t @99 [AGY] ⏳ simple-folder"
+assert_eq "Plain dir stdout" "[AGY] ⏳simple-folder" "$OUT"
+assert_log_contains "Plain dir tmux rename" "tmux rename-window -t @99 [AGY] ⏳simple-folder"
 
 echo "=== Test 6: Outside of TMUX ==="
 > "$MOCK_TMUX_LOG"
 OUT=$(PATH="$TMP_DIR:$PATH" TMUX="" TMUX_PANE="" "$WINDOW_TITLE_BIN" <<< "$INPUT_JSON")
-assert_eq "No TMUX stdout" "[AGY] ⏳ simple-folder" "$OUT"
+assert_eq "No TMUX stdout" "[AGY] ⏳simple-folder" "$OUT"
 if [[ -s "$MOCK_TMUX_LOG" ]]; then
   echo "FAIL: Tmux commands called when TMUX is unset"
   FAILED=1

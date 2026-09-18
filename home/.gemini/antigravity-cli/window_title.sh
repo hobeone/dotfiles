@@ -79,8 +79,8 @@ PROJECT_NAME="${PROJECT_NAME:-workspace}"
 # Determine title based on agent state
 case "$AGENT_STATE" in
   working|thinking|tool_use)
-    TMUX_TITLE="[AGY] ⏳ $PROJECT_NAME"
-    TERM_TITLE="[AGY] ⏳ $PROJECT_NAME"
+    TMUX_TITLE="[AGY] ⏳$PROJECT_NAME"
+    TERM_TITLE="[AGY] ⏳$PROJECT_NAME"
     ;;
   *)
     TMUX_TITLE="[AGY] ● $PROJECT_NAME"
