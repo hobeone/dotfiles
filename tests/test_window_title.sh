@@ -44,6 +44,18 @@ assert_log_contains() {
   fi
 }
 
+assert_log_not_contains() {
+  local label="$1" needle="$2"
+  if grep -Fq -- "$needle" "$MOCK_TMUX_LOG" 2>/dev/null; then
+    echo "FAIL: $label - log unexpectedly contained '$needle'"
+    echo "Log content:"
+    cat "$MOCK_TMUX_LOG" 2>/dev/null || true
+    FAILED=1
+  else
+    echo "PASS: $label"
+  fi
+}
+
 echo "=== Test 1: Git repo in working state ==="
 > "$MOCK_TMUX_LOG"
 GIT_REPO="$TMP_DIR/my-repo"
@@ -53,14 +65,20 @@ INPUT_JSON=$(jq -n --arg cwd "$GIT_REPO" '{agent_state: "working", cwd: $cwd}')
 
 OUT=$(PATH="$TMP_DIR:$PATH" TMUX="/tmp/test,1,0" TMUX_PANE="%99" "$WINDOW_TITLE_BIN" <<< "$INPUT_JSON")
 assert_eq "Working stdout" "[AGY] ⏳my-repo" "$OUT"
+assert_log_contains "Working tmux pane @agy_title" "tmux set-option -p -t %99 @agy_title [AGY] ⏳my-repo"
 assert_log_contains "Working tmux rename" "tmux rename-window -t @99 [AGY] ⏳my-repo"
+assert_log_contains "Working tmux automatic-rename on" "tmux set-window-option -t @99 automatic-rename on"
+assert_log_not_contains "Working tmux never disables automatic-rename" "automatic-rename off"
 
 echo "=== Test 2: Git repo in idle state ==="
 > "$MOCK_TMUX_LOG"
 INPUT_JSON=$(jq -n --arg cwd "$GIT_REPO" '{agent_state: "idle", cwd: $cwd}')
 OUT=$(PATH="$TMP_DIR:$PATH" TMUX="/tmp/test,1,0" TMUX_PANE="%99" "$WINDOW_TITLE_BIN" <<< "$INPUT_JSON")
 assert_eq "Idle stdout" "[AGY] ● my-repo" "$OUT"
+assert_log_contains "Idle tmux pane @agy_title" "tmux set-option -p -t %99 @agy_title [AGY] ● my-repo"
 assert_log_contains "Idle tmux rename" "tmux rename-window -t @99 [AGY] ● my-repo"
+assert_log_contains "Idle tmux automatic-rename on" "tmux set-window-option -t @99 automatic-rename on"
+assert_log_not_contains "Idle tmux never disables automatic-rename" "automatic-rename off"
 
 echo "=== Test 3: Local VCS Resolver Hook ==="
 > "$MOCK_TMUX_LOG"
@@ -115,6 +133,16 @@ if [[ -s "$MOCK_TMUX_LOG" ]]; then
   FAILED=1
 else
   echo "PASS: No tmux commands invoked when outside TMUX"
+fi
+
+echo "=== Test 7: tmux.conf automatic-rename-format uses @agy_title for cli/agy ==="
+TMUX_CONF="$REPO_ROOT/home/.config/tmux/tmux.conf"
+EXPECTED_FMT="setw -g automatic-rename-format '#{?#{m/r:^(cli|agy)$,#{pane_current_command}},#{?#{@agy_title},#{@agy_title},#{b:pane_current_path}},#{?#{m/r:^(zsh|claude)$,#{pane_current_command}},#{b:pane_current_path},#{pane_current_command}}}'"
+if grep -Fq -- "$EXPECTED_FMT" "$TMUX_CONF" 2>/dev/null; then
+  echo "PASS: tmux.conf automatic-rename-format configured with @agy_title"
+else
+  echo "FAIL: tmux.conf automatic-rename-format missing @agy_title rule"
+  FAILED=1
 fi
 
 if [[ "$FAILED" -eq 0 ]]; then
