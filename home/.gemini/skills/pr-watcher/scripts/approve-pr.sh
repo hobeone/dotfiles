@@ -15,19 +15,30 @@ repo=""
 while (($#)); do
   case "$1" in
     --repo) repo="${2:?--repo needs OWNER/NAME}"; shift 2 ;;
+    --body|--summary) summary="${2:?--body needs text}"; shift 2 ;;
+    --) shift; break ;;
     -h|--help)
-      echo "usage: approve-pr.sh <pr-number> <head-sha> [summary-or-file] [--repo OWNER/NAME]"
+      echo "usage: approve-pr.sh <pr-number> <head-sha> [summary-or-file] [--body TEXT] [--repo OWNER/NAME]"
       exit 0
       ;;
-    -*) die "unknown flag: $1" ;;
+    --*) die "unknown flag: $1" ;;
     *)
       if [[ -z $pr ]]; then pr="$1"
       elif [[ -z $sha ]]; then sha="$1"
       elif [[ -z $summary ]]; then summary="$1"
-      else die "unexpected argument: $1"
+      else summary="$summary"$'\n'"$1"
       fi
       shift ;;
   esac
+done
+
+while (($#)); do
+  if [[ -z $pr ]]; then pr="$1"
+  elif [[ -z $sha ]]; then sha="$1"
+  elif [[ -z $summary ]]; then summary="$1"
+  else summary="$summary"$'\n'"$1"
+  fi
+  shift
 done
 
 [[ -n $pr ]] || die "missing <pr-number>"
