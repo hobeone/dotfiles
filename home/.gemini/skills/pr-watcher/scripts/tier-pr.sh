@@ -9,14 +9,16 @@ die() { printf '%s: %s\n' "${0##*/}" "$*" >&2; exit 1; }
 
 pr=""
 repo=""
+base_sha=""
 as_json=0
 
 while (($#)); do
   case "$1" in
     --repo) repo="${2:?--repo needs OWNER/NAME}"; shift 2 ;;
+    --base) base_sha="${2:?--base needs SHA}"; shift 2 ;;
     --json) as_json=1; shift ;;
     -h|--help)
-      echo "usage: tier-pr.sh <pr-number> [--repo OWNER/NAME] [--json]"
+      echo "usage: tier-pr.sh <pr-number> [--base SHA] [--repo OWNER/NAME] [--json]"
       exit 0
       ;;
     -*) die "unknown flag: $1" ;;
@@ -40,11 +42,27 @@ if [[ -n $repo ]]; then
   repo_flag=(--repo "$repo")
 fi
 
-pr_data=$(gh pr view "$pr" "${repo_flag[@]}" --json files,additions,deletions,title)
-files_json=$(jq -c '.files' <<< "$pr_data")
-additions=$(jq -r '.additions' <<< "$pr_data")
-deletions=$(jq -r '.deletions' <<< "$pr_data")
+pr_data=$(gh pr view "$pr" "${repo_flag[@]}" --json files,additions,deletions,title,headRefOid)
 title=$(jq -r '.title' <<< "$pr_data")
+head_sha=$(jq -r '.headRefOid' <<< "$pr_data")
+
+if [[ -n $base_sha ]]; then
+  # Incremental classification against the prior audited head
+  files_list=$(git diff --name-only "$base_sha...$head_sha" 2>/dev/null || true)
+  if [[ -z $files_list ]]; then
+    # Fallback to fetching head
+    git fetch origin "$head_sha" "$base_sha" 2>/dev/null || true
+    files_list=$(git diff --name-only "$base_sha...$head_sha" 2>/dev/null || true)
+  fi
+  files_json=$(printf '%s\n' "$files_list" | jq -R . | jq -s 'map(select(length > 0) | {path: .})')
+  read -r additions deletions < <(git diff --numstat "$base_sha...$head_sha" 2>/dev/null | awk '{a+=$1; d+=$2} END {printf "%d %d\n", a, d}')
+  additions=${additions:-0}
+  deletions=${deletions:-0}
+else
+  files_json=$(jq -c '.files' <<< "$pr_data")
+  additions=$(jq -r '.additions' <<< "$pr_data")
+  deletions=$(jq -r '.deletions' <<< "$pr_data")
+fi
 total_changes=$((additions + deletions))
 
 # Check file classifications
@@ -86,7 +104,18 @@ done < <(jq -r '.[].path' <<< "$files_json")
 tier="tier2_deep"
 reason="general code change"
 
-if ((non_doc_count == 0)); then
+# Check if diff consists entirely of comments or documentation
+non_comment_diff_lines=-1
+if [[ -n $base_sha ]]; then
+  if git diff -U0 "$base_sha...$head_sha" 2>/dev/null | grep -q '^[+-]'; then
+    non_comment_diff_lines=$(git diff -U0 "$base_sha...$head_sha" 2>/dev/null | grep '^[+-]' | grep -v '^[+-]\{3\}' | grep -vE '^[+-][[:space:]]*(//|/\*|\*|$)' | wc -l || true)
+  fi
+fi
+
+if ((non_comment_diff_lines == 0)); then
+  tier="tier1_lightweight"
+  reason="documentation/comments only"
+elif ((non_doc_count == 0)); then
   tier="tier1_lightweight"
   reason="documentation only"
 elif ((non_test_count == 0)); then
