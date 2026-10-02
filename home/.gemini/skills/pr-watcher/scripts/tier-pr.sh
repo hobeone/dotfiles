@@ -74,7 +74,7 @@ core_touched=()
 # Core high-stakes packages that demand Tier 2 review when modified
 is_core_pkg() {
   local p="$1"
-  [[ $p =~ ^internal/(app|dispatch|durability|downloader|assembler|nntp|par2|job)/ ]]
+  [[ $p =~ ^internal/(app|dispatch|durability|downloader|assembler|nntp|par2|job|sched)/ ]]
 }
 
 while IFS= read -r f; do

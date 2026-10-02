@@ -48,7 +48,8 @@ Poll open PRs using the helper script:
 ~/.gemini/skills/pr-watcher/scripts/poll-prs.sh
 ```
 Read `~/.gemini/jetski/scratch/pr_watcher/state.json`:
-- **Merged PRs**: PR in `state.json` with status `APPROVED` that no longer appears in `gh pr list` $\to$ mark `MERGED` in `state.json`.
+- **Merged PRs**: PR in `state.json` with status `APPROVED` that no longer appears in `gh pr list` $\to$ mark `MERGED` in `state.json` (recording `merged_at` timestamp via `gh pr view <PR> --json mergedAt`), and fast-forward local `main` via `git pull --ff-only origin main`.
+- **Review Feedback / Changes Requested**: When owner or peer review comments raise new substantive findings on an open PR $\to$ update status to `CHANGES_REQUESTED` and record finding summaries in `state.json`, awaiting author fixes.
 - **Unchanged PRs**: PR whose `headRefOid` matches `head_ref_oid` in `state.json` and has no new comments $\to$ skip.
 - **New or Updated PRs**: PR whose `headRefOid` is new or changed $\to$ proceed to triage.
 
@@ -62,7 +63,7 @@ See [references/tier-routing.md](references/tier-routing.md) for full classifica
   - Applicable: Documentation only, pure test/spec additions, scripts/CI tooling, or diff $\le 30$ lines outside core packages.
   - Review: Fast sequential verification of tests and static gates. Single-pass evaluation in main context without subagents. 30–60s turnaround.
 - **Tier 2 (Full Deep PR Review)**:
-  - Applicable: Changes in `internal/app`, `internal/dispatch`, `internal/durability`, `internal/downloader`, `internal/assembler`, `internal/nntp`, `internal/par2`, `internal/job`, or any concurrency/mutex/lifecycle changes.
+  - Applicable: Changes in `internal/app`, `internal/dispatch`, `internal/durability`, `internal/downloader`, `internal/assembler`, `internal/nntp`, `internal/par2`, `internal/job`, `internal/sched`, or any concurrency/mutex/lifecycle changes.
   - Review: Ephemeral worktree, Pass 1 deterministic gates + adversarial mutation expansion, Pass 2 parallel subagents (`flash`), Pass 3 inline review / thread resolution.
 
 ---
@@ -94,7 +95,7 @@ git worktree add --detach /tmp/pr-<PR>-audit <headRefOid>
    go run ./scripts/check_citations
    go run ./scripts/check_doc_citations
    go run ./scripts/check_dup_comments
-   go run ./scripts/check_test_alignment
+   go run ./scripts/check_test_alignment --min-complexity=8
    go run ./scripts/check_lock_io --all
    ```
 3. **Committed Mutation Specs**:
