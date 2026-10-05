@@ -25,14 +25,44 @@ cleanup() {
 }
 trap cleanup EXIT
 
+# Scrub KEY=value tokens from prose, but leave Markdown code alone: fenced
+# blocks (``` or ~~~) and inline code spans (balanced backtick runs) are
+# passed through verbatim so build commands like `GOARCH=386 go build` survive.
 filter_text() {
     python3 -c '
 import sys, re
+KV = re.compile(r"\b[A-Z0-9_]+=\S+")
+FENCE = re.compile(r"^\s{0,3}(`{3,}|~{3,})")
+# A code span is a backtick run matched by an equal-length run (CommonMark).
+SPAN = re.compile(r"(?<!`)(`+)(?!`)(.+?)(?<!`)\1(?!`)", re.S)
+
+def scrub_prose(s):
+    out, pos = [], 0
+    for m in SPAN.finditer(s):
+        out.append(KV.sub("", s[pos:m.start()]))
+        out.append(m.group(0))
+        pos = m.end()
+    out.append(KV.sub("", s[pos:]))
+    return "".join(out)
+
 text = sys.stdin.read()
-lines = []
+out, prose, fence = [], [], None
+def flush():
+    if prose:
+        out.append(scrub_prose("".join(prose)))
+        prose.clear()
 for line in text.splitlines(keepends=True):
-    lines.append(re.sub(r"\b[A-Z0-9_]+=\S+", "", line))
-sys.stdout.write("".join(lines))
+    m = FENCE.match(line)
+    if fence is None and m:
+        flush(); fence = m.group(1)[0]; out.append(line)
+    elif fence is not None:
+        out.append(line)
+        if m and m.group(1)[0] == fence:
+            fence = None
+    else:
+        prose.append(line)
+flush()
+sys.stdout.write("".join(out))
 '
 }
 
