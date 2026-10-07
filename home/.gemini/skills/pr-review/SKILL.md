@@ -110,8 +110,15 @@ Batch questions using `ask_question` (max 4 per call):
 - **Skip**: Note and move on.
 - **Defer**: Create GitHub issue (`gh issue create`) with appropriate priority label (`priority:high`, `priority:medium`, `priority:low`).
 
-### 4. Post Resolution Comment to PR
+### 4. Resolve Addressed Threads & Post Resolution Comment to PR
 
+For every review comment that has been addressed, resolve its GraphQL review thread (`resolveReviewThread`):
+```bash
+~/.gemini/skills/pr-watcher/scripts/resolve-thread.sh --list-unresolved "${PR_NUM}"
+~/.gemini/skills/pr-watcher/scripts/resolve-thread.sh <threadId1> <threadId2> ...
+```
+
+Post the summary comment:
 ```markdown
 ## Feedback Addressed
 
