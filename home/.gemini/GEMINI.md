@@ -37,6 +37,12 @@
 ### 1.5 User Interaction & Clarifications
 - **Interactive Questions (`ask_question`)**: Always use the `ask_question` tool when asking the user a question or requesting a selection from a list of options. Avoid asking questions in plain text or prompting for free-form input if they can be formatted as multiple-choice questions.
 
+### 1.6 Cross-Checkout Shared Memory & Coordination
+- **Scope**: Active in any repository checkout where `.agents/shared/` is present.
+- **Shared Knowledge Store**: Consult `.agents/shared/learnings.md` and `.agents/shared/active_sessions.md` during PRAR Step 1 (Perceive).
+- **Session Registration & Conflict Prevention**: Register active branches, PR targets, and locks in `.agents/shared/active_sessions.md` to prevent colliding with concurrent agent sessions in sibling checkouts.
+- **Continuous Knowledge Capture**: Record new gotchas, tool quirks, and test behaviors into `.agents/shared/learnings.md` (and use Jetski Memory / `/learn`) during PRAR Step 4 (Refine) so all checkouts share real-time memory.
+
 ## 2. Conventional Commits Protocol
 
 All commits must follow [Conventional Commits 1.0.0](https://www.conventionalcommits.org/):
