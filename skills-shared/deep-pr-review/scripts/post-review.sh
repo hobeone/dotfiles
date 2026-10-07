@@ -25,16 +25,28 @@ repo=""
 dry_run=0
 sequential=0
 expect_head=""
+verdict=""
+since_sha=""
+scope=""
+prev_raised="none"
+checks="- Pass 1 deterministic gates and Pass 2 audits executed on ephemeral worktree"
+not_verified="live Usenet E2E (\`test/e2e/\`) and crash consistency (\`test/crash/\`)."
 
 while (($#)); do
   case "$1" in
-    --walkthrough) walkthrough="${2:?--walkthrough needs a file}"; shift 2 ;;
-    --repo)        repo="${2:?--repo needs OWNER/NAME}"; shift 2 ;;
-    --expect-head) expect_head="${2:?--expect-head needs a SHA}"; shift 2 ;;
-    --dry-run)     dry_run=1; shift ;;
-    --sequential)  sequential=1; shift ;;
-    -h|--help)     sed -n '2,10p' "$0"; exit 0 ;;
-    -*)            die "unknown flag: $1" ;;
+    --walkthrough)       walkthrough="${2:?--walkthrough needs a file}"; shift 2 ;;
+    --repo)              repo="${2:?--repo needs OWNER/NAME}"; shift 2 ;;
+    --expect-head)       expect_head="${2:?--expect-head needs a SHA}"; shift 2 ;;
+    --verdict)           verdict="${2:?--verdict needs value}"; shift 2 ;;
+    --since)             since_sha="${2:?--since needs SHA}"; shift 2 ;;
+    --scope)             scope="${2:?--scope needs text}"; shift 2 ;;
+    --previously-raised) prev_raised="${2:?--previously-raised needs text}"; shift 2 ;;
+    --checks)            checks="${2:?--checks needs text}"; shift 2 ;;
+    --not-verified)      not_verified="${2:?--not-verified needs text}"; shift 2 ;;
+    --dry-run)           dry_run=1; shift ;;
+    --sequential)        sequential=1; shift ;;
+    -h|--help)           sed -n '2,10p' "$0"; exit 0 ;;
+    -*)                  die "unknown flag: $1" ;;
     *)
       if [[ -z $pr ]]; then pr="$1"
       elif [[ -z $findings ]]; then findings="$1"
@@ -44,7 +56,7 @@ while (($#)); do
   esac
 done
 
-[[ -n $pr && -n $findings ]] || die "usage: post-review.sh <pr-number> <findings.json> [--walkthrough FILE] [--repo O/R] [--expect-head SHA] [--sequential] [--dry-run]"
+[[ -n $pr && -n $findings ]] || die "usage: post-review.sh <pr-number> <findings.json> [--walkthrough FILE] [--repo O/R] [--expect-head SHA] [--verdict V] [--since SHA] [--scope TEXT] [--previously-raised TEXT] [--checks TEXT] [--not-verified TEXT] [--sequential] [--dry-run]"
 [[ $pr =~ ^[0-9]+$ ]] || die "pr-number must be numeric, got '$pr'"
 [[ -r $findings ]] || die "cannot read findings file: $findings"
 [[ -z $walkthrough || -r $walkthrough ]] || die "cannot read walkthrough file: $walkthrough"
@@ -201,12 +213,37 @@ done
 
 n_inline=$(wc -l < "$work/inline.jsonl")
 n_orphan=$(wc -l < "$work/orphan.jsonl")
+total_findings=$((n_inline + n_orphan))
 
-# ---------------------------------------------------------------------------
-# Review body.
-# ---------------------------------------------------------------------------
-{
-  printf '<!-- deep-pr-review head:%s -->\n' "$head_sha"
+if [[ -z $verdict ]]; then
+  if ((total_findings > 0)); then
+    verdict="CHANGES_REQUESTED"
+  else
+    verdict="APPROVED"
+  fi
+fi
+
+short_sha="${head_sha:0:8}"
+since_clause=""
+if [[ -n $since_sha ]]; then
+  short_since="${since_sha:0:8}"
+  since_clause=" (since \`$short_since\`)"
+  [[ -n $scope ]] || scope="\`$short_since..$short_sha\`"
+else
+  [[ -n $scope ]] || scope="full PR"
+fi
+header_verdict="${verdict//_/ }"
+
+render_review_body() {
+  local threads_open_cnt="$1"
+  local open_threads_txt="$2"
+  printf '<!-- deep-pr-review head:%s verdict:%s threads_open:%s -->\n' "$head_sha" "$verdict" "$threads_open_cnt"
+  printf '## Review of `%s` (%s)%s: %s\n\n' "$short_sha" "$head_sha" "$since_clause" "$header_verdict"
+  printf '**Scope:** %s\n\n' "$scope"
+  printf '**Previously raised, now:**\n%s\n\n' "$prev_raised"
+  printf '**Checks run:**\n%s\n\n' "$checks"
+  printf '**Not verified:** %s\n\n' "$not_verified"
+  printf '**Open threads:** %s\n\n' "$open_threads_txt"
   printf '**Actionable comments posted: %s inline + %s in body**\n\n' "$n_inline" "$n_orphan"
 
   printf '<details>\n<summary>🤖 Prompt for all review comments with AI agents</summary>\n\n```\n'
@@ -244,8 +281,11 @@ n_orphan=$(wc -l < "$work/orphan.jsonl")
   printf '**Reviewed**: head `%s`\n\n' "$head_sha"
   printf '<details>\n<summary>📒 Files selected for processing</summary>\n\n'
   printf '%s\n' "${pr_files_lines[@]}"
-  printf '\n</details>\n\n</details>\n'
-} > "$work/body.md"
+  printf '\n</details>\n\n</details>\n\n'
+  printf 'Status: %s at `%s`. Becomes stale if the PR head moves.\n' "$header_verdict" "$short_sha"
+}
+
+render_review_body "$total_findings" "(populating thread IDs...)" > "$work/body.md"
 
 jq -n --arg commit_id "$head_sha" \
       --rawfile body "$work/body.md" \
@@ -270,12 +310,47 @@ if [[ -n $walkthrough ]]; then
   printf '%s\n' "$walkthrough_url"
 fi
 
-if ! review_url=$(gh api "repos/$repo/pulls/$pr/reviews" --input "$work/review.json" --jq '.html_url // .id'); then
+if ! review_resp=$(gh api "repos/$repo/pulls/$pr/reviews" --input "$work/review.json" --jq '[.id, (.html_url // .id)] | @tsv'); then
   if [[ -n $walkthrough_url ]]; then
     die "walkthrough already posted at $walkthrough_url; review NOT posted — fix the error and re-run WITHOUT --walkthrough"
   fi
   die "posting the review failed"
 fi
+IFS=$'\t' read -r review_id review_url <<<"$review_resp"
+
+# Query live unresolved review thread IDs after posting the review and update the review body.
+resolve_script="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../pr-watcher/scripts" 2>/dev/null && pwd || true)/resolve-thread.sh"
+threads_count="$total_findings"
+open_threads_txt="none"
+if [[ -x "$resolve_script" ]]; then
+  mapfile -t unresolved_lines < <("$resolve_script" --list-unresolved "$pr" --repo "$repo" 2>/dev/null || true)
+  if ((${#unresolved_lines[@]} > 0)); then
+    threads_count="${#unresolved_lines[@]}"
+    open_threads_txt=$'\n'$(printf -- '- `%s`\n' "${unresolved_lines[@]}")
+  elif ((total_findings == 0)); then
+    threads_count=0
+    open_threads_txt="none"
+  fi
+  render_review_body "$threads_count" "$open_threads_txt" > "$work/body_final.md"
+  gh api -X PUT "repos/$repo/pulls/$pr/reviews/$review_id" -F "body=@$work/body_final.md" >/dev/null || true
+fi
+
+status_state="success"
+status_desc="$header_verdict at $short_sha"
+if [[ $verdict == "CHANGES_REQUESTED" ]]; then
+  status_state="failure"
+  status_desc="CHANGES REQUESTED at $short_sha ($threads_count open threads)"
+elif [[ $verdict == "COMMENTED" ]]; then
+  status_state="success"
+  status_desc="COMMENTED at $short_sha ($threads_count open threads)"
+fi
+gh api "repos/$repo/statuses/$head_sha" \
+  -f state="$status_state" \
+  -f context="deep-pr-review" \
+  -f description="$status_desc" \
+  -f target_url="$review_url" >/dev/null || true
+
 printf '%s\n' "$review_url"
 
-printf 'posted: %s inline, %s in body\n' "$n_inline" "$n_orphan" >&2
+printf 'posted: %s inline, %s in body (status: %s)\n' "$n_inline" "$n_orphan" "$status_desc" >&2
+
