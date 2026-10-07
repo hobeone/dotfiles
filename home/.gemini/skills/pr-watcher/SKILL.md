@@ -43,15 +43,17 @@ schedule(
 ## 2. Each Watcher Cycle: Step-by-Step
 
 ### Step 2.1: Poll & State Compare
-Poll open PRs using the helper script:
+Poll open PRs immediately on every cron trigger using the helper script (never skip or defer polling while a background task for another PR is still running):
 ```bash
 ~/.gemini/skills/pr-watcher/scripts/poll-prs.sh
 ```
 Read `~/.gemini/jetski/scratch/pr_watcher/state.json`:
+- **Priority Rule — Re-Reviews & Thread Resolution First**: Always check open PRs with prior review comments (`CHANGES_REQUESTED` or unresolved threads) **before** starting or continuing a long-running initial audit on another PR. Once an author pushes a fix or addresses a comment, verifying and resolving that thread takes top priority.
 - **Merged PRs**: PR in `state.json` with status `APPROVED` that no longer appears in `gh pr list` $\to$ mark `MERGED` in `state.json` (recording `merged_at` timestamp via `gh pr view <PR> --json mergedAt`), and fast-forward local `main` via `git pull --ff-only origin main`.
-- **Review Feedback / Changes Requested**: When owner or peer review comments raise new substantive findings on an open PR $\to$ update status to `CHANGES_REQUESTED` and record finding summaries in `state.json`, awaiting author fixes.
-- **Unchanged PRs**: PR whose `headRefOid` matches `head_ref_oid` in `state.json` and has no new comments $\to$ skip.
-- **New or Updated PRs**: PR whose `headRefOid` is new or changed $\to$ proceed to triage.
+- **Aborted / Closed PRs**: PR in `state.json` that was closed without merging $\to$ kill any in-flight tasks/subagents for that PR, remove `/tmp/pr-<PR>-audit`, and mark `CLOSED` in `state.json`.
+- **Review Feedback / Changes Requested**: When owner or peer review comments raise new substantive findings on an open PR $\to$ update status to `CHANGES_REQUESTED` and record finding summaries and GraphQL thread IDs (`PRRT_...`) in `state.json`, awaiting author fixes.
+- **Unchanged PRs**: PR whose `headRefOid` and `updatedAt` match `state.json` and has 0 unresolved threads $\to$ skip.
+- **New or Updated PRs**: PR whose `headRefOid` or `updatedAt` changed, or which has unresolved review threads (`~/.gemini/skills/pr-watcher/scripts/resolve-thread.sh --list-unresolved <PR>`) $\to$ proceed to triage.
 
 ### Step 2.2: Adaptive Tier Triage
 Run the tier classifier on the target PR:
@@ -132,31 +134,75 @@ Spawn `pr-contract-auditor` and `pr-test-verifier` subagents via `invoke_subagen
 
 ## 6. Pass 3: Publishing Findings, Resolving Threads & Approval
 
-### Case A: New or Unaddressed Issues Found
-Format findings into JSON and post inline review using `post-review.sh`:
-```bash
-~/.gemini/skills/deep-pr-review/scripts/post-review.sh <PR> <findings.json>
-```
-*Note: Each finding must include `"path"`, `"line"`, `"severity"`, `"category"`, `"effort"`, `"title"`, `"body"`, and `"agent_prompt"`.*
+### Standardized Verdict Comment & Commit Status Protocol
+Every verdict comment (initial review, re-review, and incremental review — even when the only change on a new head is "no new findings") MUST use this exact machine- and human-readable format and post a GitHub commit status (`context: deep-pr-review`) on the reviewed SHA:
 
-### Case B: Incremental Commit Resolves Open Threads
-1. Verify that the incremental commit fixes the identified defect.
-2. Resolve the corresponding review threads via GraphQL:
+1. **Hidden Marker (Line 1)**:
+   ```markdown
+   <!-- deep-pr-review head:<full 40-char sha> verdict:<APPROVED|CHANGES_REQUESTED|COMMENTED> threads_open:<n> -->
+   ```
+2. **Visible Header (Line 2)**:
+   ```markdown
+   ## Review of `<short sha>` (<full 40-char sha>)[ (since `<old short sha>`)]: <APPROVED|CHANGES REQUESTED|COMMENTED>
+   ```
+3. **Fixed Body Sections**:
+   - `**Scope:**` commits covered (e.g., `` `28ea17b8..fd6f6970` (1 commit) `` or `full PR`).
+   - `**Previously raised, now:**` one line per earlier finding, marked `fixed in <sha>` / `still open` / `declined: <reason>`, or `none`.
+   - `**Checks run:**` exact commands executed and their results.
+   - `**Not verified:**` suites not run (e.g., `live Usenet E2E (test/e2e/) and crash consistency (test/crash/).`), or `none` only if literally everything was run.
+   - `**Open threads:**` list of open GraphQL thread IDs (`PRRT_...`), or `none`.
+4. **Last Line**:
+   ```markdown
+   Status: <APPROVED|CHANGES REQUESTED|COMMENTED> at `<short sha>`. Becomes stale if the PR head moves.
+   ```
+5. **GitHub Commit Status (`deep-pr-review`)**:
+   Both `post-review.sh` and `approve-pr.sh` automatically post a commit status on `<full 40-char sha>` via `gh api repos/<owner>/<repo>/statuses/<sha>` with `context="deep-pr-review"`, `state="success"|"failure"|"pending"`, and `description="<VERDICT> at <short sha>"`.
+6. **Mandatory Rules**:
+   - Always post the verdict as a top-level PR comment or formal review body, never only as inline thread replies.
+   - If the PR head moves after a verdict, always post a new verdict comment and commit status for the new head SHA, even when the only change is "no new findings".
+
+### Case A: New or Unaddressed Issues Found
+Format findings into JSON and post inline review + commit status using `post-review.sh`:
+```bash
+~/.gemini/skills/deep-pr-review/scripts/post-review.sh <PR> <findings.json> \
+  --verdict CHANGES_REQUESTED \
+  --scope "full PR" \
+  --previously-raised "none" \
+  --checks "- go test -race ...: PASS" \
+  --not-verified "live Usenet E2E (test/e2e/) and crash consistency (test/crash/)."
+```
+*Note: Each finding must include `"path"`, `"line"`, `"severity"`, `"category"`, `"effort"`, `"title"`, `"body"`, and `"agent_prompt"`. `post-review.sh` automatically queries live `PRRT_...` thread IDs after creating the review, patches the `**Open threads:**` section and `threads_open:<n>` marker, and posts the `deep-pr-review` commit status.*
+Record the newly created GraphQL review thread IDs (`PRRT_...`) via `~/.gemini/skills/pr-watcher/scripts/resolve-thread.sh --list-unresolved <PR>` into `state.json`.
+
+### Case B: Incremental Commit or Author Reply Addresses Open Threads
+1. List all live unresolved review threads directly from GitHub GraphQL (do not rely solely on `state.json`):
+   ```bash
+   ~/.gemini/skills/pr-watcher/scripts/resolve-thread.sh --list-unresolved <PR>
+   ```
+2. For each unresolved thread, verify whether the author's new commit(s) or reply has addressed the comment.
+3. **Immediately** mark every addressed thread resolved via GraphQL (even if other threads on the PR remain open, and strictly before posting the verdict):
    ```bash
    ~/.gemini/skills/pr-watcher/scripts/resolve-thread.sh <threadId1> <threadId2> ...
+   # Or, if all unresolved threads on the PR have been verified addressed:
+   ~/.gemini/skills/pr-watcher/scripts/resolve-thread.sh --pr <PR> --all
    ```
-3. Check remaining unresolved threads. If 0 remain:
+4. Re-check remaining unresolved threads (`resolve-thread.sh --list-unresolved <PR>`). Post the structured verdict comment and commit status via `approve-pr.sh`:
    ```bash
-   ~/.gemini/skills/pr-watcher/scripts/approve-pr.sh <PR> <headRefOid> <evidence_file_or_summary>
+   ~/.gemini/skills/pr-watcher/scripts/approve-pr.sh <PR> <full-40-char-headRefOid> \
+     --verdict APPROVED \
+     --since <old-sha> \
+     --scope "\`<old-short>..<new-short>\` (1 commit)" \
+     --previously-raised "- \`PRRT_...\`: fixed in \`<sha>\`" \
+     --checks "- go test -race ...: PASS" \
+     --not-verified "live Usenet E2E (test/e2e/) and crash consistency (test/crash/)."
    ```
-   *(GitHub GraphQL API blocks `gh pr review --approve` when reviewing own PRs; the standardized approval issue comment is the authoritative merge readiness signal).*
 
 ### Case C: Worktree & State Cleanup
 Always remove the ephemeral worktree:
 ```bash
 git worktree remove --force /tmp/pr-<PR>-audit
 ```
-Update `state.json` with the latest status, `head_ref_oid`, timestamps, and thread IDs.
+Update `state.json` with the latest status, `head_ref_oid`, timestamps, and resolved/open thread IDs.
 
 ---
 
@@ -164,6 +210,8 @@ Update `state.json` with the latest status, `head_ref_oid`, timestamps, and thre
 
 | Mistake | Consequence | Prevention |
 | :--- | :--- | :--- |
+| **Leaving addressed review comments unresolved** | Stale open threads block merge readiness and obscure true remaining work | Run `resolve-thread.sh --list-unresolved <PR>` on every update and immediately resolve every addressed thread via `resolve-thread.sh` |
+| **Skipping cron polls while a long task runs** | Author fixes on other PRs sit unverified with unresolved threads | Poll `poll-prs.sh` on every cron trigger and prioritize thread resolution on updated PRs |
 | **Running `scripts/mutate` concurrently with subagents** | Subagents inspect corrupted/mutated code and hallucinate bugs | Enforce Pass 1 completion before spawning Pass 2 |
 | **Leaking subagents across cycles** | Context window bloat, leaked background processes | Kill subagents immediately after receiving reports |
 | **Using `IsDaemon: true` on monitoring cron** | Agent finishes turn and suspends execution | Always set `IsDaemon: false` on active monitoring tasks |
