@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) for all sessions.
 ## Decision-Making
 
 - Use git and gh freely. Never merge or close PRs without explicit user approval.
-- All repos have branch protection—create PRs, never push to main directly.
+- Repos have no branch protection. Default to PRs rather than pushing to main, but a local merge into main is fine when the user chooses it.
 - Prefer MCP tools for structured data; use gh CLI for `--watch` flags, runs, and arbitrary API calls.
 
 ### Proactive Improvements
