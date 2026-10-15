@@ -46,6 +46,15 @@ Before drafting, identify:
   - Absence → no tag; it stays valid until built, so it is exempt from rot-sweeps.
   - Code-coupled → apply the `perishable` label so a rot-sweep filters to this set instead of re-reading the whole backlog. If a known issue/refactor would obviate or reshape it, additionally link that trigger in the body (or fold it in there as a checklist item) so the re-check is event-driven (when the trigger lands) rather than waiting for a periodic sweep.
 
+### 1.5. Active refutation & calibration gate (for bugs and audit findings)
+
+Before drafting a bug or audit issue, verify the finding against live source using all four gates:
+
+1. **Trace every intermediate line, callee side-effect, and caller ordering.** Read every statement between point A and point B (plus callee mutations and caller entry ordering) to confirm nothing already blocks or catches the path.
+2. **Quote verbatim from source.** Copy code snippets directly from `view_file` — never paraphrase guards or assert library behavior from memory.
+3. **Calibrate severity from reachable outcome × precondition width.** Never label an issue `severity:high` based on the worst imagined outcome when the reachable path requires a narrow multi-precondition race or produces only non-corrupting leftovers (`severity:low`).
+4. **Verify fix preconditions.** Before proposing a fix direction, check concurrency and exclusivity preconditions at the target site (e.g., never propose a single-writer directory-diff snapshot rollback in a directory where concurrent downloads are still writing).
+
 ### 2. Draft
 
 Produce a title and body following the conventions above.
