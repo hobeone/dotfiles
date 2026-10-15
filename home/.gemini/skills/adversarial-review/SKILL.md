@@ -132,11 +132,11 @@ The main orchestrator acts as the Blue Team, reading `<run-dir>/findings.json` v
 ### 1. Reception Discipline
 
 - **Zero Performative Agreement**: Never utter pleasantries ("Great point!", "You're absolutely right!", "Thanks for catching that"). Ban all gratitude expressions; focus strictly on technical reality.
-- **Codebase Reality Check**:
-  - Is the finding technically sound for *this* specific codebase and architecture?
-  - Does the proposed fix break existing callers, contracts, or platform compatibility?
-  - Does it violate YAGNI (You Aren't Gonna Need It) by introducing unused complexity or speculative flexibility?
-  - Did the reviewer lack runtime context, full test execution traces, or system invariants?
+- **Codebase Reality Check (4-Gate Active Refutation & Calibration)**:
+  1. **Intermediate-Line, Callee Side-Effect & Caller-Ordering Trace**: Read every line between the claimed entry point A and failure point B, plus all callees and the caller's ordering. Does an intermediate call already guard or mutate the state (e.g., `PauseJob` changing `Intent`), or does the caller prevent the bad input from ever reaching the function? If so, `PUSHBACK` (Refuted).
+  2. **Verbatim Source & Library Verification**: Open the cited file and line range via `view_file` to confirm the quoted guard/signature exists verbatim and check any claimed library behavior in code rather than memory.
+  3. **Reachable-Outcome Severity Calibration**: Recalibrate inflated severities before triage — grade by `(reachable outcome) × (precondition width)`, not the worst imagined outcome.
+  4. **Fix-Precondition Verification**: Before accepting a finding's `agent_prompt`, verify that the proposed fix respects the target stage's concurrency and state preconditions (never transplant a single-writer pattern into a concurrent writer directory) and does not violate YAGNI.
 
 ### 2. Triage Dispositions
 
