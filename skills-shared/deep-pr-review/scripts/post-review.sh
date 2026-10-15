@@ -181,6 +181,107 @@ render_body() {
 }
 
 # ---------------------------------------------------------------------------
+# Mechanical Pre-Post Gate: verify every finding's path, line bounds, sites[],
+# and verbatim fenced code quotes against $head_sha before partitioning/posting.
+# Prevents paraphrased guards and out-of-range line numbers from shipping.
+# ---------------------------------------------------------------------------
+git fetch origin "$head_sha" 2>/dev/null || true
+have_head_tree=0
+if git cat-file -e "${head_sha}^{commit}" 2>/dev/null; then
+  have_head_tree=1
+fi
+
+verify_finding_at_head() {
+  local idx="$1" f_json="$2"
+  ((have_head_tree)) || return 0
+
+  local f_path f_line f_start f_title
+  f_path=$(jq -r '.path // empty' <<<"$f_json")
+  f_line=$(jq -r '.line // empty' <<<"$f_json")
+  f_start=$(jq -r '.start_line // empty' <<<"$f_json")
+  f_title=$(jq -r '.title // "untitled"' <<<"$f_json")
+
+  [[ -n $f_path && $f_line =~ ^[0-9]+$ ]] || die "finding [$idx] ($f_title): missing or non-numeric path/line ($f_path:$f_line)"
+
+  # Check file existence and line bounds at $head_sha (unless file was deleted in diff)
+  if git cat-file -e "${head_sha}:${f_path}" 2>/dev/null; then
+    local total_lines
+    total_lines=$(git show "${head_sha}:${f_path}" | wc -l)
+    if ((f_line < 1 || f_line > total_lines)); then
+      die "finding [$idx] ($f_title): line $f_line out of bounds for $f_path (1..$total_lines at ${head_sha:0:8})"
+    fi
+    if [[ -n $f_start ]]; then
+      if [[ ! $f_start =~ ^[0-9]+$ ]] || ((f_start < 1 || f_start > f_line)); then
+        die "finding [$idx] ($f_title): invalid start_line $f_start for $f_path:$f_line"
+      fi
+    fi
+  fi
+
+  # Check each .sites[] entry's file and line range at $head_sha
+  local site_cnt s_idx s_file s_lines s_start s_end s_total
+  site_cnt=$(jq '(.sites // []) | length' <<<"$f_json")
+  for ((s_idx = 0; s_idx < site_cnt; s_idx++)); do
+    s_file=$(jq -r ".sites[$s_idx].file // empty" <<<"$f_json")
+    s_lines=$(jq -r ".sites[$s_idx].lines // empty" <<<"$f_json")
+    if [[ -n $s_file ]] && git cat-file -e "${head_sha}:${s_file}" 2>/dev/null; then
+      s_total=$(git show "${head_sha}:${s_file}" | wc -l)
+      if [[ $s_lines =~ ^([0-9]+)(-([0-9]+))?$ ]]; then
+        s_start="${BASH_REMATCH[1]}"
+        s_end="${BASH_REMATCH[3]:-$s_start}"
+        if ((s_start < 1 || s_end < s_start || s_end > s_total)); then
+          die "finding [$idx] ($f_title): site $s_file:$s_lines out of bounds (1..$s_total at ${head_sha:0:8})"
+        fi
+      fi
+    fi
+  done
+
+  # Verify verbatim fenced code blocks in .body (excluding diff/suggestion blocks)
+  # against the union of $f_path and .sites[].file at $head_sha.
+  local corpus="$work/finding_${idx}_corpus.txt"
+  : > "$corpus"
+  local cand_file
+  while IFS= read -r cand_file; do
+    [[ -n $cand_file ]] || continue
+    if git cat-file -e "${head_sha}:${cand_file}" 2>/dev/null; then
+      git show "${head_sha}:${cand_file}" >> "$corpus"
+      printf '\n' >> "$corpus"
+    fi
+  done < <(jq -r '[.path, ((.sites // [])[]?.file)] | unique | .[] | select(. != null and . != "")' <<<"$f_json")
+
+  if [[ -s $corpus ]]; then
+    local qline
+    while IFS= read -r qline; do
+      [[ -n $qline ]] || continue
+      if ! grep -Fq -- "$qline" "$corpus"; then
+        die "finding [$idx] ($f_title): quoted code line not found verbatim in ${f_path} (or .sites[]) at ${head_sha:0:8}: $qline"
+      fi
+    done < <(jq -r '.body // ""' <<<"$f_json" | awk '
+      /^```/ {
+        if (!in_block) {
+          in_block = 1
+          lang = substr($0, 4)
+          gsub(/^[[:space:]]+|[[:space:]]+$/, "", lang)
+          skip_block = (lang ~ /^(diff|patch|suggestion|sh|bash|text|markdown|md|json|yaml)$/)
+        } else {
+          in_block = 0
+          skip_block = 0
+        }
+        next
+      }
+      in_block && !skip_block {
+        line = $0
+        gsub(/^[[:space:]]+|[[:space:]]+$/, "", line)
+        # Skip empty lines, ellipsis placeholders, diff markers, and pure comment lines
+        if (length(line) < 15) next
+        if (line ~ /^\.\.\./ || line ~ /\.\.\.$/ || line ~ /^[+-][^+-]/) next
+        if (line ~ /^\/\// || line ~ /^#/ || line ~ /^\/\*/ || line ~ /^\*/) next
+        print line
+      }
+    ')
+  fi
+}
+
+# ---------------------------------------------------------------------------
 # Partition findings into anchorable and not.
 # ---------------------------------------------------------------------------
 : > "$work/inline.jsonl"
@@ -189,6 +290,7 @@ render_body() {
 count=$(jq 'length' "$findings")
 for ((i = 0; i < count; i++)); do
   f=$(jq -c ".[$i]" "$findings")
+  verify_finding_at_head "$i" "$f"
   path=$(jq -r '.path' <<<"$f")
   line=$(jq -r '.line' <<<"$f")
   start=$(jq -r '.start_line // empty' <<<"$f")

@@ -420,18 +420,28 @@ returns exactly one of:
 - **REFUTED** — factually wrong or guarded elsewhere. Quote the line that proves
   it.
 
-**PLAUSIBLE by default.** Do not refute a candidate for being "speculative" or
-"depends on runtime state" when the state is realistic: concurrency races,
-nil/undefined on a rare-but-reachable path (error handler, cold cache, missing
-optional field), falsy-zero treated as missing, off-by-one on a boundary the
-code does not exclude, retry storms / partial failures, a regex or allowlist
-that lost an anchor. These are PLAUSIBLE.
+**Active Refutation First (Mandatory 4-Gate Protocol for Every Verifier):**
+Before returning `CONFIRMED` or `PLAUSIBLE`, every verifier MUST actively attempt to refute the candidate by running these four gates against the live source at `<headRefOid>`:
+1. **Gate 1 — Intermediate-Line, Callee Side-Effect & Caller-Ordering Trace**:
+   - When a candidate claims a race, state leak, or ordering defect between statement A and statement B, read **every line between A and B** and **every callee invoked along that path**. Check whether an intermediate call already catches the state (e.g., an intermediate helper checking `j.manifest == nil`) or mutates the state that B later checks (e.g., a fault handler calling `PauseJob`, changing `j.Intent()` from `IntentRun` to `IntentPause` before a downstream check on `IntentRun`).
+   - Trace the **caller** that feeds the component (e.g., verify whether the caller marks a set corrupt and stops feeding before calling `Add`). If the caller or an intermediate callee makes the bad state unreachable, return **REFUTED** and cite the exact line.
+2. **Gate 2 — Verbatim Source Quotes & Library Verification**:
+   - Quote the exact guard expression, function signature, and 1-indexed line numbers directly from `⟨read-at-sha⟩` / `view_file` — never paraphrase from context or memory.
+   - Never assert internal or third-party library behavior (e.g., whether an archive engine verifies a checksum) from memory; read the library source in the workspace/vendor/module cache to verify.
+3. **Gate 3 — Reachable-Outcome × Precondition-Width Severity Calibration**:
+   - Grade severity strictly from the **reachable outcome and precondition width**, never from the worst imagined outcome.
+   - A microsecond in-memory window requiring multiple simultaneous rare preconditions (e.g., job yield + full-pool eviction between two adjacent statements) or a failure that leaves harmless/duplicate verified files without corrupting delivered output is `🟡 Minor` (`severity:low`), never `🔴 Critical` / `🟠 Major` (`severity:high`).
+4. **Gate 4 — Fix-Precondition Verification (`agent_prompt`)**:
+   - Before proposing a fix or copying a mechanism from a neighboring subsystem, verify all concurrency, lifecycle, and exclusivity preconditions of that mechanism. Never copy a single-writer cleanup mechanism (such as a before/after directory-diff snapshot from post-processing) into a stage that shares a directory with concurrent writers (such as live downloading), where it would delete newly completed files.
 
-**REFUTED only when constructible from the code**: factually wrong (quote the
-actual line); provably impossible (type/constant/invariant — show it); already
-handled in this diff (cite the guard); or pure style with no observable effect.
+**PLAUSIBLE only after surviving Active Refutation.** Do not refute a candidate merely because a realistic runtime race is timing-dependent once Gates 1–4 confirm the window is actually unguarded between A and B.
 
-**Verification Guardrails (Mandatory for Verify Subagents):**
+**REFUTED whenever constructible from the code**: factually wrong (quote the
+actual line); provably impossible or blocked by caller ordering / intermediate
+callee side-effect (cite the line); already handled in this diff (cite the
+guard); or pure style with no observable effect.
+
+**Additional Verification Guardrails (Mandatory for Verify Subagents):**
 - **Exact SHA Inspection**: Do NOT verify findings against the local working branch if it differs from the PR head. Use ⟨read-at-sha⟩ at `<headRefOid>` or `git diff <base>..<headRefOid>` to ensure verification reflects the actual PR code.
 - **Loop & Index Refactoring Check**: If a finding proposes index arithmetic substitutions (e.g., replacing a tracking variable like `prev` with `slice[i-1]`), verify whether any `continue`, `break`, or conditional filter in the loop can cause `i-1` to point to a skipped or unexamined element. If sparse iterations break the invariant, REFUTE the finding.
 - **Go Verification Guardrails (Inject Section 5 of `⟨skill-dir⟩/reference/go_rules.md`)**: When verifying Go findings, inject Section 5 of `⟨skill-dir⟩/reference/go_rules.md` into verifier subagent prompts to enforce the Go decision matrix:
@@ -444,7 +454,7 @@ handled in this diff (cite the guard); or pure style with no observable effect.
   quoted comment objected to is present at the cited new line. Otherwise
   REFUTED — quote the new line.
 
-Keep CONFIRMED and PLAUSIBLE. Drop REFUTED. Do not drop on uncertainty.
+Keep CONFIRMED and PLAUSIBLE that survive all 4 gates. Drop REFUTED.
 
 ---
 
