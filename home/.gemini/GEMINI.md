@@ -43,6 +43,13 @@
 - **Session Registration & Conflict Prevention**: Register active branches, PR targets, and locks in `.agents/shared/active_sessions.md` to prevent colliding with concurrent agent sessions in sibling checkouts.
 - **Continuous Knowledge Capture**: Record new gotchas, tool quirks, and test behaviors into `.agents/shared/learnings.md` (and use Jetski Memory / `/learn`) during PRAR Step 4 (Refine) so all checkouts share real-time memory.
 
+### 1.7 Review, Audit & Fix-Precondition Discipline (4-Gate Protocol)
+Apply these four gates whenever reviewing code, auditing a subsystem, filing an issue, or designing/validating a fix:
+1. **Intermediate-Line, Callee Side-Effect & Caller-Ordering Trace**: Before claiming a race, state leak, or bug between statement A and statement B, inspect every line and callee between A and B (including side-effecting state transitions in error/fault handlers) and verify the caller's ordering before entry. Actively try to refute the claim from source before keeping it.
+2. **Verbatim Source Quotes & Library Verification**: Quote guards, signatures, and line numbers verbatim from live files (`view_file`) — never paraphrase or assert library behavior from memory.
+3. **Reachable-Outcome Severity Calibration**: Grade severity strictly by `(reachable outcome) × (precondition width)`, not the worst imagined outcome. Narrow multi-precondition windows or non-corrupting leftovers are `severity:low`.
+4. **Fix-Precondition Verification**: Before proposing or applying a fix adapted from a neighboring code path, verify all concurrency and exclusivity preconditions of that mechanism (e.g., never copy a single-writer snapshot rollback into a directory shared with concurrent download writers).
+
 ## 2. Conventional Commits Protocol
 
 All commits must follow [Conventional Commits 1.0.0](https://www.conventionalcommits.org/):
