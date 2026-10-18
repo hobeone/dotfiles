@@ -42,9 +42,13 @@ if [[ -n $repo ]]; then
   repo_flag=(--repo "$repo")
 fi
 
-pr_data=$(gh pr view "$pr" "${repo_flag[@]}" --json files,additions,deletions,title,headRefOid)
+pr_data=$(gh pr view "$pr" "${repo_flag[@]}" --json files,additions,deletions,title,headRefOid,baseRefOid)
 title=$(jq -r '.title' <<< "$pr_data")
 head_sha=$(jq -r '.headRefOid' <<< "$pr_data")
+pr_base_sha=$(jq -r '.baseRefOid // empty' <<< "$pr_data")
+if [[ -z $base_sha && -n $pr_base_sha ]]; then
+  base_sha="$pr_base_sha"
+fi
 
 if [[ -n $base_sha ]]; then
   # Incremental classification against the prior audited head
@@ -70,6 +74,7 @@ non_doc_count=0
 non_test_count=0
 non_script_count=0
 core_touched=()
+go_touched=()
 
 # Core high-stakes packages that demand Tier 2 review when modified
 is_core_pkg() {
@@ -81,8 +86,13 @@ while IFS= read -r f; do
   [[ -z $f ]] && continue
 
   # Doc check
-  if ! [[ $f =~ \.(md|txt|rst|adoc)$ || $f =~ ^docs/ ]]; then
+  if ! [[ $f =~ \.(md|txt|rst|adoc)$ || $f =~ ^docs/ || $f =~ ^LICENSE ]]; then
     ((non_doc_count++)) || true
+  fi
+
+  # Go file check (any .go file, production or test)
+  if [[ $f =~ \.go$ ]]; then
+    go_touched+=("$f")
   fi
 
   # Test / spec check
@@ -118,20 +128,14 @@ if ((non_comment_diff_lines == 0)); then
 elif ((non_doc_count == 0)); then
   tier="tier1_lightweight"
   reason="documentation only"
-elif ((non_test_count == 0)); then
-  tier="tier1_lightweight"
-  reason="test and spec additions only"
-elif ((non_script_count == 0)); then
-  tier="tier1_lightweight"
-  reason="tooling and scripts only"
-elif ((${#core_touched[@]} == 0)) && ((total_changes <= 30)); then
-  tier="tier1_lightweight"
-  reason="small diff ($total_changes lines) outside core pipeline"
 else
+  tier="tier2_deep"
   if ((${#core_touched[@]} > 0)); then
     reason="touches core pipeline packages (${#core_touched[@]} files)"
+  elif ((${#go_touched[@]} > 0)); then
+    reason="touches Go code (${#go_touched[@]} files, $total_changes lines)"
   else
-    reason="substantial diff ($total_changes lines)"
+    reason="code/tooling change ($total_changes lines)"
   fi
 fi
 

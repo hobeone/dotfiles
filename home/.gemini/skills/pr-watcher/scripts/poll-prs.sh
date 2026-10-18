@@ -33,8 +33,8 @@ if [[ -n $repo ]]; then
 fi
 
 if ((as_json)); then
-  gh pr list "${repo_flag[@]}" --state open --json number,title,headRefOid,updatedAt,isDraft,author
+  gh pr list "${repo_flag[@]}" --state open --json number,title,headRefOid,updatedAt,mergeStateStatus,isDraft,author
 else
-  gh pr list "${repo_flag[@]}" --state open --json number,title,headRefOid,updatedAt \
-    --jq '.[] | "\(.number)\t\(.headRefOid)\t\(.updatedAt)\t\(.title)"'
+  gh pr list "${repo_flag[@]}" --state open --json number,title,headRefOid,updatedAt,mergeStateStatus \
+    --jq '.[] | "\(.number)\t\(.headRefOid)\t\(.updatedAt)\t\(.mergeStateStatus)\t\(.title)"'
 fi

@@ -65,12 +65,13 @@ For every deleted line, SQL statement, lock acquisition, or guard (e.g. removing
 
 ---
 
-## Rule 4: Subagent Tier Routing & Executable Reproduction Proofs
+## Rule 4: Cross-Model Swarm Routing & Executable Reproduction Proofs
 
-### 4.1 Subagent Model Tier Selection
-- Always default subagents (`pr-contract-auditor`, `pr-test-verifier`) to `Model: "flash"`.
-- Use `flash_lite` for pure pattern-matching and citation verification.
-- Only escalate to `pro` for large multi-file architectural redesigns requiring frontier reasoning.
+### 4.1 Cross-Model Adversarial Swarm & Quota Failover
+See the **Active Model Configuration** callout at the top of [`SKILL.md`](../SKILL.md) for the current `<PRIMARY_REVIEW_MODEL>`, `<PRO_FAILOVER_MODEL>`, and `<FLASH_MODEL>` identifiers:
+- **Primary Review Model (`<PRIMARY_REVIEW_MODEL>`)**: Pin persistent `swarm` review workers to `<PRIMARY_REVIEW_MODEL>` so PRs authored by Gemini 4 Argon are audited by a cross-family frontier model with an explicitly adversarial, skeptical posture.
+- **In-Place Quota Failover (`<PRO_FAILOVER_MODEL>`)**: When `<PRIMARY_REVIEW_MODEL>` hits `RESOURCE_EXHAUSTED`, switch waiting swarm workers in-place via `swarm(action="model", name="...", model="<PRO_FAILOVER_MODEL>")` without killing their conversation context, and switch them back to `<PRIMARY_REVIEW_MODEL>` once the quota reset window elapses.
+- **Subagent Fallback (`<FLASH_MODEL>`)**: When using one-shot `invoke_subagent` helpers (`pr-contract-auditor`, `pr-test-verifier`) instead of `swarm`, default to `Model: "flash"` (`<FLASH_MODEL>`).
 
 ### 4.2 Fail-Fast Worktree Sequencing Invariant
 - **Strict Sequencing**: Pass 1 (`scripts/mutate`, test suites, static gates) runs sequentially in `/tmp/pr-<PR>-audit` **before** any Pass 2 subagents are spawned.
