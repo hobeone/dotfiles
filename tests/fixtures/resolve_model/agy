@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# Stub `agy` for resolve-model.sh tests: logs each call, then serves the
+# fixture model list (or fails / returns nothing on request).
+#   STUB_LOG   file receiving one line per invocation (required)
+#   STUB_FAIL  non-empty -> exit 1 with no output
+#   STUB_EMPTY non-empty -> print only the progress line (an empty list)
+echo "$*" >>"${STUB_LOG:?}"
+[[ -z ${STUB_FAIL:-} ]] || exit 1
+if [[ $1 == models ]]; then
+	if [[ -n ${STUB_EMPTY:-} ]]; then
+		echo "Fetching available models..."
+	else
+		cat "$(dirname "$0")/models.tsv"
+	fi
+fi

@@ -15,16 +15,21 @@ required:
 
 options:
   --repo DIR        repository to guard (default: git toplevel of $PWD)
-  --model NAME      default: gemini-3.7-flash-high
+  --model NAME      model id, or auto:<family>-<tier>[-<effort>] to take the
+                    newest matching model agy offers.
+                    default: auto:gemini-flash-high
   --effort LEVEL    default: high
   --timeout DUR     --print-timeout value, default: 20m
   --allow-dirty     permit a dirty starting tree (still fails if it CHANGES)
 
 exit codes:
   0  review ran and the repository is untouched
-  1  usage or precondition error
+  1  usage or precondition error (includes a claude-* model, refused)
   2  agy exited non-zero (out file still written)
   3  the repository changed during the review  <-- treat the run as void
+  4  the model is not available on agy (or availability could not be
+     checked); the recommendation is on stderr and agy was NOT run. Show it
+     to the user - never swap the model silently.
 EOF
 }
 
@@ -32,7 +37,7 @@ prompt=''
 out=''
 repo=''
 allow_dirty=0
-model=gemini-3.7-flash-high
+model=auto:gemini-flash-high
 effort=high
 timeout=20m
 
@@ -53,6 +58,21 @@ done
 if [ -z "$prompt" ] || [ -z "$out" ]; then usage; exit 1; fi
 [ -r "$prompt" ] || { echo "prompt file not readable: $prompt" >&2; exit 1; }
 command -v agy >/dev/null || { echo "agy not on PATH" >&2; exit 1; }
+
+# Resolve the model against what agy actually offers, before any git check or
+# agy run: a model that does not exist must stop here with a recommendation,
+# not fail minutes into a review or be swapped for another behind the user's
+# back. resolve-model.sh exits 3 (unavailable) or 4 (cannot list); both mean
+# "ask", so both become 4 here, and its stderr carries the recommendation.
+resolver=$(dirname "$0")/../../model-check/scripts/resolve-model.sh
+[ -x "$resolver" ] || { echo "model-check resolver not found: $resolver" >&2; exit 1; }
+resolve_rc=0
+resolved=$("$resolver" "$model") || resolve_rc=$?
+case "$resolve_rc" in
+0) model=$resolved ;;
+1) exit 1 ;;
+*) exit 4 ;;
+esac
 
 repo=${repo:-$(git rev-parse --show-toplevel)}
 [ -d "$repo/.git" ] || [ -f "$repo/.git" ] || { echo "not a git repo: $repo" >&2; exit 1; }

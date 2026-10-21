@@ -33,6 +33,26 @@ Autonomous background pull-request review and monitoring workflow. Combines sche
 
 ## 1. Setting Up the Watcher
 
+### Step 1.0: Model availability check (before scheduling)
+
+The ids in the **Active Model Configuration** block go stale as models are retired, and a worker pinned to a missing model fails mid-review. Before scheduling anything, check every concrete agy model id in that block:
+
+```bash
+for m in opus-5.5-high gemini-3.8-flash-high gemini-3.5-flash-lite; do   # the ids from the block
+  ~/.gemini/skills/model-check/scripts/resolve-model.sh "$m" >/dev/null; echo "$m -> exit $?"
+done
+```
+
+Run it for the display-name-only entry (`<PRO_FAILOVER_MODEL>`) too, passing the display name (e.g. `"Gemini 4 Argon (High)"`). Tier aliases for `invoke_subagent` (`flash`, `flash_lite`, `pro`) are not agy model ids and are **not** checked.
+
+- **Exit 3** (not available): do not schedule yet. Show the user, via `ask_question`, each unavailable model with the recommendation printed on stderr, and let them choose (accept the recommendation, pick another listed model, or proceed anyway). Update the Active Model Configuration block with their answer. **Never swap a model silently.**
+- **Exit 4** (listing failed): tell the user availability could not be verified and why, then ask whether to continue unverified.
+- **Exit 0**: proceed.
+
+See the `model-check` skill for the full contract.
+
+### Step 1.1: Schedule
+
 Run the watcher on a recurring schedule using the `schedule` tool:
 - **`CronExpression`**: `"*/5 * * * *"` (every 5 minutes).
 - **`IsDaemon`**: `false` (keeps the session active across monitoring cycles).
@@ -140,6 +160,7 @@ Maintain a persistent pool of 3 swarm review workers (`rev-1`, `rev-2`, `rev-3`)
    - Pin review workers to `<PRIMARY_REVIEW_MODEL>` via `swarm(action="add", name="rev-1", model="<PRIMARY_REVIEW_MODEL>", brief="...")`.
    - Because PRs are often authored by a sibling Gemini model (e.g., Gemini 4 Argon), instruct reviewers to be **extra adversarial and skeptical**: never trust commit-body claims, doc comments, or authored `.spec` files without mechanical verification.
 2. **Quota Failover & Recovery (`<PRIMARY_REVIEW_MODEL>` $\leftrightarrow$ `<PRO_FAILOVER_MODEL>`)**:
+   - Before any failover switch, run `~/.gemini/skills/model-check/scripts/resolve-model.sh` on the target model id (as in Step 1.0). On exit 3, ask the user via `ask_question` with the recommendation before switching; on exit 4, tell them availability could not be verified. Never switch to an unchecked or silently substituted model.
    - If a `<PRIMARY_REVIEW_MODEL>` worker hits `RESOURCE_EXHAUSTED` quota limits, **do not `kill` and `add`** the worker. Switch `waiting` workers in-place to `<PRO_FAILOVER_MODEL>` (or `<FLASH_MODEL>` for flash-tier passes) via:
      ```bash
      swarm(action="model", name="rev-1", model="<PRO_FAILOVER_MODEL>")

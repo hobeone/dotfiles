@@ -50,8 +50,13 @@ jobs:
             tests/test_run_analyzers.sh \
             tests/test_select_angles.sh \
             tests/test_redact_secrets.sh \
+            tests/test_resolve_model.sh \
+            tests/test_agy_review.sh \
             tests/fixtures/post_review/gh \
-            tests/fixtures/run_analyzers/bin/stub
+            tests/fixtures/run_analyzers/bin/stub \
+            tests/fixtures/resolve_model/agy \
+            tests/fixtures/agy_review/agy \
+            home/.claude/skills/agy-adversarial-review/scripts/agy-review.sh
 
   syntax:
     name: Syntax check
@@ -91,6 +96,12 @@ jobs:
 
       - name: redact-secrets.sh behavior
         run: bash tests/test_redact_secrets.sh
+
+      - name: resolve-model.sh behavior
+        run: bash tests/test_resolve_model.sh
+
+      - name: agy-review.sh model handling
+        run: bash tests/test_agy_review.sh
 
   structure:
     name: Verify structure

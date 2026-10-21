@@ -46,16 +46,31 @@ dispatch below stops it after Phase 2.
 ## Invocation
 
 ```bash
-agy --model gemini-3.7-flash-high --effort high --mode plan \
+# Resolve first: auto: ids are not agy ids, and a pinned id may have been retired.
+model=$(~/.claude/skills/model-check/scripts/resolve-model.sh auto:gemini-flash-high) || exit $?
+agy --model "$model" --effort high --mode plan \
     --print-timeout 20m \
     -p "$(cat /path/to/prompt.txt)" > /path/to/out.md 2>&1
 ```
+
+`resolve-model.sh` checks the id against `agy models` and picks the newest
+model of the family and tier, so no model version is pinned in this skill.
+`scripts/agy-review.sh` does the same internally (its `--model` accepts an id
+or `auto:<family>-<tier>[-<effort>]`) and is the better entry point.
+
+**Exit 4 — the model is not available** (the script's exit 4, or the
+resolver's 3 or 4 when run by hand). The recommendation is on stderr and agy
+was not run. Show it to the user with `AskUserQuestion` — requested id,
+recommended id, what else is available — and wait for the answer. **Never
+silently swap the model and carry on.** Exit 4 can also mean availability could
+not be checked at all (agy failed to list models); say that instead of calling
+the model unavailable.
 
 Flag by flag, because each one is load-bearing:
 
 | Flag | Why |
 |---|---|
-| `--model gemini-3.7-flash-high` | **The default.** Flash at high effort is what found this skill's motivating defects — the vacuous subtests and the unverifiable citations — and it is several times faster and cheaper than the pro tier. Escalate to `gemini-3.1-pro-high` only when a pass at flash comes back thin on a diff you have reason to think is deep. **Never a `claude-*` model** — `agy` can drive Claude, and that forfeits the entire reason for running it. |
+| `--model auto:gemini-flash-high` | **The default.** Flash at high effort is what found this skill's motivating defects — the vacuous subtests and the unverifiable citations — and it is several times faster and cheaper than the pro tier. Escalate to `auto:gemini-pro-high` only when a pass at flash comes back thin on a diff you have reason to think is deep. **Never a `claude-*` model** — `agy` can drive Claude, and that forfeits the entire reason for running it. |
 | `--effort high` | Adversarial review is the case that wants it. |
 | `--mode plan` | **The read-only guard.** Sets execution mode to plan rather than accept-edits, at the harness level. A prompt asking nicely not to edit is not a guard; this is. Still pair it with the prompt's read-only override — belt and braces, since the review is being told to *run commands*. |
 | `--print-timeout 20m` | The default is **5m** and a real review will not finish in it — you get a truncated run that looks like a short review. Budget by scope: single task ≈ 9–14m, whole branch ≈ 20–25m. |
@@ -244,10 +259,10 @@ adds one, not discarding.
 
 | Scope | Model | `--print-timeout` |
 |---|---|---|
-| One task, one package | `gemini-3.7-flash-high` | 9–14m |
-| Whole branch, many commits | `gemini-3.7-flash-high` | 20–25m |
-| Flash came back thin on a diff you think is deep | `gemini-3.1-pro-high` | 14–25m |
-| Design doc / prose review | `gemini-3.1-pro-high`, and drop `/adversarial-review` | 14m |
+| One task, one package | `auto:gemini-flash-high` | 9–14m |
+| Whole branch, many commits | `auto:gemini-flash-high` | 20–25m |
+| Flash came back thin on a diff you think is deep | `auto:gemini-pro-high` | 14–25m |
+| Design doc / prose review | `auto:gemini-pro-high`, and drop `/adversarial-review` | 14m |
 
 That last row: `/adversarial-review` is diff-and-code oriented — Phase 0
 resolves a target *diff* and Phase 1 runs a twelve-angle *code* review with

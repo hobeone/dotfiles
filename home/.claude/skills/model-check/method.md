@@ -1,0 +1,1 @@
+../../../../skills-shared/model-check/method.md
