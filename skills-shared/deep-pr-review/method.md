@@ -747,6 +747,16 @@ walkthrough issue comment. Post in this order:
    this head from a concurrent run), stop without posting.
 4. Run the same command without `--dry-run` to post for real.
 
+Before anything leaves the machine the script pipes every outbound text
+(inline bodies, the review body, the walkthrough, the draft snapshot) through
+`⟨skill-dir⟩/scripts/redact-secrets.sh`, which replaces secret-shaped strings
+(GitHub/AWS/Slack/Google/Anthropic/OpenAI keys, JWTs, PEM private keys,
+`password=`-style values) with `<secret-redacted>`. This runs after the
+verbatim-quote check, which sees the original text, and the dry-run payload
+shows the redacted result. If the redactor cannot run (it needs perl) the
+script refuses to post rather than send unredacted text. Redaction is a net,
+not a license: do not copy secrets into findings in the first place.
+
 The script validates every anchor against the diff **before** posting, because
 GitHub rejects the entire review if any one comment falls outside a hunk. A
 finding whose line is not commentable is moved into the review body under

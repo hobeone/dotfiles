@@ -49,6 +49,7 @@ jobs:
             tests/test_deep_pr_review_method.sh \
             tests/test_run_analyzers.sh \
             tests/test_select_angles.sh \
+            tests/test_redact_secrets.sh \
             tests/fixtures/post_review/gh \
             tests/fixtures/run_analyzers/bin/stub
 
@@ -87,6 +88,9 @@ jobs:
 
       - name: select-angles.sh behavior
         run: bash tests/test_select_angles.sh
+
+      - name: redact-secrets.sh behavior
+        run: bash tests/test_redact_secrets.sh
 
   structure:
     name: Verify structure

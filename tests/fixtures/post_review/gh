@@ -35,6 +35,7 @@ case "$*" in
       cp "$input" "$STUB_PAYLOAD_OUT"
     fi
     printf '901\thttps://example.test/o/r/pull/7#pullrequestreview-901\n' ;;
+  "api repos/o/r/statuses/"*) ;;
   "api repos/o/r/issues/7/comments"*) echo https://example.test/comment ;;
   *) echo "stub gh: unexpected: $*" >&2; exit 99 ;;
 esac

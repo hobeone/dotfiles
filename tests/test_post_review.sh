@@ -339,5 +339,50 @@ jq -e '(.kept | length == 3) and (.edited | length == 0) and (.removed | length 
 if out=$(XDG_STATE_HOME=$work/empty-state STUB_REVIEWS=$work/rb/reviews.json "$rb" 7 --repo o/r 2>&1); then err "read-back without a snapshot exited 0"; fi
 grep -qF 'post-review.sh --draft' <<<"$out" || err "read-back no-snapshot message lacks the --draft pointer: $out"
 
+# Secret redaction: every outbound text (inline bodies, review body incl. the
+# combined agent prompt, walkthrough, draft snapshot) goes through
+# redact-secrets.sh. The fake token is assembled at runtime so no token-shaped
+# string is committed.
+secret="gh""p_$(printf 'Q%.0s' {1..36})"
+jq --arg s "$secret" '.[0].body += " Leaked " + $s + " here." | .[0].agent_prompt += " token " + $s' \
+  "$fx/findings.json" > "$work/findings-secret.json"
+printf 'Walkthrough mentions %s too.\n' "$secret" > "$work/walkthrough-secret.md"
+: > "$STUB_LOG"
+out_rs=$("$script" 7 "$work/findings-secret.json" --repo o/r --walkthrough "$work/walkthrough-secret.md" --dry-run 2>&1) \
+  || err "secret-bearing dry run failed: $out_rs"
+grep -qF -- "$secret" <<<"$out_rs" && err "dry run still shows the secret"
+grep -qF '<secret-redacted>' <<<"$out_rs" || err "dry run shows no redaction placeholder"
+payload_rs=$(awk 'f; /^## Review payload$/ {f=1}' <<<"$out_rs")
+jq -e '.comments[0].body | contains("<secret-redacted>") and (contains("Leaked") )' <<<"$payload_rs" >/dev/null \
+  || err "inline comment was not redacted in place"
+jq -e '.body | contains("<secret-redacted>")' <<<"$payload_rs" >/dev/null || err "review body (combined agent prompt) not redacted"
+# A real post sends the redacted payload.
+STUB_PAYLOAD_OUT=$work/rs-payload.json "$script" 7 "$work/findings-secret.json" --repo o/r --walkthrough "$work/walkthrough-secret.md" >/dev/null 2>&1 \
+  || err "secret-bearing post failed"
+grep -qF -- "$secret" "$work/rs-payload.json" && err "posted payload contains the secret"
+# Draft: payload (walkthrough folded in) and snapshot are clean.
+printf '[{"id":11,"path":"a.go","line":2,"body":"quotes %s"}]' "$secret" > "$work/review-comments-secret.json"
+STUB_REVIEW_COMMENTS=$work/review-comments-secret.json STUB_PAYLOAD_OUT=$work/rs-draft.json \
+  "$script" 7 "$work/findings-secret.json" --repo o/r --walkthrough "$work/walkthrough-secret.md" --draft >/dev/null 2>&1 \
+  || err "secret-bearing draft failed"
+grep -qF -- "$secret" "$work/rs-draft.json" && err "draft payload contains the secret"
+grep -qF 'Walkthrough mentions <secret-redacted>' "$work/rs-draft.json" || err "draft walkthrough not redacted"
+grep -rqF -- "$secret" "$XDG_STATE_HOME" && err "snapshot contains the secret"
+grep -rqF '<secret-redacted>' "$XDG_STATE_HOME/deep-pr-review/o_r_7_901.json" || err "snapshot comment not redacted"
+
+# perl missing: refuse before any network write, never post unredacted.
+mkdir -p "$work/noperl-bin"
+for f in /usr/bin/* /bin/*; do
+  case ${f##*/} in perl*) continue ;; esac
+  [[ -e $work/noperl-bin/${f##*/} ]] || ln -s "$f" "$work/noperl-bin/${f##*/}" 2>/dev/null
+done
+ln -sf "$PWD/$fx/gh" "$work/noperl-bin/gh"
+: > "$STUB_LOG"
+if out=$(PATH="$work/noperl-bin" "$script" 7 "$fx/findings.json" --repo o/r 2>&1); then
+  err "post-review.sh without perl exited 0"
+fi
+grep -qi 'perl' <<<"$out" || err "no-perl refusal does not mention perl: $out"
+if grep -q 'reviews --input\|issues/7/comments\|statuses/' "$STUB_LOG"; then err "posted although redaction was unavailable"; fi
+
 ((fail)) && exit 1
 echo PASS

@@ -140,6 +140,30 @@ fi
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 
+# Everything outbound goes through redact-secrets.sh — after the verbatim-quote
+# gate below, which must see the original text. Text is never posted
+# unredacted: if the redactor cannot run (no perl), refuse now, before any
+# write. Counts accumulate in a file because redaction often runs in a pipeline
+# subshell.
+redactor="$(dirname "${BASH_SOURCE[0]}")/redact-secrets.sh"
+[[ -x $redactor ]] || die "redactor not found or not executable: $redactor"
+: > "$work/redactions.log"
+redact_stream() {
+  local out="$work/redact.out.$BASHPID" cnt="$work/redact.cnt.$BASHPID"
+  if ! "$redactor" > "$out" 2> "$cnt"; then
+    die "secret redaction unavailable ($(tr '\n' ' ' < "$cnt")); refusing to post unredacted text"
+  fi
+  cat "$out"
+  cat "$cnt" >> "$work/redactions.log"
+  rm -f "$out" "$cnt"
+}
+redact_stream < /dev/null > /dev/null   # preflight: fail before any network write
+
+if [[ -n $walkthrough ]]; then
+  redact_stream < "$walkthrough" > "$work/walkthrough.redacted.md"
+  walkthrough="$work/walkthrough.redacted.md"
+fi
+
 # GitHub allows one PENDING review per user per PR; a second create is rejected
 # (422, "a pending review already exists" per user reports — the REST docs do
 # not state it). Check up front, read-only, so the refusal names the existing
@@ -360,7 +384,7 @@ for ((i = 0; i < count; i++)); do
   path=$(jq -r '.path' <<<"$f")
   line=$(jq -r '.line' <<<"$f")
   start=$(jq -r '.start_line // empty' <<<"$f")
-  rendered=$(render_body "$f")
+  rendered=$(render_body "$f" | redact_stream)
 
   if grep -qxF "${path}"$'\t'"${line}" "$work/valid.tsv"; then
     # A multi-line anchor whose start is outside the diff degrades to a
@@ -468,9 +492,9 @@ render_review_body() {
 }
 
 if ((draft)); then
-  render_review_body "$total_findings" "(not computed: draft review)" > "$work/body.md"
+  render_review_body "$total_findings" "(not computed: draft review)" | redact_stream > "$work/body.md"
 else
-  render_review_body "$total_findings" "(populating thread IDs...)" > "$work/body.md"
+  render_review_body "$total_findings" "(populating thread IDs...)" | redact_stream > "$work/body.md"
 fi
 
 # A draft omits `event`, which is what makes GitHub create it PENDING.
@@ -481,6 +505,11 @@ jq -n --arg commit_id "$head_sha" \
   '{commit_id: $commit_id, body: $body, comments: $comments}
    + (if $draft == 1 then {} else {event: "COMMENT"} end)' \
   > "$work/review.json"
+
+redaction_total=$(awk '{ s += $1 } END { print s + 0 }' "$work/redactions.log")
+if ((redaction_total > 0)); then
+  printf '%s: redacted %s secret-shaped string(s) from the outbound text\n' "${0##*/}" "$redaction_total" >&2
+fi
 
 if ((dry_run)); then
   printf '# DRY RUN — nothing posted\n# repo=%s pr=%s head=%s inline=%s orphan=%s draft=%s\n\n' \
@@ -506,6 +535,14 @@ if ((draft)); then
   gh api "repos/$repo/pulls/$pr/reviews/$review_id/comments" --paginate \
     | jq -s 'add // [] | map({id, path, line: (.line // .original_line), body})' > "$work/snap_comments.json" \
     || die "review $review_id was created but its comments could not be fetched; read-back will not work"
+  # The server copies are what we posted (already redacted), but the snapshot
+  # lives on disk indefinitely, so redact it independently.
+  n_snap=$(jq length "$work/snap_comments.json")
+  for ((si = 0; si < n_snap; si++)); do
+    snap_body=$(jq -r ".[$si].body // \"\"" "$work/snap_comments.json" | redact_stream)
+    jq --argjson i "$si" --arg b "$snap_body" '.[$i].body = $b' "$work/snap_comments.json" > "$work/snap_comments.tmp"
+    mv "$work/snap_comments.tmp" "$work/snap_comments.json"
+  done
   state_dir="${XDG_STATE_HOME:-$HOME/.local/state}/deep-pr-review"
   mkdir -p "$state_dir"
   snapshot="$state_dir/${repo//\//_}_${pr}_${review_id}.json"
@@ -552,7 +589,7 @@ if [[ -x "$resolve_script" ]]; then
     threads_count=0
     open_threads_txt="none"
   fi
-  render_review_body "$threads_count" "$open_threads_txt" > "$work/body_final.md"
+  render_review_body "$threads_count" "$open_threads_txt" | redact_stream > "$work/body_final.md"
   gh api -X PUT "repos/$repo/pulls/$pr/reviews/$review_id" -F "body=@$work/body_final.md" >/dev/null || true
 fi
 
