@@ -145,7 +145,7 @@ Invoke the reviewer using `invoke_subagent`:
   - If Go is detected, supply the target Go version and `~/.gemini/skills/deep-pr-review/reference/go_rules.md`.
   - Include relevant repo rules from `GEMINI.md` or `CLAUDE.md`.
   - Mandate execution of every angle in `deep-pr-review`'s Find phase (Angles
-    A–O, as defined in its `method.md`), plus 1-vote verification and the gap
+    A–P, as defined in its `method.md`), plus 1-vote verification and the gap
     sweep.
   - Run in **local mode**: do NOT post to GitHub.
   - **Output destination**: Write verified findings to `<run-dir>/findings.json`. If 0 defects are found, write an empty JSON array `[]`.

@@ -1,6 +1,6 @@
 ---
 name: deep-pr-review
-description: Use when asked to deeply review a pull request, run a CodeRabbit-style review, review a diff before merge, or produce severity-ranked PR findings. Runs eligibility checks and an architectural approach gate followed by a 15-angle recall-biased review, posting findings as a GitHub review.
+description: Use when asked to deeply review a pull request, run a CodeRabbit-style review, review a diff before merge, or produce severity-ranked PR findings. Runs eligibility checks and an architectural approach gate followed by a 16-angle recall-biased review, posting findings as a GitHub review.
 ---
 
 # Deep PR Review (agy adapter)
@@ -25,7 +25,7 @@ follow it, applying the bindings below wherever it writes a `⟨verb⟩`.
 
 | Role | Model | Why |
 |---|---|---|
-| Architecture Gate, Finders A–I and K–O, Verifiers | `flash` | Gemini 3.8 Flash on high reasoning outperforms 3.1 Pro while executing significantly faster and cheaper |
+| Architecture Gate, Finders A–I and K–P, Verifiers | `flash` | Gemini 3.8 Flash on high reasoning outperforms 3.1 Pro while executing significantly faster and cheaper; Angle P (blind diff reader) reads only a diff, which flash handles well |
 | Finder J (conventions) | `flash_lite` | quote-the-rule / quote-the-line matching |
 | Gap Sweep | main context | needs the deduplicated list |
 

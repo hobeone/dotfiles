@@ -88,7 +88,7 @@ Use `invoke_subagent` to spawn a fresh-context reviewer:
   - The unified diff or exact git commands to inspect the target.
   - Project rules and guidelines from repo configuration files.
   - If Go is detected: target Go version and the text of `~/.gemini/skills/deep-pr-review/reference/go_rules.md`.
-  - Mandate to run every angle in `deep-pr-review`'s Find phase (Angles A–O, as
+  - Mandate to run every angle in `deep-pr-review`'s Find phase (Angles A–P, as
     defined in its `method.md`), plus 1-vote verification and the gap sweep.
   - Run in **local mode**: skips the Eligibility and Post phases of `deep-pr-review`.
   - Output contract: write verified findings to `<run-dir>/findings.json`.

@@ -1,6 +1,6 @@
 ---
 name: deep-pr-review
-description: Use only when the user explicitly asks for deep-pr-review or a CodeRabbit-style deep review of a PR, branch, or diff. Recall-biased 15-angle review with eligibility checks and an architecture gate, posted as a GitHub review. Not for routine /pr-review or /code-review requests.
+description: Use only when the user explicitly asks for deep-pr-review or a CodeRabbit-style deep review of a PR, branch, or diff. Recall-biased 16-angle review with eligibility checks and an architecture gate, posted as a GitHub review. Not for routine /pr-review or /code-review requests.
 ---
 
 # Deep PR Review (Claude Code adapter)
@@ -26,7 +26,7 @@ then follow it, applying the bindings below wherever it writes a `⟨verb⟩`.
 | Role | Model | Why |
 |---|---|---|
 | Architecture Gate | `opus` | One judgment that can halt the whole review; ambiguous design reasoning |
-| Finders A–I and K–O | `sonnet` | Standard code reading and cross-file tracing |
+| Finders A–I and K–P | `sonnet` | Standard code reading and cross-file tracing; Angle P needs no more than a careful cold read of a diff, and a cheaper tier would miss its subtle-naming and unstated-assumption cases |
 | Finder J (conventions) | `haiku` | Quote-the-rule / quote-the-line matching |
 | Verifiers | `sonnet` | Must construct refutations from code; cheaper tiers wave candidates through |
 | Gap Sweep | main context | Needs the deduplicated list |

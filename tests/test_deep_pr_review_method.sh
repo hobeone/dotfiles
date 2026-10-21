@@ -52,9 +52,20 @@ want_phases=$'Phase 0 — Eligibility\nPhase 1 — Gather\nPhase 2 — Architect
 got_phases=$(grep -E '^## Phase [0-9] — ' "$m" | sed 's/^## //')
 [[ $got_phases == "$want_phases" ]] || err "phase headings differ:"$'\n'"$got_phases"
 
-for a in A B C D E F G H I J K L M N O; do
+for a in A B C D E F G H I J K L M N O P; do
   grep -qE "^### Angle $a — " "$m" || err "missing Angle $a"
 done
+
+# Angle P is blind by construction: its section must say it receives only the
+# diff, and the shared prompt rules must carry the exception, otherwise the
+# generic "paste instruction files / profiles into every entry" rules would
+# leak context into it.
+p_sec=$(awk '/^### Angle P — /{f=1;next} /^### |^## |^---$/{f=0} f' "$m")
+grep -qiE 'only the (unified )?diff' <<<"$p_sec" || err "Angle P section does not say it receives only the diff"
+grep -qiE 'not (to )?read (any )?files|do not read files' <<<"$p_sec" || err "Angle P section does not forbid reading files"
+grep -qiE 'Angle P' <(awk '/^## Fan-out/{f=1;next} /^---$/{f=0} f' "$m") || err "Fan-out context list lacks the Angle P exception"
+grep -qiE 'Angle P' <(awk '/^### Mandatory Subagent Prompt Guardrails/{f=1;next} /^### Angle A /{f=0} f' "$m") \
+  || err "Mandatory guardrails lack the Angle P exception"
 
 assert_exists "$core/reference/go_rules.md" "$m" "$core"
 check_absent "go_rules.md cites phase numbers" 'Phase [0-9]' "$core/reference/go_rules.md"
@@ -102,15 +113,42 @@ fi
 check_absent "callers must not quote an angle count at all" \
   '[0-9]+-angle|[0-9]+ angles|[0-9]+ analytical' "${callers[@]}"
 
+# "<N> correctness" has one owner too: the ranking note in method.md that
+# lists the correctness angles ("Correctness bugs (Angles A–E, K, ...)").
+# Expand its letters and ranges, then require every "N correctness" quoted in
+# the core and adapters to equal that count.
+rank_list=$(tr '\n>' '  ' <"$m" | grep -oE 'Correctness +bugs \(Angles [^)]*\)' | sed -E 's/^.*\(Angles //; s/\)$//')
+[[ -n $rank_list ]] || err "could not find the correctness-angle ranking list in method.md"
+correct_n=0
+IFS=', ' read -ra rank_items <<<"$rank_list"
+for item in "${rank_items[@]}"; do
+  if [[ $item =~ ^([A-Z])–([A-Z])$ ]]; then
+    lo=$(printf '%d' "'${BASH_REMATCH[1]}"); hi=$(printf '%d' "'${BASH_REMATCH[2]}")
+    correct_n=$((correct_n + hi - lo + 1))
+  elif [[ $item =~ ^[A-Z]$ ]]; then
+    correct_n=$((correct_n + 1))
+  fi
+done
+out=$(grep -nroE '[0-9]+ correctness' "${count_targets[@]}" 2>&1)
+rc=$?
+if ((rc == 0)); then
+  while IFS=: read -r file lineno match; do
+    [[ ${match%% *} == "$correct_n" ]] || err "correctness count mismatch in $file:$lineno ($match, expected $correct_n)"
+  done <<<"$out"
+elif ((rc == 2)); then
+  err "grep failed scanning for correctness counts: $out"
+fi
+
 check_absent "callers still say 12 angles" '12-angle|12 analytical' "${callers[@]}"
 # shellcheck disable=SC2016 # literal backticks in the pattern, no expansion intended
 check_absent "callers cite deep-pr-review phases by number" \
   'Phase [0-9] of `deep-pr-review`' "${callers[@]}"
 
 # Callers must not enumerate their own per-angle list (it drifts from
-# method.md's names); they must instead cite deep-pr-review's own Angles A-O.
-check_absent "callers enumerate a per-angle list instead of citing deep-pr-review's Angles A-O" \
-  '^[[:space:]]*[-*][[:space:]]*\**Angle [A-O]\b' "${callers[@]}"
+# method.md's names); they must instead cite deep-pr-review's own Angles A-P.
+check_absent "callers enumerate a per-angle list instead of citing deep-pr-review's Angles A-P" \
+  '^[[:space:]]*[-*][[:space:]]*\**Angle [A-P]\b' "${callers[@]}"
+check_absent "callers cite a stale angle range (A–O)" 'A–O' "${callers[@]}"
 
 # Concurrent runs of the same caller must not clobber each other's findings
 # file: no caller may hard-code /tmp/<name>-findings.json (or any other

@@ -14,7 +14,7 @@ Phase 1  Gather — diff, instructions, Go telemetry, analyzers, expected head  
 Phase 2  Architecture Gate (Altitude Audit)                         sequential (or 1 subagent)
          ├── If FLAWED_APPROACH ──► Post Architectural Review & HALT
          └── If SOUND_APPROACH  ──► Proceed to Find
-Phase 3  Find — 15 angles, ≤8 candidates each                       FAN OUT — 15 subagents
+Phase 3  Find — 16 angles, ≤8 candidates each                       FAN OUT — 16 subagents
 Phase 4  Verify — dedup + 1-vote 3-state verify (recall-biased)     FAN OUT — 1 subagent per candidate
 Phase 5  Gap Sweep — fresh pass, then Verify its candidates          sequential, then FAN OUT
 Phase 6  Render in CodeRabbit format                                sequential
@@ -25,11 +25,14 @@ Phase 7  Post as a single GitHub review                             sequential
 
 Find and Verify are embarrassingly parallel and are the whole cost of this
 review. Run each as **a single ⟨dispatch-parallel⟩ carrying every entry**, so
-15 angles cost one angle's wall-clock. Dispatching entries one at a time
+16 angles cost one angle's wall-clock. Dispatching entries one at a time
 runs them in series and defeats the point.
 
 Subagents do **not** share your context. Every entry's prompt must be
-self-contained:
+self-contained. **Angle P is the one exception to everything below except the
+diff and its own mandate**: its entry receives the unified diff pasted
+verbatim (never a command to regenerate it, since it must not run commands)
+and nothing else — see Angle P.
 
 - the unified diff (or the exact command to regenerate it, plus the target)
 - the repo instruction files read in Gather — paste the governing rules, do not
@@ -46,7 +49,7 @@ Model routing per role is set by the adapter.
 **If ⟨dispatch-parallel⟩ is unavailable or refused**, do not error: work every angle
 yourself, in sequence, in this context. Do not skip angles for lack of fan-out.
 Then say so in the review body's Method line — a sequential run is a different
-review from a 15-angle fan-out, and the reader must not be misled about which
+review from a 16-angle fan-out, and the reader must not be misled about which
 one produced the findings.
 
 **Do not modify the branch.** This skill only reads and comments. If the user
@@ -208,7 +211,7 @@ PR re-exposes or fails to fix them.
 
 Approach & Architecture Gate (Altitude Audit).
 
-Before dispatching 15 subagents to audit lines, evaluate the PR's fundamental architecture against the 5 Core Inquiries:
+Before dispatching 16 subagents to audit lines, evaluate the PR's fundamental architecture against the 5 Core Inquiries:
 
 1. **Root Cause vs. Symptom Treatment**:
    Is the PR addressing the root cause, or building scaffolding (sweepers, fallbacks, defensive error-swallowing) around an unhandled defect, leaky caller, or un-detached context?
@@ -241,14 +244,18 @@ Record a 1-paragraph architecture endorsement for inclusion in the final review 
 
 ## Phase 3 — Find
 
-15 angles, up to 8 candidates each.
+16 angles, up to 8 candidates each.
 
-One ⟨dispatch-parallel⟩, 15 entries, one entry per angle below. Each returns up
+One ⟨dispatch-parallel⟩, 16 entries, one entry per angle below. Each returns up
 to 8 candidates; each candidate needs `file`, `line`, a one-line `summary`, and
 a concrete `failure_scenario`.
 
 ### Mandatory Subagent Prompt Guardrails (Include in Every Entry)
-When dispatching each angle subagent, include these explicit rules in its prompt:
+When dispatching each angle subagent, include these explicit rules in its prompt.
+**Angle P is exempt from every rule in this list**: it is deliberately blind and
+gets only the diff, so it is told neither to inspect a SHA nor to receive Go
+rules, instruction files, language profiles or analyzer output — its own
+mandate (Angle P) replaces this list.
 - **Exact SHA Inspection**: Do NOT inspect files in the local working tree if it differs from the PR head. Always inspect code with ⟨read-at-sha⟩ at `<headRefOid>`, or `git diff <base>..<headRefOid>`, to avoid testing against stale base code.
 - **Loop Invariants & Sparse Iteration**: When proposing index substitutions (e.g., replacing a tracking variable `prev` with `slice[i-1]`), you MUST audit all `continue`, `break`, and conditional filter branches in the loop to verify the index invariant holds under sparse or filtered iterations.
 - **Callback & Closure Re-entrancy**: When evaluating lazy resolvers, callbacks, or closures, check whether the callee invokes them under a lock (`RLock`/`Lock`) that could deadlock or re-acquire locks.
@@ -432,10 +439,41 @@ Read comments in and adjacent to every changed function that state a contract �
 preconditions and postconditions. Flag changes that violate one, quoting the
 comment and the violating line.
 
+### Angle P — blind diff reader
+The entry for this angle receives **only the unified diff**, pasted into its
+prompt, and nothing else: no repo instruction files, no language profiles, no
+Go rules, no analyzer output, no other angle's candidates, and no repository
+access. Its prompt tells it not to read files and not to run commands, and to
+judge the diff as a reviewer who has never seen this codebase would. The point
+is a deliberately uncontaminated read: every other angle is primed by context
+and shares its blind spots, while a cold reader notices what the diff fails to
+explain on its face.
+
+Hunt for:
+- naming that contradicts behaviour (a `getX` that writes, a `isValid` that
+  returns a count, a comment or parameter name the body does not honour);
+- logic that only works under an assumption the diff does not show — an
+  unstated precondition, ordering, non-nil, or non-empty guarantee;
+- dead or unreachable code, conditions that are always true or false, values
+  computed and never used;
+- surprising behaviour a caller would not expect from the name and signature
+  (hidden side effects, mutated arguments, silent fallbacks, swallowed errors);
+- missing guardrails at boundaries visible in the diff: unvalidated input,
+  unchecked bounds, an unhandled empty or error case;
+- copy-paste artifacts: duplicated blocks that differ in one spot, a pasted
+  name left from the original, a branch that repeats its sibling;
+- incomplete changes: a rename, signature change or new case applied at some
+  sites but not at sibling sites visible in the same diff.
+
+Everything it cannot confirm from the diff alone is a *question*, not a
+conclusion: it states the assumption it could not check in `failure_scenario`.
+Its candidates enter Verify like all others — verifiers, unlike this finder,
+DO get full context, and refute what the repository disproves.
+
 > Cleanup, altitude, and conventions candidates use the same shape; in
 > `failure_scenario`, state the concrete cost (what is duplicated, wasted,
 > harder to maintain, or which rule is broken) instead of a crash. **Correctness
-> bugs (Angles A–E, K, L, M, O) always outrank cleanup, altitude, and conventions
+> bugs (Angles A–E, K, L, M, O, P) always outrank cleanup, altitude, and conventions
 > findings** when the output cap forces a cut. Angle N findings rank by the
 > category of the feedback they quote.
 
