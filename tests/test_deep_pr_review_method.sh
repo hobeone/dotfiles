@@ -182,5 +182,53 @@ for f in "${callers[@]}"; do
   done < <(grep -oE '"category": *"[^"]*"' "$f" | sed -E 's/^"category": *"([^"]*)"$/\1/')
 done
 
+# --- language profiles -----------------------------------------------------
+# reference/lang/<name>.md: exactly the four sections, in order; every "Do not
+# flag" bullet carries its reason; the set of profiles equals the set method.md's
+# detection table lists; Angle P never receives them.
+lang_dir=$core/reference/lang
+assert_exists "$lang_dir"
+want_sections=$'## Detection\n## Do not flag\n## Common bugs\n## Trust boundaries'
+shopt -s nullglob
+profiles=("$lang_dir"/*.md)
+shopt -u nullglob
+((${#profiles[@]})) || err "no language profiles in $lang_dir"
+for p in "${profiles[@]}"; do
+  got=$(grep -E '^## ' "$p")
+  [[ $got == "$want_sections" ]] || err "$p: sections differ from Detection / Do not flag / Common bugs / Trust boundaries:"$'\n'"$got"
+  dnf=$(awk '/^## Do not flag/{f=1;next} /^## /{f=0} f' "$p")
+  entries=$(grep -cE '^- ' <<<"$dnf")
+  ((entries > 0)) || err "$p: 'Do not flag' has no entries"
+  while IFS= read -r bullet; do
+    grep -qF 'Why:' <<<"$bullet" || err "$p: do-not-flag entry has no 'Why:' reason: ${bullet:0:80}"
+  done < <(grep -E '^- ' <<<"$dnf")
+  for sec in 'Common bugs' 'Trust boundaries' 'Detection'; do
+    body=$(awk -v s="## $sec" '$0==s{f=1;next} /^## /{f=0} f' "$p")
+    grep -qE '^- ' <<<"$body" || err "$p: '$sec' has no bullet entries"
+  done
+done
+[[ -f $lang_dir/go.md ]] && { grep -qF 'go_rules.md' "$lang_dir/go.md" || err "go.md must point at go_rules.md instead of duplicating it"; }
+
+# method.md's detection table rows look like: | `lang/shell.md` | ... |
+# shellcheck disable=SC2016 # literal backticks in the patterns, no expansion intended
+mapfile -t table_profiles < <(grep -oE '^\| `lang/[a-z]+\.md`' "$m" | sed -E 's/^\| `lang\/(.*)`$/\1/' | sort)
+mapfile -t disk_profiles < <(for p in "${profiles[@]}"; do basename "$p"; done | sort)
+[[ "${table_profiles[*]}" == "${disk_profiles[*]}" ]] \
+  || err "method.md detection table (${table_profiles[*]}) != reference/lang files (${disk_profiles[*]})"
+profile_sec=$(awk '/^### Language profiles/{f=1;next} /^### |^## /{f=0} f' "$m")
+[[ -n $profile_sec ]] || err "method.md has no '### Language profiles' section in Gather"
+tr '\n' ' ' <<<"$profile_sec" | grep -qE 'Angle P[^.]*(never|not|no)[^.]*profile|profile[^.]*Angle P[^.]*(never|not)' \
+  || err "Language profiles section does not say Angle P never receives profiles"
+grep -qF 'REFUTED unless' <<<"$profile_sec" || err "Language profiles section does not say a do-not-flag match is REFUTED unless the exception is argued away"
+grep -qF 'Trust boundaries' <<<"$profile_sec" || err "Language profiles section does not mention injecting Trust boundaries"
+grep -qF 'Angle D' <<<"$profile_sec" || err "Language profiles section does not inject into Angle D"
+
+# quality-list shell addendum: both harness copies, same contract header as lang-go.md.
+for h in claude gemini; do
+  f=home/.$h/skills/quality-list/lang-shell.md
+  assert_exists "$f"
+  grep -qF 'This file does **not** introduce new audit items.' "$f" || err "$f lacks the addenda contract paragraph"
+done
+
 ((fail)) && exit 1
 echo PASS

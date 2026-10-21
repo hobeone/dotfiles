@@ -40,6 +40,9 @@ and nothing else — see Angle P.
 - when Go is detected, the target Go version and the relevant sections of
   `⟨skill-dir⟩/reference/go_rules.md` pasted directly into the prompt (Angles D, G, K, L in
   Find; verifiers in Verify)
+- when language profiles matched (Language profiles in Gather), the injected
+  sections as pasted text: `Common bugs` and `Trust boundaries` for Angles D
+  and A, `Do not flag` for verifiers
 - that angle's mandate, verbatim from below
 - the required output shape: a JSON array of candidates with `file`, `line`,
   `summary`, `failure_scenario`
@@ -170,6 +173,35 @@ git diff --name-only HEAD | grep -E '\.go$|go\.mod$'   # working-tree targets (u
 If Go is detected:
 1. **Target Go Version**: Check `go.mod` in the repository root or module/submodule directories for the `go <version>` directive (e.g. `go 1.22`). Fallback to `go version` from the local environment if `go.mod` is absent.
 2. **Load Go Reference Rules**: Read `⟨skill-dir⟩/reference/go_rules.md`. The relevant sections of this catalog MUST be dynamically injected into subagent prompts in Find (Angles D, G, K, L), Verify (verifiers), and Render (remediation prompts).
+
+### Language profiles
+
+Each profile in `⟨skill-dir⟩/reference/lang/` holds what a reviewer of that
+language needs and a generic one gets wrong: `Detection`, `Do not flag` (idioms
+that look like bugs but are correct, each with its reason), `Common bugs`, and
+`Trust boundaries`. Match the changed paths against this table and read every
+profile that matches (a PR can match several):
+
+| Profile | Selected when a changed path is |
+|---|---|
+| `lang/shell.md` | `*.sh`, `*.bash`, `*.zsh`, a dotfile such as `.bashrc` or `.zshrc`, a file whose first line is a `sh`/`bash`/`zsh` shebang, or a CI/Makefile shell block |
+| `lang/python.md` | `*.py`, `*.pyi`, or a file with a `python` shebang |
+| `lang/typescript.md` | `*.ts`, `*.tsx`, `*.mts`, `*.cts`, `*.js`, `*.jsx`, `*.mjs`, `*.cjs`, or `*.svelte` |
+| `lang/go.md` | `*.go`, `go.mod` (it points at `reference/go_rules.md`, which Go detection above already loads) |
+
+Inject them as follows, pasting the text rather than naming the file:
+
+- **Angle D** (and Angle A) finders get the `Common bugs` and `Trust boundaries`
+  sections of every matching profile, so that language pitfalls and untrusted
+  input are hunted on purpose.
+- **Verifiers** get the `Do not flag` section of the profile for the candidate's
+  file. A candidate that matches a `Do not flag` idiom is REFUTED unless the
+  verifier names the specific reason the exception does not apply here (each
+  entry states its own limit, for example "unless the value can contain
+  spaces").
+- **Angle P never receives a profile**, nor does any other text beyond the diff;
+  that is what keeps it a cold read.
+- A changed path no profile matches simply gets none; do not guess one.
 
 ### Static analyzers (optional, never fatal)
 
@@ -339,6 +371,8 @@ JS falsy-zero, `==` coercion, closure-captured loop var; Python mutable default
 args, late-binding closures; Go nil-map write, range-var capture, `defer` in a
 loop, unbuffered-channel deadlock, `err` shadowing; SQL injection; timezone/DST
 drift; float equality. Flag any instance the diff introduces.
+
+*When a language profile matched, its `Common bugs` and `Trust boundaries` are pasted into this angle's prompt (Language profiles in Gather); hunt those on purpose.*
 
 *When reviewing Go code, `⟨skill-dir⟩/reference/go_rules.md` (Section 1) is the governing authority for language pitfalls (typed `nil` in interfaces, goroutine leaks, context misuse, resource leaks, map/slice aliasing, version-aware loopvar capture).*
 
@@ -560,6 +594,10 @@ guard); or pure style with no observable effect.
   - *Channel send deadlock*: Audit `select` for `default:` clauses, buffer capacities vs sender counts, and `case <-ctx.Done():` guards before confirming deadlocks.
   - *Lock copy (`copylocks`)*: Confirm if struct containing mutex/waitgroup is passed by value or has a value receiver; refute if pointer receiver/reference throughout.
   - *Unwrapped error (`%v` vs `%w`)*: Confirm if error is returned from public/internal API function to caller; mark plausible/nitpick if purely internal log string.
+- **Language `Do not flag` idioms**: when the candidate's file matched a
+  language profile, its `Do not flag` section is part of the verifier prompt. A
+  candidate that matches one of those idioms is REFUTED unless the verifier
+  states why that entry's stated limit does not hold here.
 - **Prior-feedback findings (Angle N)**: CONFIRMED only when the pattern the
   quoted comment objected to is present at the cited new line. Otherwise
   REFUTED — quote the new line.
