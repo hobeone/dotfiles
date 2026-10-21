@@ -1,0 +1,1 @@
+{"results":[{"source":{"path":"package-lock.json","type":"lockfile"},"packages":[{"package":{"name":"left-pad","version":"1.0.0","ecosystem":"npm"},"vulnerabilities":[{"id":"GHSA-xxxx-yyyy-zzzz","summary":"Bad thing"}]}]}]}

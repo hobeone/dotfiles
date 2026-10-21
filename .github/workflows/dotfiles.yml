@@ -47,7 +47,9 @@ jobs:
             tests/test_skills_shared.sh \
             tests/test_post_review.sh \
             tests/test_deep_pr_review_method.sh \
-            tests/fixtures/post_review/gh
+            tests/test_run_analyzers.sh \
+            tests/fixtures/post_review/gh \
+            tests/fixtures/run_analyzers/bin/stub
 
   syntax:
     name: Syntax check
@@ -78,6 +80,9 @@ jobs:
 
       - name: post-review.sh behavior
         run: bash tests/test_post_review.sh
+
+      - name: run-analyzers.sh behavior
+        run: bash tests/test_run_analyzers.sh
 
   structure:
     name: Verify structure

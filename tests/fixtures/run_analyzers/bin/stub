@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+# Generic analyzer stub for tests/test_run_analyzers.sh. Tests symlink it under
+# each tool's name into a per-case ANALYZER_BIN_DIR; the name it was invoked as
+# picks the canned output in ../out/<name>.out.
+#
+# Logs "<name> cwd=<pwd> <args>" to $STUB_LOG, answers version queries from
+# $STUB_VERSION_<NAME> (default 1.0.0), exits with $STUB_EXIT_<NAME> (default 0).
+# @SECRET@ and @ROOT@ in the canned output are replaced at runtime so no
+# token-shaped literal is ever committed. Tools that write a report file
+# (gitleaks --report-path, golangci-lint v2 --output.json.path) get the
+# canned output there instead of on stdout.
+name=${0##*/}
+upper=$(tr 'a-z-' 'A-Z_' <<<"$name")
+printf '%s cwd=%s %s\n' "$name" "$PWD" "$*" >> "${STUB_LOG:?}"
+
+case "$1" in
+  --version|version)
+    v="STUB_VERSION_$upper"
+    echo "${!v:-1.0.0}"
+    exit 0 ;;
+esac
+
+out_file=""
+prev=""
+for a in "$@"; do
+  case $prev in
+    --report-path|--output.json.path) [[ $a == stdout ]] || out_file=$a ;;
+  esac
+  prev=$a
+done
+
+content=$(cat "$(dirname "$(readlink -f "$0")")/../out/$name.out")
+content=${content//@SECRET@/${STUB_SECRET:-}}
+content=${content//@ROOT@/$PWD}
+if [[ -n $out_file ]]; then printf '%s\n' "$content" > "$out_file"; else printf '%s\n' "$content"; fi
+e="STUB_EXIT_$upper"
+if [[ -n ${!e:-} ]]; then
+  echo "stub $name: forced failure" >&2
+  exit "${!e}"
+fi
+exit 0

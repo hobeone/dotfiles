@@ -65,6 +65,25 @@ grep -qF '* `b.go`' <<<"$files_block" || err "Files selected block missing b.go"
 # shellcheck disable=SC2016 # literal markdown backticks, no expansion intended
 grep -qF '* `old.go`' <<<"$files_block" || err "Files selected block missing old.go"
 
+# Static analyzers: without --analyzers the body says so (never silent); with
+# it, the --summarize lines follow **Checks run** directly. Defaults for
+# checks / not-verified are honest rather than claiming gates that never ran.
+grep -qF '**Static analyzers:** not run for this review.' <<<"$body" || err "default body lacks the analyzers-not-run line"
+grep -qF -- 'Pass 1 deterministic gates' <<<"$body" && err "default --checks still claims gates ran"
+[[ $(grep -A1 -F '**Checks run:**' <<<"$body" | tail -1) == 'none recorded' ]] || err "default --checks is not 'none recorded'"
+grep -qF '**Not verified:** not recorded' <<<"$body" || err "default --not-verified is not 'not recorded'"
+out_an=$("$script" 7 "$fx/findings.json" --repo o/r --analyzers "$fx/analyzers.json" --dry-run 2>&1) || err "--analyzers dry run failed: $out_an"
+body_an=$(jq -r .body <<<"$(awk 'f; /^## Review payload$/ {f=1}' <<<"$out_an")")
+grep -qF '**Static analyzers run:** shellcheck (3 files, 2 findings, 5 outside diff)' <<<"$body_an" || err "--analyzers body lacks the ran line"
+grep -qF '**Static analyzers NOT run:** semgrep — not installed (applies to 4 changed files)' <<<"$body_an" || err "--analyzers body lacks the NOT-run line"
+grep -qF 'not run for this review' <<<"$body_an" && err "--analyzers body still has the not-run default"
+checks_ln=$(grep -n '^\*\*Checks run:\*\*' <<<"$body_an" | cut -d: -f1)
+ran_ln=$(grep -n '^\*\*Static analyzers run:' <<<"$body_an" | cut -d: -f1)
+nv_ln=$(grep -n '^\*\*Not verified:' <<<"$body_an" | cut -d: -f1)
+[[ -n $checks_ln && -n $ran_ln && -n $nv_ln && $checks_ln -lt $ran_ln && $ran_ln -lt $nv_ln ]] \
+  || err "analyzer lines are not placed between Checks run and Not verified"
+if out=$("$script" 7 "$fx/findings.json" --repo o/r --analyzers "$work/missing.json" --dry-run 2>&1); then err "unreadable --analyzers exited 0"; fi
+
 # Sequential Method wording.
 out_seq=$("$script" 7 "$fx/findings.json" --repo o/r --sequential --dry-run 2>&1) || err "sequential dry run failed"
 body_seq=$(jq -r .body <<<"$(awk 'f; /^## Review payload$/ {f=1}' <<<"$out_seq")")

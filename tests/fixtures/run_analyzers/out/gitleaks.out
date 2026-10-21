@@ -1,0 +1,1 @@
+[{"RuleID":"generic-api-key","Description":"Generic API Key","StartLine":6,"EndLine":6,"File":"a.sh","Secret":"@SECRET@","Match":"key=@SECRET@","Fingerprint":"a.sh:generic-api-key:6"}]

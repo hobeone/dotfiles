@@ -1,0 +1,1 @@
+[{"code":"F401","message":"`os` imported but unused","filename":"@ROOT@/app.py","location":{"row":2,"column":8},"end_location":{"row":2,"column":10},"fix":null,"url":"https://docs.astral.sh/ruff/rules/unused-import"}]

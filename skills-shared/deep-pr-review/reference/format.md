@@ -203,6 +203,20 @@ the fan-out did not run — `post-review.sh --sequential` emits that wording.
 </details>
 ````
 
+`post-review.sh` places the static-analyzer status directly after **Checks run**
+(before **Not verified**), one paragraph per line, from
+`run-analyzers.sh --summarize`:
+
+```
+**Static analyzers run:** shellcheck (3 files, 2 findings, 5 outside diff) · secrets/trufflehog (3 files, 0 findings, 0 outside diff)
+**Static analyzers NOT run:** semgrep — not installed (applies to 4 changed files)
+```
+
+A tool that applied to the diff and did not run (`not installed`, or `failed`
+with its reason) always appears in the NOT-run line; a tool with no matching
+changed file does not. When no analyzers file was supplied the body reads
+`**Static analyzers:** not run for this review.`
+
 List any angle that failed outright (not "no findings" — an actual `gh api`
 error, e.g. Angle N hitting an auth or rate-limit failure rather than "no
 GitHub remote") as its own line inside the `ℹ️ Review info` block, right after

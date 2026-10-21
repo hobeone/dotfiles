@@ -1,0 +1,5 @@
+{"base":"b000000","head":"abc123","tools":[
+ {"tool":"shellcheck","status":"ran","files":3,"findings":2,"outside_diff":5},
+ {"tool":"semgrep","status":"not_installed","files":4,"reason":"semgrep not on PATH"},
+ {"tool":"hadolint","status":"not_applicable","files":0}],
+ "findings":[]}

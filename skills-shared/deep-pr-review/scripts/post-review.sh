@@ -3,7 +3,7 @@
 #
 # Usage:
 #   post-review.sh <pr-number> <findings.json> [--walkthrough FILE] [--repo O/R]
-#                  [--expect-head SHA] [--sequential] [--dry-run]
+#                  [--expect-head SHA] [--analyzers FILE] [--sequential] [--dry-run]
 #
 # Posts exactly one review with event=COMMENT. Never approves, never requests
 # changes, never edits the branch.
@@ -29,8 +29,11 @@ verdict=""
 since_sha=""
 scope=""
 prev_raised="none"
-checks="- Pass 1 deterministic gates and Pass 2 audits executed on ephemeral worktree"
-not_verified="live Usenet E2E (\`test/e2e/\`) and crash consistency (\`test/crash/\`)."
+# Honest defaults: a body must not claim gates ran, or omit what was not
+# verified, unless the caller said so (pr-watcher passes both explicitly).
+checks="none recorded"
+not_verified="not recorded"
+analyzers=""
 
 while (($#)); do
   case "$1" in
@@ -43,6 +46,7 @@ while (($#)); do
     --previously-raised) prev_raised="${2:?--previously-raised needs text}"; shift 2 ;;
     --checks)            checks="${2:?--checks needs text}"; shift 2 ;;
     --not-verified)      not_verified="${2:?--not-verified needs text}"; shift 2 ;;
+    --analyzers)         analyzers="${2:?--analyzers needs a file}"; shift 2 ;;
     --dry-run)           dry_run=1; shift ;;
     --sequential)        sequential=1; shift ;;
     -h|--help)           sed -n '2,10p' "$0"; exit 0 ;;
@@ -56,14 +60,26 @@ while (($#)); do
   esac
 done
 
-[[ -n $pr && -n $findings ]] || die "usage: post-review.sh <pr-number> <findings.json> [--walkthrough FILE] [--repo O/R] [--expect-head SHA] [--verdict V] [--since SHA] [--scope TEXT] [--previously-raised TEXT] [--checks TEXT] [--not-verified TEXT] [--sequential] [--dry-run]"
+[[ -n $pr && -n $findings ]] || die "usage: post-review.sh <pr-number> <findings.json> [--walkthrough FILE] [--repo O/R] [--expect-head SHA] [--verdict V] [--since SHA] [--scope TEXT] [--previously-raised TEXT] [--checks TEXT] [--not-verified TEXT] [--analyzers FILE] [--sequential] [--dry-run]"
 [[ $pr =~ ^[0-9]+$ ]] || die "pr-number must be numeric, got '$pr'"
 [[ -r $findings ]] || die "cannot read findings file: $findings"
 [[ -z $walkthrough || -r $walkthrough ]] || die "cannot read walkthrough file: $walkthrough"
+[[ -z $analyzers || -r $analyzers ]] || die "cannot read analyzers file: $analyzers"
 command -v gh >/dev/null || die "gh is not installed"
 command -v jq >/dev/null || die "jq is not installed"
 
 jq -e 'type == "array"' "$findings" >/dev/null || die "findings file must contain a JSON array"
+
+# Rendered once: the --summarize lines of run-analyzers.sh (blank line between
+# them so Markdown keeps two paragraphs), or an explicit statement that no
+# analyzers ran. Never silent about it.
+if [[ -n $analyzers ]]; then
+  analyzer_lines=$("$(dirname "${BASH_SOURCE[0]}")/run-analyzers.sh" --summarize "$analyzers" \
+    | awk 'NR > 1 { print "" } { print }') \
+    || die "could not summarize analyzers file: $analyzers"
+else
+  analyzer_lines='**Static analyzers:** not run for this review.'
+fi
 
 if [[ -z $repo ]]; then
   repo=$(gh repo view --json nameWithOwner --jq .nameWithOwner)
@@ -345,6 +361,7 @@ render_review_body() {
   printf '**Scope:** %s\n\n' "$scope"
   printf '**Previously raised, now:**\n%s\n\n' "$prev_raised"
   printf '**Checks run:**\n%s\n\n' "$checks"
+  printf '%s\n\n' "$analyzer_lines"
   printf '**Not verified:** %s\n\n' "$not_verified"
   printf '**Open threads:** %s\n\n' "$open_threads_txt"
   printf '**Actionable comments posted: %s inline + %s in body**\n\n' "$n_inline" "$n_orphan"

@@ -10,7 +10,7 @@ The finding methodology is ported from Claude Code's `/code-review xhigh`:
 
 ```
 Phase 0  Eligibility — skip closed/draft/trivial/already-reviewed  sequential (PR targets only)
-Phase 1  Gather — diff, instructions, Go telemetry, expected head   sequential
+Phase 1  Gather — diff, instructions, Go telemetry, analyzers, expected head  sequential
 Phase 2  Architecture Gate (Altitude Audit)                         sequential (or 1 subagent)
          ├── If FLAWED_APPROACH ──► Post Architectural Review & HALT
          └── If SOUND_APPROACH  ──► Proceed to Find
@@ -168,6 +168,36 @@ If Go is detected:
 1. **Target Go Version**: Check `go.mod` in the repository root or module/submodule directories for the `go <version>` directive (e.g. `go 1.22`). Fallback to `go version` from the local environment if `go.mod` is absent.
 2. **Load Go Reference Rules**: Read `⟨skill-dir⟩/reference/go_rules.md`. The relevant sections of this catalog MUST be dynamically injected into subagent prompts in Find (Angles D, G, K, L), Verify (verifiers), and Render (remediation prompts).
 
+### Static analyzers (optional, never fatal)
+
+Create ⟨run-dir⟩ once for this review and write every artifact of the review
+into it. Then run the deterministic analyzers over the same diff. Each tool is
+optional — none is required to be installed — but a tool that applied to the
+diff and did not run is reported, never silently skipped.
+
+```bash
+# PR target: fetch the head commit so the script can analyse it in a worktree
+git fetch origin pull/<N>/head
+⟨skill-dir⟩/scripts/run-analyzers.sh --base <base sha> --head <headRefOid> --out <run-dir>/analyzers.json
+
+# Branch target
+⟨skill-dir⟩/scripts/run-analyzers.sh --base <merge-base> --head HEAD --out <run-dir>/analyzers.json
+
+# Working-tree target
+⟨skill-dir⟩/scripts/run-analyzers.sh --base HEAD --out <run-dir>/analyzers.json
+```
+
+The script exits 0 whenever analysis completed, even if every tool was
+missing. Per tool it records `ran`, `not_applicable` (no matching changed
+file — not a gap), `not_installed` (applicable, binary missing — a gap) or
+`failed` (unexpected exit or unparseable output — a gap). Findings are kept
+only on changed lines unless `--all-lines` is passed; the rest are counted as
+`outside_diff`. A non-zero exit is a usage or git error: report it and
+continue without analyzers, and say so in the review body.
+
+Print the gaps to the user as soon as the run finishes:
+`⟨skill-dir⟩/scripts/run-analyzers.sh --summarize <run-dir>/analyzers.json`.
+
 Treat this diff as the review scope. Read the **enclosing function** for every
 hunk — bugs in unchanged lines of a touched function are in scope, because the
 PR re-exposes or fails to fix them.
@@ -232,6 +262,16 @@ When dispatching each angle subagent, include these explicit rules in its prompt
 Do **not** let one angle's conclusions suppress another's — if two angles flag
 the same line for different reasons, record both. That independence is the
 reason the angles are separate subagents rather than one long prompt.
+
+**Analyzer findings.** Each finding in `<run-dir>/analyzers.json` joins the
+candidate pool as a candidate with source `tool:<name>` (`file`, `line`,
+`summary` from the rule and message; a `failure_scenario` is still required —
+write the concrete consequence, or drop the candidate). It is deduplicated
+with the angles' candidates and goes through Verify like any other: a tool is
+a lead, not a verdict, and a verifier REFUTES a finding that does not apply
+(intentional word splitting, a test fixture, an already-guarded path).
+A `secrets` finding names the rule only; never copy a matched value into a
+candidate, a finding, or a prompt.
 
 Pass every candidate with a nameable failure scenario through to Verify.
 Finders that silently drop half-believed candidates bypass the verify step and
@@ -494,7 +534,11 @@ severity / effort vocabularies, and a worked example lifted from a real
 CodeRabbit review. Follow it literally — the value of this format is that
 downstream agents can consume it.
 
-Create ⟨run-dir⟩ once for this review and write every artifact below into it.
+Write every artifact below into the ⟨run-dir⟩ created in Gather.
+
+A finding that originated as an analyzer candidate names the tool and rule in
+its title (for example `shellcheck SC2086: Quote "$f" so a path with spaces
+is not split.`) so a reader can tell which findings a tool raised.
 
 If the invoking skill supplied an output path (local mode only — see Phase 0),
 write the verified findings there, in the invoking skill's requested schema,
@@ -541,8 +585,14 @@ When authoring the `🤖 Prompt for AI Agents` in CodeRabbit comments for Go fin
 ⟨skill-dir⟩/scripts/post-review.sh \
   <pr-number> <run-dir>/findings.json \
   --expect-head <expected_head> \
+  --analyzers <run-dir>/analyzers.json \
   [--walkthrough <run-dir>/walkthrough.md] [--repo OWNER/NAME] [--sequential] [--dry-run]
 ```
+
+`--analyzers` renders the run/NOT-run analyzer lines into the review body
+right after **Checks run**. Without it the body says
+`**Static analyzers:** not run for this review.` — omit it only when Gather
+could not produce the file.
 
 Write the walkthrough (Render, `reference/format.md`) to `<run-dir>/walkthrough.md`
 first; the script posts it as a separate issue comment before the review.
@@ -582,7 +632,9 @@ anchor whose `start_line` is outside the diff degrades to a single-line comment.
 
 **No PR?** If the target is a branch or the working tree, skip Post entirely
 and print the walkthrough, review body, and each rendered finding to the
-terminal in the same format. Do not open a PR to have somewhere to post.
+terminal in the same format, followed by the analyzer summary
+(`⟨skill-dir⟩/scripts/run-analyzers.sh --summarize <run-dir>/analyzers.json`),
+so tools that did not run are visible in local output too. Do not open a PR to have somewhere to post.
 
 ---
 

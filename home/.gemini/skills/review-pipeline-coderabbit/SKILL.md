@@ -28,7 +28,8 @@ Done-check runs **before** any commit.
 Runs after the done-check loop and **before anything is committed**.
 
 1. Perform self code-review (or dispatch subagent via `invoke_subagent` with `TypeName: "self"`, `Role: "Code Reviewer"`) against the current diff.
-2. Triage the output — classify each finding under the `finding-triage` SSOT dispositions.
+   Alongside it, run the optional deterministic analyzers over the same local diff via `run_command`: `~/.gemini/skills/deep-pr-review/scripts/run-analyzers.sh --base <merge-base or HEAD> --out <scratch>/analyzers.json` (add `--head HEAD` for a committed branch; it needs no PR). Every tool is optional and absence never fails the gate, but a tool that applied to the diff and did not run is a visible gap: print `run-analyzers.sh --summarize <scratch>/analyzers.json` and carry its **NOT run** line into the summary given to the user.
+2. Triage the output — classify each finding under the `finding-triage` SSOT dispositions. Analyzer findings (`tool:<name>`) are leads: verify each against the code before calling it actionable.
 3. If actionable findings exist: fix, run `done-check` in delta mode, then re-run code-review at the same effort. If the same conceptual topic recurs across 2+ iterations, stop and follow the escalation order in Rules.
 4. Repeat until no actionable findings remain.
 

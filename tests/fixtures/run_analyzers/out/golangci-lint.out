@@ -1,0 +1,1 @@
+{"Issues":[{"FromLinter":"errcheck","Text":"Error return value is not checked","Severity":"","Pos":{"Filename":"main.go","Line":4,"Column":2}}],"Report":{}}

@@ -1,0 +1,5 @@
+{"comments":[
+{"file":"a.sh","line":3,"endLine":3,"column":1,"endColumn":2,"level":"info","code":2086,"message":"Double quote to prevent globbing.","fix":null},
+{"file":"a.sh","line":6,"endLine":6,"column":1,"endColumn":2,"level":"warning","code":2034,"message":"x appears unused.","fix":null},
+{"file":"a.sh","line":7,"endLine":7,"column":1,"endColumn":2,"level":"error","code":1072,"message":"Unexpected token.","fix":null}
+]}
