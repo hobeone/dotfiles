@@ -53,6 +53,7 @@ fi
 results_json="[]"
 
 for pr in "${prs[@]}"; do
+  # shellcheck disable=SC2016 # $owner/$name/$pr are GraphQL variables
   pr_gql=$(gh api graphql -F owner="$owner" -F name="$name" -F pr="$pr" -f query='
     query($owner: String!, $name: String!, $pr: Int!) {
       repository(owner: $owner, name: $name) {

@@ -58,6 +58,7 @@ comment_id=""
 
 if [[ $target_id == PRRT_* ]]; then
   thread_id="$target_id"
+  # shellcheck disable=SC2016 # $tid is a GraphQL variable, not a shell expansion
   comment_id=$(gh api graphql -F tid="$thread_id" -f query='
     query($tid: ID!) {
       node(id: $tid) {
@@ -74,6 +75,7 @@ if [[ $target_id == PRRT_* ]]; then
 elif [[ $target_id =~ ^[0-9]+$ ]]; then
   comment_id="$target_id"
   if ((do_resolve)); then
+    # shellcheck disable=SC2016 # $owner/$name/$pr are GraphQL variables
     thread_id=$(gh api graphql -F owner="$owner" -F name="$name" -F pr="$pr" -f query='
       query($owner: String!, $name: String!, $pr: Int!) {
         repository(owner: $owner, name: $name) {
@@ -101,6 +103,7 @@ reply_url=$(gh api "repos/$repo/pulls/$pr/comments/$comment_id/replies" -f body=
 printf 'Replied in thread (comment %s): %s\n' "$comment_id" "$reply_url"
 
 if ((do_resolve)); then
+  # shellcheck disable=SC2016 # $threadId is a GraphQL variable
   res=$(gh api graphql -f query='
     mutation($threadId: ID!) {
       resolveReviewThread(input: {threadId: $threadId}) {

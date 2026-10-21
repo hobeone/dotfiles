@@ -38,7 +38,20 @@ jq -e '.commit_id == "abc123" and .event == "COMMENT"' <<<"$payload" >/dev/null 
 body=$(jq -r .body <<<"$payload")
 grep -q 'a.go:40' <<<"$body" || err "a.go orphan finding missing from body"
 grep -q 'old.go:1' <<<"$body" || err "deleted-file finding (old.go:1) missing from body"
-[[ $(head -1 <<<"$body") == '<!-- deep-pr-review head:abc123 -->' ]] || err "head marker is not the first body line"
+[[ $(head -1 <<<"$body") =~ ^'<!-- deep-pr-review head:abc123 verdict:'[A-Z_]+' threads_open:'[0-9]+' -->'$ ]] \
+  || err "head marker is not the first body line: $(head -1 <<<"$body")"
+
+# The Eligibility "already reviewed" jq program in method.md must recognise
+# the marker this script actually writes. Run the program from method.md
+# itself (not a copy) against a dry-run body; the stub head needs >=7 hex
+# chars to satisfy the marker's SHA pattern.
+marker_prog=$(awk '/^  marker=\x27/ {f=1; sub(/^  marker=\x27/, "")} f {print} f && /\x27$/ {exit}' \
+  skills-shared/deep-pr-review/method.md | sed '$ s/\x27$//')
+[[ -n $marker_prog ]] || err "could not extract the marker jq program from method.md"
+out_mk=$(STUB_HEAD=abc1234 "$script" 7 "$fx/findings.json" --repo o/r --dry-run 2>&1) || err "marker dry run failed"
+body_mk=$(jq -r .body <<<"$(awk 'f; /^## Review payload$/ {f=1}' <<<"$out_mk")")
+got_mk=$(jq -nr --arg b "$body_mk" "[{body: \$b, html_url: \"u\"}] | $marker_prog")
+[[ $got_mk == 'abc1234 u' ]] || err "method.md marker program does not match post-review.sh's marker (got '$got_mk')"
 grep -qF '**Actionable comments posted: 3 inline + 2 in body**' <<<"$body" || err "count line wrong"
 
 # G2 — format.md drift: body matches what the script actually emits.

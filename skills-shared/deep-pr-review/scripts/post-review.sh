@@ -340,6 +340,7 @@ render_review_body() {
   local threads_open_cnt="$1"
   local open_threads_txt="$2"
   printf '<!-- deep-pr-review head:%s verdict:%s threads_open:%s -->\n' "$head_sha" "$verdict" "$threads_open_cnt"
+  # shellcheck disable=SC2016 # literal markdown backticks
   printf '## Review of `%s` (%s)%s: %s\n\n' "$short_sha" "$head_sha" "$since_clause" "$header_verdict"
   printf '**Scope:** %s\n\n' "$scope"
   printf '**Previously raised, now:**\n%s\n\n' "$prev_raised"
@@ -384,6 +385,7 @@ render_review_body() {
   printf '<details>\n<summary>📒 Files selected for processing</summary>\n\n'
   printf '%s\n' "${pr_files_lines[@]}"
   printf '\n</details>\n\n</details>\n\n'
+  # shellcheck disable=SC2016 # literal markdown backticks
   printf 'Status: %s at `%s`. Becomes stale if the PR head moves.\n' "$header_verdict" "$short_sha"
 }
 
@@ -421,13 +423,16 @@ fi
 IFS=$'\t' read -r review_id review_url <<<"$review_resp"
 
 # Query live unresolved review thread IDs after posting the review and update the review body.
-resolve_script="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../pr-watcher/scripts" 2>/dev/null && pwd || true)/resolve-thread.sh"
+# resolve-thread.sh lives beside this script in the shared core, so both
+# harnesses get it (it used to live only under agy's pr-watcher).
+resolve_script="$(dirname "${BASH_SOURCE[0]}")/resolve-thread.sh"
 threads_count="$total_findings"
 open_threads_txt="none"
 if [[ -x "$resolve_script" ]]; then
   mapfile -t unresolved_lines < <("$resolve_script" --list-unresolved "$pr" --repo "$repo" 2>/dev/null || true)
   if ((${#unresolved_lines[@]} > 0)); then
     threads_count="${#unresolved_lines[@]}"
+    # shellcheck disable=SC2016 # literal markdown backticks
     open_threads_txt=$'\n'$(printf -- '- `%s`\n' "${unresolved_lines[@]}")
   elif ((total_findings == 0)); then
     threads_count=0
