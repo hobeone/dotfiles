@@ -604,6 +604,11 @@ guard); or pure style with no observable effect.
 
 Keep CONFIRMED and PLAUSIBLE that survive all 4 gates. Drop REFUTED.
 
+**Every verifier also returns `strongest_refutation`:** the strongest argument
+it found that the candidate is not a real problem or not worth fixing, and why
+that argument fails (for a REFUTED candidate, the refutation that held). Render
+needs it: it becomes the finding's `counter_argument`.
+
 ---
 
 ## Phase 5 — Gap Sweep
@@ -663,6 +668,8 @@ each finding into a JSON array at `<run-dir>/findings.json`:
     "verdict": "CONFIRMED",
     "title": "Keep each displaced article in one terminal disposition.",
     "body": "Prose explaining the mechanism and the failure...",
+    "counter_argument": "The strongest case that this is fine: ... and why it does not hold.",
+    "rejected_alternative": "Rolling back in place was rejected because ...",
     "sites": [
       {"file": "internal/assembler/filewriter.go", "lines": "511-528", "role": "anchor", "note": "reject or roll back before replacing ownership"},
       {"file": "docs/durability-contract.md", "lines": "945-964", "role": "sibling", "note": "update the stale claim"}
@@ -671,6 +678,18 @@ each finding into a JSON array at `<run-dir>/findings.json`:
   }
 ]
 ```
+
+Governance fields are enforced, not advisory:
+
+- `counter_argument` is required on every `🔴 Critical` / `🟠 Major` finding.
+  Take it from the verifier's `strongest_refutation` (Verify); do not invent
+  one at Render time — if the verifier did not return it, ask again.
+- `rejected_alternative` is required on every `🔧 Moderate` / `🏗️ Heavy lift`
+  finding: one fix considered and rejected, with why.
+
+`post-review.sh` refuses to post (before any network write) when a finding is
+missing a required field, and names the finding. The fields are optional on
+other findings and rendered when present.
 
 `line` is the **last** line of the anchored range and must be a line the diff
 touches on the RIGHT side, or GitHub rejects the comment. `start_line` is

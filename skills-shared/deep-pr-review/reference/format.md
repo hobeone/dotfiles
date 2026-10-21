@@ -61,8 +61,12 @@ _{category}_ | _{severity}_ | _{effort}_
 inputs or state trigger it and what goes wrong. Quote the line if it settles
 the point. Do not restate the diff.}
 
+**Strongest counter-argument:** {Critical/Major only — see below}
+
 - `{file}#L{start}-L{end}`: {what to change here}
 - `{file}#L{start}-L{end}`: {what to change here}
+
+**Rejected alternative:** {Moderate/Heavy lift only — see below}
 
 {Optional: "Add coverage for: ..." naming the cases a test must exercise.}
 
@@ -94,6 +98,18 @@ file and line range that must change, and what the end state is}.
 
 Rules for the template:
 
+- **Governance fields** (JSON keys on the finding; `post-review.sh` refuses to
+  post, before any network call, when one that is required is missing or blank):
+  - `counter_argument` — required when severity is `🔴 Critical` or `🟠 Major`.
+    The strongest argument that this is *not* a real problem or not worth
+    fixing. The natural source is the verifier's `strongest_refutation`: the
+    best refutation it tried and why it failed. Rendered as
+    `**Strongest counter-argument:**` right after the prose, before the
+    per-site fix lines.
+  - `rejected_alternative` — required when effort is `🔧 Moderate` or
+    `🏗️ Heavy lift`. One fix that was considered and rejected, with why.
+    Rendered as `**Rejected alternative:**` after the per-site fix lines.
+  Both are optional (and rendered when present) for every other finding.
 - The `📍 Affects` block appears **only** when the finding spans more than one
   location. Omit it for a single-site finding.
 - The `🤖 Prompt for AI Agents` block is **mandatory on every finding**. Its

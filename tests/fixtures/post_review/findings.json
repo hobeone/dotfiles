@@ -1,7 +1,8 @@
 [
   {"path": "a.go", "line": 2, "category": "🐛 Correctness & Logic", "severity": "🟠 Major",
    "effort": "🧹 Quick fix", "verdict": "CONFIRMED", "title": "Inline one.",
-   "body": "Body one.", "agent_prompt": "Fix A."},
+   "body": "Body one.", "agent_prompt": "Fix A.",
+   "counter_argument": "Counter one: the caller may already validate this input."},
   {"path": "a.go", "line": 40, "category": "🐛 Correctness & Logic", "severity": "🟡 Minor",
    "effort": "🧹 Quick fix", "verdict": "PLAUSIBLE", "title": "Orphan one.",
    "body": "Body two.", "agent_prompt": "Fix orphan."},
@@ -10,7 +11,8 @@
    "title": "Degrades to single line.", "body": "Body three.", "agent_prompt": "Fix B."},
   {"path": "b.go", "line": 2, "category": "🐛 Correctness & Logic", "severity": "🟠 Major",
    "effort": "🧹 Quick fix", "verdict": "CONFIRMED", "title": "Inline in second file.",
-   "body": "Body four.", "agent_prompt": "Fix b.go."},
+   "body": "Body four.", "agent_prompt": "Fix b.go.",
+   "counter_argument": "Counter four: the second file is only loaded in tests."},
   {"path": "old.go", "line": 1, "category": "🧹 Maintainability", "severity": "🟡 Minor",
    "effort": "🧹 Quick fix", "verdict": "PLAUSIBLE", "title": "Deleted file finding.",
    "body": "Body five.", "agent_prompt": "Note about old.go."}

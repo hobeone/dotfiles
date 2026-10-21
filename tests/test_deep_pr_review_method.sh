@@ -239,5 +239,30 @@ grep -qF -- '--draft' "$m" || err "method.md does not document --draft"
 assert_exists "$core/scripts/read-back.sh"
 [[ -x $core/scripts/read-back.sh ]] || err "read-back.sh is not executable"
 
+# Governance: the schema callers show must carry the fields post-review.sh now
+# requires, or every post they feed would be refused. Every example finding in
+# a caller whose severity is Critical/Major needs counter_argument, and one
+# whose effort is Moderate/Heavy needs rejected_alternative. Checked per
+# example block (a "path" line starts one).
+for f in "${callers[@]}"; do
+  out=$(awk '
+    function flush() {
+      if (!have) return
+      if ((sev ~ /Critical|Major/) && !ca) print FILENAME ": example finding " n " (" sev ") lacks counter_argument"
+      if ((eff ~ /Moderate|Heavy/) && !ra) print FILENAME ": example finding " n " (" eff ") lacks rejected_alternative"
+    }
+    /"path":/ { flush(); have = 1; n++; sev = ""; eff = ""; ca = 0; ra = 0 }
+    /"severity":/ { sev = $0 }
+    /"effort":/ { eff = $0 }
+    /"counter_argument":/ { ca = 1 }
+    /"rejected_alternative":/ { ra = 1 }
+    END { flush() }
+  ' "$f")
+  [[ -z $out ]] || err "$out"
+done
+grep -qF '"counter_argument"' home/.gemini/skills/pr-watcher/SKILL.md || err "pr-watcher findings note does not mention counter_argument"
+grep -qF '"rejected_alternative"' home/.gemini/skills/pr-watcher/SKILL.md || err "pr-watcher findings note does not mention rejected_alternative"
+grep -qF 'strongest_refutation' "$m" || err "method.md Verify does not return strongest_refutation"
+
 ((fail)) && exit 1
 echo PASS

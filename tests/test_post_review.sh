@@ -384,5 +384,44 @@ fi
 grep -qi 'perl' <<<"$out" || err "no-perl refusal does not mention perl: $out"
 if grep -q 'reviews --input\|issues/7/comments\|statuses/' "$STUB_LOG"; then err "posted although redaction was unavailable"; fi
 
+# Governance: a Critical/Major finding carries counter_argument, a Moderate/Heavy
+# one carries rejected_alternative; both are rendered, and a finding missing a
+# required field is refused BEFORE any gh call (the log must stay empty).
+refuses() { # NAME JQ-PROGRAM WANT-SUBSTRING...
+  local name=$1 prog=$2 want=$3 out
+  jq "$prog" "$fx/findings-sites.json" > "$work/gov.json"
+  : > "$STUB_LOG"
+  if out=$("$script" 7 "$work/gov.json" --repo o/r 2>&1); then err "$name: exited 0"; return; fi
+  grep -qF -- "$want" <<<"$out" || err "$name: message lacks '$want': $out"
+  grep -qF 'Multi-site finding.' <<<"$out" || err "$name: message does not name the finding: $out"
+  [[ ! -s $STUB_LOG ]] || err "$name: made gh calls before refusing: $(cat "$STUB_LOG")"
+}
+refuses "major without counter_argument" 'map(del(.counter_argument))' 'counter_argument'
+refuses "heavy lift without rejected_alternative" 'map(del(.rejected_alternative))' 'rejected_alternative'
+refuses "blank counter_argument" 'map(.counter_argument = "  ")' 'counter_argument'
+refuses "moderate without rejected_alternative" 'map(.effort = "🔧 Moderate" | del(.rejected_alternative))' 'rejected_alternative'
+refuses "critical without counter_argument" 'map(.severity = "🔴 Critical" | del(.counter_argument))' 'counter_argument'
+# Not required: a Minor quick fix needs neither field.
+jq 'map(.severity = "🟡 Minor" | .effort = "🧹 Quick fix" | del(.counter_argument, .rejected_alternative))' "$fx/findings-sites.json" > "$work/gov-ok.json"
+"$script" 7 "$work/gov-ok.json" --repo o/r --dry-run >/dev/null 2>&1 || err "Minor quick fix was refused for lacking governance fields"
+# The dry run refuses too (it is the preview of the post).
+jq 'map(del(.counter_argument))' "$fx/findings-sites.json" > "$work/gov.json"
+if "$script" 7 "$work/gov.json" --repo o/r --dry-run >/dev/null 2>&1; then err "dry run accepted a finding missing counter_argument"; fi
+
+# Rendering: counter-argument before the per-site fix lines, rejected
+# alternative after them.
+c_body=$(jq -r '.comments[0].body' <<<"$payload_sites")
+grep -qF '**Strongest counter-argument:** Strongest counter: both sites are only reached from tests.' <<<"$c_body" || err "counter-argument not rendered"
+grep -qF '**Rejected alternative:** Guarding at the call site was rejected' <<<"$c_body" || err "rejected alternative not rendered"
+ca_ln=$(grep -n 'Strongest counter-argument' <<<"$c_body" | head -1 | cut -d: -f1)
+# shellcheck disable=SC2016 # literal markdown backticks in the pattern
+site_ln=$(grep -n '^- `a.go#L2-L2`' <<<"$c_body" | head -1 | cut -d: -f1)
+ra_ln=$(grep -n 'Rejected alternative' <<<"$c_body" | head -1 | cut -d: -f1)
+[[ -n $ca_ln && -n $site_ln && -n $ra_ln && $ca_ln -lt $site_ln && $site_ln -lt $ra_ln ]] \
+  || err "order must be counter-argument < site lines < rejected alternative (got $ca_ln/$site_ln/$ra_ln)"
+# A finding without the optional fields renders neither label.
+grep -qF 'Rejected alternative' <<<"$(jq -r '.comments[] | select(.line == 3) | .body' <<<"$payload")" \
+  && err "rendered a rejected-alternative label for a finding without one"
+
 ((fail)) && exit 1
 echo PASS

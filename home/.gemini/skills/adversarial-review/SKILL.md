@@ -105,9 +105,12 @@ The findings array must follow the CodeRabbit format:
     "start_line": 138,
     "category": "🔒 Security",
     "severity": "🔴 Critical",
+    "effort": "🔧 Moderate",
     "verdict": "CONFIRMED",
     "title": "Short descriptive title of the defect",
     "body": "Detailed failure scenario and technical explanation...",
+    "counter_argument": "Required for Critical/Major: the strongest argument this is not a real problem, and why it fails.",
+    "rejected_alternative": "Required for Moderate/Heavy lift: one fix considered and rejected, with why.",
     "sites": [
       {
         "file": "path/to/file.ext",

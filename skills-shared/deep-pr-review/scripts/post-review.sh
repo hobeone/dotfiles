@@ -88,6 +88,24 @@ command -v jq >/dev/null || die "jq is not installed"
 
 jq -e 'type == "array"' "$findings" >/dev/null || die "findings file must contain a JSON array"
 
+# Governance: the review is only as trustworthy as the doubts it records. A
+# Critical/Major finding must carry the strongest argument against itself
+# (counter_argument), and a finding whose fix is Moderate or a Heavy lift must
+# name one fix that was considered and rejected (rejected_alternative). Checked
+# before any network call, so a refusal never leaves a half-posted review.
+missing=$(jq -r '
+  def blank: (. // "") | (type != "string") or (gsub("\\s"; "") == "");
+  to_entries[] | .key as $i | .value as $f
+  | ( if ($f.severity == "🔴 Critical" or $f.severity == "🟠 Major") and ($f.counter_argument | blank)
+      then "finding [\($i)] (\($f.title // "untitled") at \($f.path // "?"):\($f.line // "?")): severity \($f.severity) requires counter_argument" else empty end ),
+    ( if ($f.effort == "🔧 Moderate" or $f.effort == "🏗️ Heavy lift") and ($f.rejected_alternative | blank)
+      then "finding [\($i)] (\($f.title // "untitled") at \($f.path // "?"):\($f.line // "?")): effort \($f.effort) requires rejected_alternative" else empty end )
+' "$findings") || die "could not validate findings against the governance rules"
+if [[ -n $missing ]]; then
+  printf '%s: refusing to post; findings missing required fields:\n%s\n' "${0##*/}" "$missing" >&2
+  exit 1
+fi
+
 # Rendered once: the --summarize lines of run-analyzers.sh (blank line between
 # them so Markdown keeps two paragraphs), or an explicit statement that no
 # analyzers ran. Never silent about it.
@@ -254,8 +272,14 @@ render_body() {
     ( "_" + .category + "_ | _" + .severity + "_ | _" + .effort + "_\n\n"
     + "**" + .title + "**\n\n"
     + .body + "\n"
+    + ( if (.counter_argument // "") != ""
+        then "\n**Strongest counter-argument:** " + .counter_argument + "\n"
+        else "" end )
     + ( if (.sites // [] | length) > 0
         then "\n" + ( .sites | map("- `" + .file + "#L" + (.lines | sub("-"; "-L")) + "`: " + (.note // "")) | join("\n") ) + "\n"
+        else "" end )
+    + ( if (.rejected_alternative // "") != ""
+        then "\n**Rejected alternative:** " + .rejected_alternative + "\n"
         else "" end )
     + ( if (.sites // [] | length) > 1
         then "\n<details>\n<summary>📍 Affects " + ((.sites | length) | tostring) + " files</summary>\n\n"

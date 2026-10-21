@@ -162,9 +162,12 @@ The findings array follows the CodeRabbit format:
     "start_line": 80,
     "category": "🔒 Security",
     "severity": "🔴 Critical",
+    "effort": "🔧 Moderate",
     "verdict": "CONFIRMED",
     "title": "Unvalidated token expiry enables session replay",
     "body": "The token validation handler parses the claims but omits checking exp against time.Now()...",
+    "counter_argument": "An upstream gateway may already reject expired tokens, but this service is also reachable directly on the internal network, so the gateway is not a guarantee.",
+    "rejected_alternative": "Shortening the token lifetime instead was rejected: it narrows the replay window but leaves expired tokens accepted.",
     "sites": [
       {
         "file": "pkg/auth/session.go",
