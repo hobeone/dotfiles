@@ -1,5 +1,12 @@
 #!/usr/bin/env bash
 # Stub gh for post-review.sh tests. Logs every call; serves canned output.
+#
+# Knobs (all optional):
+#   STUB_REVIEWS          file served as the raw JSON array of PR reviews (default [])
+#   STUB_REVIEW           file served for GET reviews/<id> (read-back)
+#   STUB_REVIEW_COMMENTS  file served for GET reviews/<id>/comments
+#   STUB_PAYLOAD_OUT      where to copy the --input file of a review create
+#   STUB_FAIL_REVIEW      make the review create fail
 printf '%s\n' "$*" >> "$STUB_LOG"
 # shellcheck disable=SC2016 # literal markdown backticks in case statement
 case "$*" in
@@ -10,12 +17,24 @@ case "$*" in
   "api repos/o/r/pulls/7/files --paginate --jq"*)
     printf '* `a.go`\n* `b.go`\n* `old.go`\n' ;;
   "repo view --json nameWithOwner --jq .nameWithOwner") echo o/r ;;
-  "api repos/o/r/pulls/7/reviews"*)
+  "api user --jq .login") echo me ;;
+  "api repos/o/r/pulls/7/reviews --paginate")
+    if [[ -n ${STUB_REVIEWS:-} ]]; then cat "$STUB_REVIEWS"; else echo '[]'; fi ;;
+  "api repos/o/r/pulls/7/reviews/"*"/comments --paginate")
+    cat "${STUB_REVIEW_COMMENTS:?stub: STUB_REVIEW_COMMENTS not set}" ;;
+  "api repos/o/r/pulls/7/reviews/"[0-9]*)
+    cat "${STUB_REVIEW:?stub: STUB_REVIEW not set}" ;;
+  "api -X PUT repos/o/r/pulls/7/reviews/"*) ;;
+  "api repos/o/r/pulls/7/reviews --input "*)
     if [[ -n ${STUB_FAIL_REVIEW:-} ]]; then
       echo "stub gh: forced review failure" >&2
       exit 1
     fi
-    echo https://example.test/review ;;
+    if [[ -n ${STUB_PAYLOAD_OUT:-} ]]; then
+      all="$*"; input=${all#*--input }; input=${input%% *}
+      cp "$input" "$STUB_PAYLOAD_OUT"
+    fi
+    printf '901\thttps://example.test/o/r/pull/7#pullrequestreview-901\n' ;;
   "api repos/o/r/issues/7/comments"*) echo https://example.test/comment ;;
   *) echo "stub gh: unexpected: $*" >&2; exit 99 ;;
 esac

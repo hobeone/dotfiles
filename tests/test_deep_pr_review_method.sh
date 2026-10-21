@@ -230,5 +230,14 @@ for h in claude gemini; do
   grep -qF 'This file does **not** introduce new audit items.' "$f" || err "$f lacks the addenda contract paragraph"
 done
 
+# Draft + read-back: method.md documents the flag, the script and the section,
+# and the script exists. "Read-back" is a ## section, not a Phase (the phase
+# list above is pinned).
+grep -qxF '## Read-back' "$m" || err "method.md lacks the '## Read-back' section"
+grep -qF 'scripts/read-back.sh' "$m" || err "method.md does not reference read-back.sh"
+grep -qF -- '--draft' "$m" || err "method.md does not document --draft"
+assert_exists "$core/scripts/read-back.sh"
+[[ -x $core/scripts/read-back.sh ]] || err "read-back.sh is not executable"
+
 ((fail)) && exit 1
 echo PASS

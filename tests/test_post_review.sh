@@ -241,5 +241,103 @@ out=$("$script" -h 2>&1); rc=$?
 ((rc == 0)) || err "-h exited $rc, want 0"
 grep -q 'Usage:' <<<"$out" || err "-h did not print usage"
 
+# --draft: a PENDING review (no `event` in the payload), walkthrough folded
+# into the body, no issue comment, no commit status, no thread-list patch, and a
+# snapshot saved for read-back.sh.
+export XDG_STATE_HOME=$work/state
+cat > "$work/review-comments.json" <<'EOF'
+[{"id":11,"path":"a.go","line":2,"body":"c1"},{"id":12,"path":"b.go","line":2,"body":"c2"}]
+EOF
+export STUB_REVIEW_COMMENTS=$work/review-comments.json
+: > "$STUB_LOG"
+out_dr=$(STUB_PAYLOAD_OUT=$work/draft-payload.json "$script" 7 "$fx/findings.json" --repo o/r --walkthrough "$fx/walkthrough.md" --draft 2>&1) \
+  || err "--draft post failed: $out_dr"
+[[ -s $work/draft-payload.json ]] || err "--draft never created a review"
+jq -e 'has("event") | not' "$work/draft-payload.json" >/dev/null || err "--draft payload carries an event (would not be PENDING)"
+jq -e '.comments | length == 3' "$work/draft-payload.json" >/dev/null || err "--draft payload lost its inline comments"
+head -1 < <(jq -r .body "$work/draft-payload.json") | grep -q '^<!-- deep-pr-review head:abc123 ' \
+  || err "--draft body does not start with the marker"
+grep -qF '<summary>📝 Walkthrough</summary>' <(jq -r .body "$work/draft-payload.json") || err "--draft body lacks the folded walkthrough"
+grep -qF 'Adds two small Go files' <(jq -r .body "$work/draft-payload.json") || err "--draft body lacks the walkthrough text"
+if grep -q 'issues/7/comments' "$STUB_LOG"; then err "--draft posted a walkthrough issue comment"; fi
+if grep -q 'statuses/' "$STUB_LOG"; then err "--draft posted a commit status"; fi
+if grep -q -- '-X PUT' "$STUB_LOG"; then err "--draft patched the open-thread list"; fi
+snap="$XDG_STATE_HOME/deep-pr-review/o_r_7_901.json"
+[[ -r $snap ]] || err "--draft wrote no snapshot at $snap"
+jq -e '.review_id == 901 and .head == "abc123" and (.comments | length == 2) and (.comments[0].id == 11) and (.body | startswith("<!-- deep-pr-review"))' "$snap" >/dev/null \
+  || err "snapshot content wrong: $(cat "$snap" 2>/dev/null)"
+grep -qF "snapshot: $snap" <<<"$out_dr" || err "--draft did not print the snapshot path"
+grep -qF 'pull/7/files' <<<"$out_dr" || err "--draft did not print where to submit"
+
+# Without --draft the payload still carries event=COMMENT (publish stays the default).
+STUB_PAYLOAD_OUT=$work/pub-payload.json "$script" 7 "$fx/findings.json" --repo o/r >/dev/null 2>&1 || err "publish failed"
+jq -e '.event == "COMMENT"' "$work/pub-payload.json" >/dev/null || err "publish payload lost event=COMMENT"
+
+# --draft dry run: shows the payload, folds the walkthrough, makes no write.
+: > "$STUB_LOG"
+out_dd=$("$script" 7 "$fx/findings.json" --repo o/r --walkthrough "$fx/walkthrough.md" --draft --dry-run 2>&1) || err "--draft dry run failed: $out_dd"
+grep -q '^## Walkthrough comment$' <<<"$out_dd" && err "--draft dry run shows a separate walkthrough comment"
+jq -e 'has("event") | not' <<<"$(awk 'f; /^## Review payload$/ {f=1}' <<<"$out_dd")" >/dev/null || err "--draft dry-run payload carries an event"
+if grep -q 'reviews --input' "$STUB_LOG"; then err "--draft dry run created a review"; fi
+
+# An existing PENDING review of the same user: refuse before any write.
+echo '[{"id":55,"state":"PENDING","user":{"login":"me"}}]' > "$work/reviews-pending.json"
+: > "$STUB_LOG"
+if out=$(STUB_REVIEWS=$work/reviews-pending.json "$script" 7 "$fx/findings.json" --repo o/r --draft 2>&1); then
+  err "--draft with an existing pending review exited 0"
+fi
+grep -qF 'already have a PENDING review (id 55)' <<<"$out" || err "missing pending-review refusal: $out"
+if grep -q 'reviews --input\|issues/7/comments\|statuses/' "$STUB_LOG"; then err "wrote something despite an existing pending review"; fi
+# Another user's pending review (or my own submitted one) is not a blocker.
+echo '[{"id":56,"state":"PENDING","user":{"login":"someone"}},{"id":57,"state":"COMMENTED","user":{"login":"me"}}]' > "$work/reviews-other.json"
+STUB_REVIEWS=$work/reviews-other.json "$script" 7 "$fx/findings.json" --repo o/r --draft >/dev/null 2>&1 \
+  || err "--draft refused although the pending review belongs to someone else"
+# Publish mode does not consult the pending list.
+: > "$STUB_LOG"
+STUB_REVIEWS=$work/reviews-pending.json "$script" 7 "$fx/findings.json" --repo o/r >/dev/null 2>&1 || err "publish refused because of a pending review"
+
+# read-back.sh: kept / edited / removed / added against the snapshot.
+rb=skills-shared/deep-pr-review/scripts/read-back.sh
+mkdir -p "$work/rb"
+cat > "$work/rb/reviews.json" <<'EOF'
+[{"id":3,"state":"COMMENTED","user":{"login":"me"}},
+ {"id":901,"state":"PENDING","user":{"login":"me"}},
+ {"id":950,"state":"COMMENTED","user":{"login":"other"}}]
+EOF
+cat > "$work/rb/review.json" <<'EOF'
+{"id":901,"state":"PENDING","body":"edited body"}
+EOF
+# c1 kept (CRLF and trailing space are UI noise, not an edit), c2 removed,
+# c3 edited, c4 added.
+cat > "$work/rb/snap-src.json" <<'EOF'
+{"review_id":901,"head":"abc123","body":"orig body",
+ "comments":[{"id":11,"path":"a.go","line":2,"body":"c1"},
+             {"id":12,"path":"b.go","line":2,"body":"c2"},
+             {"id":13,"path":"a.go","line":3,"body":"c3 before"}]}
+EOF
+cp "$work/rb/snap-src.json" "$XDG_STATE_HOME/deep-pr-review/o_r_7_901.json"
+printf '%s' '[{"id":11,"path":"a.go","line":2,"body":"c1\r\n "},
+ {"id":13,"path":"a.go","line":3,"body":"c3 after"},
+ {"id":14,"path":"b.go","line":null,"original_line":9,"body":"c4 new"}]' > "$work/rb/comments.json"
+rb_out=$(STUB_REVIEWS=$work/rb/reviews.json STUB_REVIEW=$work/rb/review.json STUB_REVIEW_COMMENTS=$work/rb/comments.json \
+  "$rb" 7 --repo o/r 2>&1) || err "read-back.sh failed: $rb_out"
+jq -e '(.kept | map(.id)) == [11]' <<<"$rb_out" >/dev/null || err "read-back kept wrong: $rb_out"
+jq -e '(.removed | map(.id)) == [12]' <<<"$rb_out" >/dev/null || err "read-back removed wrong: $rb_out"
+jq -e '(.edited | length == 1) and .edited[0].id == 13 and .edited[0].before == "c3 before" and .edited[0].after == "c3 after" and .edited[0].path == "a.go"' <<<"$rb_out" >/dev/null \
+  || err "read-back edited wrong: $rb_out"
+jq -e '(.added | length == 1) and .added[0].id == 14 and .added[0].line == 9 and .added[0].body == "c4 new"' <<<"$rb_out" >/dev/null \
+  || err "read-back added wrong: $rb_out"
+jq -e '.body_changed == true' <<<"$rb_out" >/dev/null || err "read-back missed the body change"
+# Unedited body and comments: everything kept, nothing else.
+printf '%s' '{"id":901,"state":"PENDING","body":"orig body\n"}' > "$work/rb/review-same.json"
+printf '%s' '[{"id":11,"path":"a.go","line":2,"body":"c1"},{"id":12,"path":"b.go","line":2,"body":"c2"},{"id":13,"path":"a.go","line":3,"body":"c3 before"}]' > "$work/rb/comments-same.json"
+rb_same=$(STUB_REVIEWS=$work/rb/reviews.json STUB_REVIEW=$work/rb/review-same.json STUB_REVIEW_COMMENTS=$work/rb/comments-same.json \
+  "$rb" 7 --repo o/r --review-id 901 2>&1) || err "read-back (unchanged) failed: $rb_same"
+jq -e '(.kept | length == 3) and (.edited | length == 0) and (.removed | length == 0) and (.added | length == 0) and .body_changed == false' <<<"$rb_same" >/dev/null \
+  || err "read-back of an untouched review is not all-kept: $rb_same"
+# No snapshot: refuse with a pointer to --draft.
+if out=$(XDG_STATE_HOME=$work/empty-state STUB_REVIEWS=$work/rb/reviews.json "$rb" 7 --repo o/r 2>&1); then err "read-back without a snapshot exited 0"; fi
+grep -qF 'post-review.sh --draft' <<<"$out" || err "read-back no-snapshot message lacks the --draft pointer: $out"
+
 ((fail)) && exit 1
 echo PASS

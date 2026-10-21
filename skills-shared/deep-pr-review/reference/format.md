@@ -232,6 +232,11 @@ GitHub remote") as its own line inside the `ℹ️ Review info` block, right aft
 **Angle failures**: Angle N — <error>
 ```
 
+A draft (`post-review.sh --draft`) has the same body, except that the
+walkthrough template below is folded into the body directly after the marker
+line (it is not posted as a separate issue comment) and **Open threads** reads
+`(not computed: draft review)`. The marker stays the first line.
+
 Add a `## Additional comments (not anchorable)` section to the body for any
 finding whose line GitHub refused, so nothing is silently dropped. Add a
 `{k} lower-severity findings were cut at the 15-finding cap.` line when the cap
@@ -241,7 +246,8 @@ bit.
 
 ## Walkthrough template
 
-Posted as a separate issue comment, before the review.
+Posted as a separate issue comment, before the review (in draft mode it is
+folded into the review body instead).
 
 ````markdown
 <details>

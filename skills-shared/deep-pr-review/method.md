@@ -715,6 +715,17 @@ the anchors would land on different code. Re-run the review from Eligibility.
 Pass `--sequential` when ⟨dispatch-parallel⟩ was unavailable and the angles ran
 in this context; the review body's Method line then says so.
 
+Pass `--draft` when the user wants to look the review over before anyone else
+does. It creates a **pending** review (visible only to the user's account): the
+walkthrough is folded into the top of the review body instead of posted as an
+issue comment, no commit status is set, and no thread list is patched, because
+a draft is not a verdict. If the user already has a pending review on the PR the
+script refuses (GitHub allows one). It saves a snapshot of what it created and
+prints its path and the PR's files URL, where the user edits and submits the
+review. Publishing stays the default — other tooling depends on published
+verdicts, markers and statuses. After the user has edited the draft, see
+`## Read-back`.
+
 The script writes `<!-- deep-pr-review head:<sha> -->` as the first line of the
 review body; Eligibility uses it to detect a prior review. When the Architecture
 Gate halts, put the same marker as the first line of the architectural review
@@ -749,6 +760,32 @@ terminal in the same format, followed by the analyzer summary
 so tools that did not run are visible in local output too, and the selected/
 skipped angles from `<run-dir>/angles.json` (tier, then each skipped angle with
 its reason). Do not open a PR to have somewhere to post.
+
+---
+
+## Read-back
+
+Not a phase: run it only when the user asks to read back a draft they edited
+(a review created with `post-review.sh --draft`). It is report-only — never
+publish, and never edit the pending review.
+
+```bash
+⟨skill-dir⟩/scripts/read-back.sh <N> [--repo OWNER/NAME] [--review-id ID]
+```
+
+It finds the user's newest review on the PR that has a snapshot, re-fetches its
+body and comments, and prints JSON: `kept`, `edited` (`before` / `after`),
+`removed`, `added`, and `body_changed`. Then:
+
+1. For every `edited` comment, re-verify the edited claim against the code at
+   the review's head (`head` in the snapshot) with the Verify 4-gate rules, one
+   ⟨dispatch-parallel⟩ entry per edited comment. Report any edit that made the
+   claim inaccurate, quoting the line that contradicts it.
+2. Treat an `added` comment the same way: it is the user's claim, verify it.
+3. For every `removed` comment that Verify had CONFIRMED in the original run,
+   ask the user (⟨ask-user⟩) whether the removal was intended.
+4. Report the kept / edited / removed / added counts and whether the body
+   changed.
 
 ---
 

@@ -4,7 +4,7 @@
 # Usage:
 #   post-review.sh <pr-number> <findings.json> [--walkthrough FILE] [--repo O/R]
 #                  [--expect-head SHA] [--analyzers FILE] [--angles FILE]
-#                  [--sequential] [--dry-run]
+#                  [--sequential] [--draft] [--dry-run]
 #
 # --angles FILE is select-angles.sh's JSON. The Method line then says
 # "ran K of N angles (tier: T)" and lists each skipped angle with its reason;
@@ -13,6 +13,13 @@
 #
 # Posts exactly one review with event=COMMENT. Never approves, never requests
 # changes, never edits the branch.
+#
+# --draft creates a PENDING review instead (the POST omits `event`): only the
+# token's user can see it, so they can edit or delete comments in the GitHub UI
+# and submit it themselves. A draft is not a verdict, so it posts no walkthrough
+# issue comment (the walkthrough is folded into the review body), no commit
+# status, and does not patch the open-thread list. A snapshot of what was
+# created is saved so read-back.sh can later report the user's edits.
 #
 # The walkthrough comment is posted via `gh api repos/.../issues/.../comments`
 # rather than the repo's gh-post wrapper: it targets a plain issue-comment
@@ -41,6 +48,7 @@ checks="none recorded"
 not_verified="not recorded"
 analyzers=""
 angles_file=""
+draft=0
 
 while (($#)); do
   case "$1" in
@@ -57,7 +65,8 @@ while (($#)); do
     --angles)            angles_file="${2:?--angles needs a file}"; shift 2 ;;
     --dry-run)           dry_run=1; shift ;;
     --sequential)        sequential=1; shift ;;
-    -h|--help)           sed -n '2,13p' "$0"; exit 0 ;;
+    --draft)             draft=1; shift ;;
+    -h|--help)           sed -n '2,22p' "$0"; exit 0 ;;
     -*)                  die "unknown flag: $1" ;;
     *)
       if [[ -z $pr ]]; then pr="$1"
@@ -68,7 +77,7 @@ while (($#)); do
   esac
 done
 
-[[ -n $pr && -n $findings ]] || die "usage: post-review.sh <pr-number> <findings.json> [--walkthrough FILE] [--repo O/R] [--expect-head SHA] [--verdict V] [--since SHA] [--scope TEXT] [--previously-raised TEXT] [--checks TEXT] [--not-verified TEXT] [--analyzers FILE] [--angles FILE] [--sequential] [--dry-run]"
+[[ -n $pr && -n $findings ]] || die "usage: post-review.sh <pr-number> <findings.json> [--walkthrough FILE] [--repo O/R] [--expect-head SHA] [--verdict V] [--since SHA] [--scope TEXT] [--previously-raised TEXT] [--checks TEXT] [--not-verified TEXT] [--analyzers FILE] [--angles FILE] [--sequential] [--draft] [--dry-run]"
 [[ $pr =~ ^[0-9]+$ ]] || die "pr-number must be numeric, got '$pr'"
 [[ -r $findings ]] || die "cannot read findings file: $findings"
 [[ -z $walkthrough || -r $walkthrough ]] || die "cannot read walkthrough file: $walkthrough"
@@ -130,6 +139,20 @@ fi
 
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
+
+# GitHub allows one PENDING review per user per PR; a second create is rejected
+# (422, "a pending review already exists" per user reports — the REST docs do
+# not state it). Check up front, read-only, so the refusal names the existing
+# review instead of surfacing as an opaque API error after the work is done.
+if ((draft)); then
+  me=$(gh api user --jq .login) || die "could not resolve the authenticated GitHub user"
+  existing_pending=$(gh api "repos/$repo/pulls/$pr/reviews" --paginate \
+    | jq -rs --arg me "$me" 'add // [] | map(select(.state == "PENDING" and .user.login == $me)) | .[0].id // empty') \
+    || die "could not list reviews for $repo#$pr"
+  if [[ -n $existing_pending ]]; then
+    die "you already have a PENDING review (id $existing_pending) on $repo#$pr; GitHub allows one — submit or delete it, then re-run"
+  fi
+fi
 
 # ---------------------------------------------------------------------------
 # Commentable RIGHT-side lines. GitHub 422s the whole review if any single
@@ -383,6 +406,16 @@ render_review_body() {
   local threads_open_cnt="$1"
   local open_threads_txt="$2"
   printf '<!-- deep-pr-review head:%s verdict:%s threads_open:%s -->\n' "$head_sha" "$verdict" "$threads_open_cnt"
+  if ((draft)) && [[ -n $walkthrough ]]; then
+    # No separate issue comment in draft mode, so the walkthrough rides at the
+    # top of the body. The marker above must stay the first line.
+    if grep -qF '<summary>📝 Walkthrough</summary>' "$walkthrough"; then
+      cat "$walkthrough"
+    else
+      printf '<details>\n<summary>📝 Walkthrough</summary>\n\n'; cat "$walkthrough"; printf '\n\n</details>'
+    fi
+    printf '\n\n'
+  fi
   # shellcheck disable=SC2016 # literal markdown backticks
   printf '## Review of `%s` (%s)%s: %s\n\n' "$short_sha" "$head_sha" "$since_clause" "$header_verdict"
   printf '**Scope:** %s\n\n' "$scope"
@@ -434,22 +467,58 @@ render_review_body() {
   printf 'Status: %s at `%s`. Becomes stale if the PR head moves.\n' "$header_verdict" "$short_sha"
 }
 
-render_review_body "$total_findings" "(populating thread IDs...)" > "$work/body.md"
+if ((draft)); then
+  render_review_body "$total_findings" "(not computed: draft review)" > "$work/body.md"
+else
+  render_review_body "$total_findings" "(populating thread IDs...)" > "$work/body.md"
+fi
 
+# A draft omits `event`, which is what makes GitHub create it PENDING.
 jq -n --arg commit_id "$head_sha" \
+      --argjson draft "$draft" \
       --rawfile body "$work/body.md" \
       --slurpfile comments <(cat "$work/inline.jsonl") \
-  '{commit_id: $commit_id, body: $body, event: "COMMENT", comments: $comments}' \
+  '{commit_id: $commit_id, body: $body, comments: $comments}
+   + (if $draft == 1 then {} else {event: "COMMENT"} end)' \
   > "$work/review.json"
 
 if ((dry_run)); then
-  printf '# DRY RUN — nothing posted\n# repo=%s pr=%s head=%s inline=%s orphan=%s\n\n' \
-    "$repo" "$pr" "$head_sha" "$n_inline" "$n_orphan"
-  if [[ -n $walkthrough ]]; then
+  printf '# DRY RUN — nothing posted\n# repo=%s pr=%s head=%s inline=%s orphan=%s draft=%s\n\n' \
+    "$repo" "$pr" "$head_sha" "$n_inline" "$n_orphan" "$draft"
+  if [[ -n $walkthrough ]] && ((! draft)); then
     printf '## Walkthrough comment\n\n'; cat "$walkthrough"; printf '\n\n'
   fi
   printf '## Review payload\n\n'
   cat "$work/review.json"
+  exit 0
+fi
+
+if ((draft)); then
+  if ! review_resp=$(gh api "repos/$repo/pulls/$pr/reviews" --input "$work/review.json" --jq '[.id, (.html_url // .id)] | @tsv'); then
+    die "creating the pending review failed"
+  fi
+  IFS=$'\t' read -r review_id review_url <<<"$review_resp"
+  [[ $review_id =~ ^[0-9]+$ ]] || die "could not read the new review's id from: $review_resp"
+
+  # Snapshot what was created so read-back.sh can diff it against what the user
+  # leaves after editing in the GitHub UI. Fetch the stored comments rather than
+  # trusting our payload: ids exist only server-side.
+  gh api "repos/$repo/pulls/$pr/reviews/$review_id/comments" --paginate \
+    | jq -s 'add // [] | map({id, path, line: (.line // .original_line), body})' > "$work/snap_comments.json" \
+    || die "review $review_id was created but its comments could not be fetched; read-back will not work"
+  state_dir="${XDG_STATE_HOME:-$HOME/.local/state}/deep-pr-review"
+  mkdir -p "$state_dir"
+  snapshot="$state_dir/${repo//\//_}_${pr}_${review_id}.json"
+  jq -n --argjson review_id "$review_id" --arg head "$head_sha" \
+        --slurpfile comments "$work/snap_comments.json" --rawfile body "$work/body.md" \
+    '{review_id: $review_id, head: $head, comments: $comments[0], body: $body}' > "$snapshot"
+
+  pr_url="${review_url%%#*}"
+  [[ $pr_url == */pull/* ]] || pr_url="https://github.com/$repo/pull/$pr"
+  printf '%s\n' "$review_url"
+  printf 'snapshot: %s\n' "$snapshot"
+  printf 'pending review %s created (visible only to you). Edit it and submit at: %s/files\n' "$review_id" "${pr_url%/files}"
+  printf 'draft: %s inline, %s in body (nothing submitted)\n' "$n_inline" "$n_orphan" >&2
   exit 0
 fi
 
