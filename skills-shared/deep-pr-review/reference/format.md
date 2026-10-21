@@ -203,6 +203,12 @@ the fan-out did not run — `post-review.sh --sequential` emits that wording.
 </details>
 ````
 
+When angle selection ran (`post-review.sh --angles FILE`), **Method** instead
+reads `ran K of N angles (tier: T)` followed by the fan-out wording, and an
+`**Angles skipped**:` list (`* F — tiny tier`) follows it, one bullet per
+skipped angle with its reason. N is the number of angles in method.md, taken
+from the selection file; nothing in this format quotes it.
+
 `post-review.sh` places the static-analyzer status directly after **Checks run**
 (before **Not verified**), one paragraph per line, from
 `run-analyzers.sh --summarize`:

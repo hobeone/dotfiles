@@ -14,7 +14,7 @@ Phase 1  Gather — diff, instructions, Go telemetry, analyzers, expected head  
 Phase 2  Architecture Gate (Altitude Audit)                         sequential (or 1 subagent)
          ├── If FLAWED_APPROACH ──► Post Architectural Review & HALT
          └── If SOUND_APPROACH  ──► Proceed to Find
-Phase 3  Find — 16 angles, ≤8 candidates each                       FAN OUT — 16 subagents
+Phase 3  Find — select angles (up to 16), ≤8 candidates each        FAN OUT — 1 subagent per selected angle
 Phase 4  Verify — dedup + 1-vote 3-state verify (recall-biased)     FAN OUT — 1 subagent per candidate
 Phase 5  Gap Sweep — fresh pass, then Verify its candidates          sequential, then FAN OUT
 Phase 6  Render in CodeRabbit format                                sequential
@@ -25,7 +25,7 @@ Phase 7  Post as a single GitHub review                             sequential
 
 Find and Verify are embarrassingly parallel and are the whole cost of this
 review. Run each as **a single ⟨dispatch-parallel⟩ carrying every entry**, so
-16 angles cost one angle's wall-clock. Dispatching entries one at a time
+all the selected angles cost one angle's wall-clock. Dispatching entries one at a time
 runs them in series and defeats the point.
 
 Subagents do **not** share your context. Every entry's prompt must be
@@ -46,10 +46,10 @@ and nothing else — see Angle P.
 
 Model routing per role is set by the adapter.
 
-**If ⟨dispatch-parallel⟩ is unavailable or refused**, do not error: work every angle
-yourself, in sequence, in this context. Do not skip angles for lack of fan-out.
-Then say so in the review body's Method line — a sequential run is a different
-review from a 16-angle fan-out, and the reader must not be misled about which
+**If ⟨dispatch-parallel⟩ is unavailable or refused**, do not error: work every selected
+angle yourself, in sequence, in this context. Do not skip a selected angle for
+lack of fan-out. Then say so in the review body's Method line — a sequential run
+is a different review from a subagent fan-out, and the reader must not be misled about which
 one produced the findings.
 
 **Do not modify the branch.** This skill only reads and comments. If the user
@@ -201,6 +201,9 @@ continue without analyzers, and say so in the review body.
 Print the gaps to the user as soon as the run finishes:
 `⟨skill-dir⟩/scripts/run-analyzers.sh --summarize <run-dir>/analyzers.json`.
 
+Save the diff you gathered to `<run-dir>/diff.patch` (Find sizes it from there,
+and Angle P is handed its text).
+
 Treat this diff as the review scope. Read the **enclosing function** for every
 hunk — bugs in unchanged lines of a touched function are in scope, because the
 PR re-exposes or fails to fix them.
@@ -244,11 +247,38 @@ Record a 1-paragraph architecture endorsement for inclusion in the final review 
 
 ## Phase 3 — Find
 
-16 angles, up to 8 candidates each.
+Up to 16 angles, up to 8 candidates each. Not every change needs every angle:
+a docs-only edit or a ten-line fix does not warrant the history, prior-feedback
+or state-lifecycle readers, and dispatching them is pure cost. Selection is
+mechanical, so it is a script's job and not a judgement call made differently
+each run.
 
-One ⟨dispatch-parallel⟩, 16 entries, one entry per angle below. Each returns up
-to 8 candidates; each candidate needs `file`, `line`, a one-line `summary`, and
-a concrete `failure_scenario`.
+### Select the angles
+
+```bash
+# GitHub remote? (decides whether Angle N can run)
+remote=no; git remote -v | grep -q 'github\.com' && remote=yes
+⟨skill-dir⟩/scripts/select-angles.sh --diff <run-dir>/diff.patch --github-remote "$remote" > <run-dir>/angles.json
+```
+
+Add `--full` when the user asked for a full review, or whenever you cannot
+tell whether skipping is safe. The script reads the angle list from the
+headings of this file, sizes the diff into a tier (`docs`, `tiny`, `small`,
+`large`, or `unknown` when the diff cannot be sized — which selects every
+angle), and applies pattern gates over the lines the diff adds: Angle E needs a
+wrapper/proxy/cache shape, K needs map/latch/mutex/state patterns, L needs
+error-path patterns, M needs a modified (not newly added) file, N needs a
+GitHub remote. Angles A, B, J, O and P run at every tier. Its header documents
+the tiers and the gate regexes.
+
+Dispatch **only the angles in `angles`**. Never silently drop one: the
+`skipped` list (angle and reason) is passed to Post as `--angles` and appears in
+the review body, so a reader sees which readers did not look. Print the tier and
+the skipped list to the user when selection finishes.
+
+One ⟨dispatch-parallel⟩, one entry per selected angle below (at most 16
+entries). Each returns up to 8 candidates; each candidate needs `file`, `line`,
+a one-line `summary`, and a concrete `failure_scenario`.
 
 ### Mandatory Subagent Prompt Guardrails (Include in Every Entry)
 When dispatching each angle subagent, include these explicit rules in its prompt.
@@ -624,6 +654,7 @@ When authoring the `🤖 Prompt for AI Agents` in CodeRabbit comments for Go fin
   <pr-number> <run-dir>/findings.json \
   --expect-head <expected_head> \
   --analyzers <run-dir>/analyzers.json \
+  --angles <run-dir>/angles.json \
   [--walkthrough <run-dir>/walkthrough.md] [--repo OWNER/NAME] [--sequential] [--dry-run]
 ```
 
@@ -631,6 +662,11 @@ When authoring the `🤖 Prompt for AI Agents` in CodeRabbit comments for Go fin
 right after **Checks run**. Without it the body says
 `**Static analyzers:** not run for this review.` — omit it only when Gather
 could not produce the file.
+
+`--angles` makes the Method line say `ran K of N angles (tier: T)` and list
+each skipped angle with its reason. Without it the line describes the full set
+of angles, which is only true when every angle ran — omit it only for a
+`--full` review.
 
 Write the walkthrough (Render, `reference/format.md`) to `<run-dir>/walkthrough.md`
 first; the script posts it as a separate issue comment before the review.
@@ -672,7 +708,9 @@ anchor whose `start_line` is outside the diff degrades to a single-line comment.
 and print the walkthrough, review body, and each rendered finding to the
 terminal in the same format, followed by the analyzer summary
 (`⟨skill-dir⟩/scripts/run-analyzers.sh --summarize <run-dir>/analyzers.json`),
-so tools that did not run are visible in local output too. Do not open a PR to have somewhere to post.
+so tools that did not run are visible in local output too, and the selected/
+skipped angles from `<run-dir>/angles.json` (tier, then each skipped angle with
+its reason). Do not open a PR to have somewhere to post.
 
 ---
 

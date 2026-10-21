@@ -3,7 +3,13 @@
 #
 # Usage:
 #   post-review.sh <pr-number> <findings.json> [--walkthrough FILE] [--repo O/R]
-#                  [--expect-head SHA] [--analyzers FILE] [--sequential] [--dry-run]
+#                  [--expect-head SHA] [--analyzers FILE] [--angles FILE]
+#                  [--sequential] [--dry-run]
+#
+# --angles FILE is select-angles.sh's JSON. The Method line then says
+# "ran K of N angles (tier: T)" and lists each skipped angle with its reason;
+# N is the file's angles plus skipped, so it follows method.md's headings
+# rather than a constant here. Without it the line describes the full set.
 #
 # Posts exactly one review with event=COMMENT. Never approves, never requests
 # changes, never edits the branch.
@@ -34,6 +40,7 @@ prev_raised="none"
 checks="none recorded"
 not_verified="not recorded"
 analyzers=""
+angles_file=""
 
 while (($#)); do
   case "$1" in
@@ -47,9 +54,10 @@ while (($#)); do
     --checks)            checks="${2:?--checks needs text}"; shift 2 ;;
     --not-verified)      not_verified="${2:?--not-verified needs text}"; shift 2 ;;
     --analyzers)         analyzers="${2:?--analyzers needs a file}"; shift 2 ;;
+    --angles)            angles_file="${2:?--angles needs a file}"; shift 2 ;;
     --dry-run)           dry_run=1; shift ;;
     --sequential)        sequential=1; shift ;;
-    -h|--help)           sed -n '2,10p' "$0"; exit 0 ;;
+    -h|--help)           sed -n '2,13p' "$0"; exit 0 ;;
     -*)                  die "unknown flag: $1" ;;
     *)
       if [[ -z $pr ]]; then pr="$1"
@@ -60,11 +68,12 @@ while (($#)); do
   esac
 done
 
-[[ -n $pr && -n $findings ]] || die "usage: post-review.sh <pr-number> <findings.json> [--walkthrough FILE] [--repo O/R] [--expect-head SHA] [--verdict V] [--since SHA] [--scope TEXT] [--previously-raised TEXT] [--checks TEXT] [--not-verified TEXT] [--analyzers FILE] [--sequential] [--dry-run]"
+[[ -n $pr && -n $findings ]] || die "usage: post-review.sh <pr-number> <findings.json> [--walkthrough FILE] [--repo O/R] [--expect-head SHA] [--verdict V] [--since SHA] [--scope TEXT] [--previously-raised TEXT] [--checks TEXT] [--not-verified TEXT] [--analyzers FILE] [--angles FILE] [--sequential] [--dry-run]"
 [[ $pr =~ ^[0-9]+$ ]] || die "pr-number must be numeric, got '$pr'"
 [[ -r $findings ]] || die "cannot read findings file: $findings"
 [[ -z $walkthrough || -r $walkthrough ]] || die "cannot read walkthrough file: $walkthrough"
 [[ -z $analyzers || -r $analyzers ]] || die "cannot read analyzers file: $analyzers"
+[[ -z $angles_file || -r $angles_file ]] || die "cannot read angles file: $angles_file"
 command -v gh >/dev/null || die "gh is not installed"
 command -v jq >/dev/null || die "jq is not installed"
 
@@ -79,6 +88,24 @@ if [[ -n $analyzers ]]; then
     || die "could not summarize analyzers file: $analyzers"
 else
   analyzer_lines='**Static analyzers:** not run for this review.'
+fi
+
+# Method line. Default: the full angle set. With --angles: how many ran out of
+# how many exist, the tier, and every skipped angle with its reason, so a
+# reader sees exactly which reviewers did not look at this change.
+if [[ -n $angles_file ]]; then
+  jq -e '(.tier | type == "string") and (.angles | type == "array") and (.skipped | type == "array")
+         and all(.skipped[]; has("angle") and has("reason"))' "$angles_file" >/dev/null \
+    || die "angles file is not select-angles.sh output: $angles_file"
+  angles_ran_line=$(jq -r '"ran \(.angles | length) of \((.angles | length) + (.skipped | length)) angles (tier: \(.tier))"' "$angles_file")
+  angles_skipped_block=$(jq -r 'if (.skipped | length) == 0 then empty
+    else "**Angles skipped**:\n\n" + (.skipped | map("* \(.angle) — \(.reason)") | join("\n")) + "\n\n" end' "$angles_file")
+  method_fanout="$angles_ran_line, recall-biased review fanned out to concurrent subagents, 1-vote verify, gap sweep."
+  method_sequential="$angles_ran_line, recall-biased review, 1-vote verify, gap sweep — run **sequentially in a single context**, not as a subagent fan-out."
+else
+  angles_skipped_block=""
+  method_fanout=$'16-angle recall-biased review (10 correctness + 3 cleanup +\naltitude + conventions + prior feedback) fanned out to concurrent subagents,\n1-vote verify, gap sweep.'
+  method_sequential=$'16-angle recall-biased review (10 correctness + 3 cleanup +\naltitude + conventions + prior feedback), 1-vote verify, gap sweep — run\n**sequentially in a single context**, not as a subagent fan-out.'
 fi
 
 if [[ -z $repo ]]; then
@@ -393,10 +420,11 @@ render_review_body() {
 
   printf '<details>\n<summary>ℹ️ Review info</summary>\n\n'
   if ((sequential)); then
-    printf '**Method**: 16-angle recall-biased review (10 correctness + 3 cleanup +\naltitude + conventions + prior feedback), 1-vote verify, gap sweep \u2014 run\n**sequentially in a single context**, not as a subagent fan-out.\n\n'
+    printf '**Method**: %s\n\n' "$method_sequential"
   else
-    printf '**Method**: 16-angle recall-biased review (10 correctness + 3 cleanup +\naltitude + conventions + prior feedback) fanned out to concurrent subagents,\n1-vote verify, gap sweep.\n\n'
+    printf '**Method**: %s\n\n' "$method_fanout"
   fi
+  [[ -z $angles_skipped_block ]] || printf '%s\n\n' "$angles_skipped_block"
   # shellcheck disable=SC2016 # literal markdown backticks
   printf '**Reviewed**: head `%s`\n\n' "$head_sha"
   printf '<details>\n<summary>📒 Files selected for processing</summary>\n\n'

@@ -1,0 +1,4 @@
+{"tier":"tiny","lines":3,"files":1,
+ "angles":["A","B","C","D","J","O","P"],
+ "skipped":[{"angle":"F","reason":"tiny tier"},
+            {"angle":"E","reason":"gate not met: no wrapper/proxy/decorator/adapter/cache/delegate in added lines"}]}

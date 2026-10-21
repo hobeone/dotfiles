@@ -84,6 +84,40 @@ nv_ln=$(grep -n '^\*\*Not verified:' <<<"$body_an" | cut -d: -f1)
   || err "analyzer lines are not placed between Checks run and Not verified"
 if out=$("$script" 7 "$fx/findings.json" --repo o/r --analyzers "$work/missing.json" --dry-run 2>&1); then err "unreadable --analyzers exited 0"; fi
 
+# --angles: the Method line states how many angles ran out of how many exist,
+# the tier, and each skipped angle with its reason. The total comes from the
+# angles file, never from a constant in the script; here it must equal the
+# number of angle headings in method.md when the file is real select-angles
+# output.
+heading_n=$(grep -c '^### Angle [A-Z] — ' skills-shared/deep-pr-review/method.md)
+out_ag=$("$script" 7 "$fx/findings.json" --repo o/r --angles "$fx/angles.json" --dry-run 2>&1) || err "--angles dry run failed: $out_ag"
+body_ag=$(jq -r .body <<<"$(awk 'f; /^## Review payload$/ {f=1}' <<<"$out_ag")")
+grep -qF '**Method**: ran 7 of 9 angles (tier: tiny)' <<<"$body_ag" || err "--angles Method line wrong: $(grep -F '**Method**' <<<"$body_ag")"
+grep -qF '* F — tiny tier' <<<"$body_ag" || err "--angles body lacks skipped angle F with its reason"
+grep -qF '* E — gate not met: no wrapper/proxy/decorator/adapter/cache/delegate in added lines' <<<"$body_ag" || err "--angles body lacks skipped angle E with its reason"
+grep -qF '16-angle' <<<"$body_ag" && err "--angles body still quotes the all-angles wording"
+grep -qF 'fanned out to concurrent subagents' <<<"$body_ag" || err "--angles body lost the fan-out wording"
+out_agq=$("$script" 7 "$fx/findings.json" --repo o/r --angles "$fx/angles.json" --sequential --dry-run 2>&1) || err "--angles --sequential dry run failed"
+body_agq=$(jq -r .body <<<"$(awk 'f; /^## Review payload$/ {f=1}' <<<"$out_agq")")
+grep -qF 'ran 7 of 9 angles (tier: tiny)' <<<"$body_agq" || err "--angles --sequential Method line wrong: $(grep -F '**Method**' <<<"$body_agq")"
+grep -q 'sequentially in a' <<<"$body_agq" || err "--angles --sequential body lacks the sequential wording"
+# Real select-angles output: the total in the Method line is the heading count.
+"$PWD/skills-shared/deep-pr-review/scripts/select-angles.sh" --diff "$fx/diff.txt" > "$work/real-angles.json" || err "select-angles.sh failed on the fixture diff"
+out_ar=$("$script" 7 "$fx/findings.json" --repo o/r --angles "$work/real-angles.json" --dry-run 2>&1) || err "real --angles dry run failed"
+body_ar=$(jq -r .body <<<"$(awk 'f; /^## Review payload$/ {f=1}' <<<"$out_ar")")
+ran_n=$(jq '.angles | length' "$work/real-angles.json")
+grep -qF "**Method**: ran $ran_n of $heading_n angles (tier: $(jq -r .tier "$work/real-angles.json"))" <<<"$body_ar" \
+  || err "real --angles Method total is not the heading count $heading_n: $(grep -F '**Method**' <<<"$body_ar")"
+# A full run (nothing skipped) lists no skipped angles.
+printf '{"tier":"large","lines":900,"files":9,"angles":["A","B"],"skipped":[]}\n' > "$work/full-angles.json"
+out_af=$("$script" 7 "$fx/findings.json" --repo o/r --angles "$work/full-angles.json" --dry-run 2>&1) || err "full --angles dry run failed"
+grep -qF 'Angles skipped' <<<"$out_af" && err "empty skipped list still rendered an 'Angles skipped' block"
+printf '{"tier":"tiny"}\n' > "$work/bad-angles.json"
+if "$script" 7 "$fx/findings.json" --repo o/r --angles "$work/bad-angles.json" --dry-run >/dev/null 2>&1; then err "malformed --angles file exited 0"; fi
+if "$script" 7 "$fx/findings.json" --repo o/r --angles "$work/missing.json" --dry-run >/dev/null 2>&1; then err "unreadable --angles exited 0"; fi
+# Without --angles the wording is unchanged.
+grep -qF 'ran 7 of' <<<"$body" && err "default body should not carry the --angles Method line"
+
 # Sequential Method wording.
 out_seq=$("$script" 7 "$fx/findings.json" --repo o/r --sequential --dry-run 2>&1) || err "sequential dry run failed"
 body_seq=$(jq -r .body <<<"$(awk 'f; /^## Review payload$/ {f=1}' <<<"$out_seq")")

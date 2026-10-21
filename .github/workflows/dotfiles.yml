@@ -48,6 +48,7 @@ jobs:
             tests/test_post_review.sh \
             tests/test_deep_pr_review_method.sh \
             tests/test_run_analyzers.sh \
+            tests/test_select_angles.sh \
             tests/fixtures/post_review/gh \
             tests/fixtures/run_analyzers/bin/stub
 
@@ -83,6 +84,9 @@ jobs:
 
       - name: run-analyzers.sh behavior
         run: bash tests/test_run_analyzers.sh
+
+      - name: select-angles.sh behavior
+        run: bash tests/test_select_angles.sh
 
   structure:
     name: Verify structure

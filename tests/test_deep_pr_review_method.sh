@@ -73,6 +73,9 @@ check_absent "method.md hard-codes /tmp" '/tmp/' "$m"
 check_absent_r "stale 12-angle wording in core" '12-angle|twelve' "$core"
 grep -q -- '--expect-head' "$m" || err "method.md does not use --expect-head"
 grep -q -- '--sequential' "$m" || err "method.md does not document --sequential"
+grep -qF 'scripts/select-angles.sh' "$m" || err "method.md does not run select-angles.sh in Find"
+grep -qF -- '--angles <run-dir>/angles.json' "$m" || err "method.md does not pass --angles to post-review.sh"
+grep -qF -- '--full' "$m" || err "method.md does not document --full"
 grep -qF '<!-- deep-pr-review head:' "$m" || err "method.md does not describe the head marker"
 
 # C — instruction-file discovery must use `git ls-files`, not a `**/` glob
