@@ -297,7 +297,7 @@ if command -v zoxide &>/dev/null; then
 fi
 
 # ripgrep config
-RIPGREP_CONFIG_PATH=~/.config/ripgrep.config
+export RIPGREP_CONFIG_PATH=~/.config/ripgrep.config
 
 # Lesspipe preprocessing
 if [ -e "$HOME/bin/lesspipe.sh" ]; then
