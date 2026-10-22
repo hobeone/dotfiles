@@ -70,7 +70,7 @@ Flag by flag, because each one is load-bearing:
 
 | Flag | Why |
 |---|---|
-| `--model auto:gemini-flash-high` | **The default.** Flash at high effort is what found this skill's motivating defects — the vacuous subtests and the unverifiable citations — and it is several times faster and cheaper than the pro tier. Escalate to `auto:gemini-pro-high` only when a pass at flash comes back thin on a diff you have reason to think is deep. **Never a `claude-*` model** — `agy` can drive Claude, and that forfeits the entire reason for running it. |
+| `--model "$model"` (resolved from `auto:gemini-flash-high`) | **The default.** `agy` itself takes only a concrete id; `resolve-model.sh` turns the `auto:` request into the newest available one and stops if none exists. Flash at high effort is what found this skill's motivating defects — the vacuous subtests and the unverifiable citations — and it is several times faster and cheaper than the pro tier. Escalate to `auto:gemini-pro-high` only when a pass at flash comes back thin on a diff you have reason to think is deep. **Never a `claude-*` model** — `agy` can drive Claude, and that forfeits the entire reason for running it. |
 | `--effort high` | Adversarial review is the case that wants it. |
 | `--mode plan` | **The read-only guard.** Sets execution mode to plan rather than accept-edits, at the harness level. A prompt asking nicely not to edit is not a guard; this is. Still pair it with the prompt's read-only override — belt and braces, since the review is being told to *run commands*. |
 | `--print-timeout 20m` | The default is **5m** and a real review will not finish in it — you get a truncated run that looks like a short review. Budget by scope: single task ≈ 9–14m, whole branch ≈ 20–25m. |
@@ -257,7 +257,7 @@ adds one, not discarding.
 
 ## Cost and tiering
 
-| Scope | Model | `--print-timeout` |
+| Scope | Model (a `resolve-model.sh` request, not a raw agy id) | `--print-timeout` |
 |---|---|---|
 | One task, one package | `auto:gemini-flash-high` | 9–14m |
 | Whole branch, many commits | `auto:gemini-flash-high` | 20–25m |
