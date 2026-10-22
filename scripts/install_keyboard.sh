@@ -33,9 +33,7 @@ if [[ "$(id -u)" -ne 0 ]]; then
 fi
 
 TARGET_USER="${SUDO_USER:-$(whoami)}"
-TARGET_HOME=$(getent passwd "$TARGET_USER" | cut -d: -f6)
 TARGET_UID=$(id -u "$TARGET_USER")
-XDG_RUNTIME_DIR="/run/user/$TARGET_UID"
 
 log_info() { echo -e "\033[0;34m[INFO]\033[0m $*"; }
 log_warn() { echo -e "\033[0;33m[WARN]\033[0m $*"; }

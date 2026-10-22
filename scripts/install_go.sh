@@ -70,7 +70,7 @@ main() {
 
   if [[ -z "$current" ]]; then
     echo "Go is not installed."
-    read -p "Do you want to install Go ${latest}? [y/N] " response
+    read -r -p "Do you want to install Go ${latest}? [y/N] " response
     case "$response" in
       [yY][eE][sS]|[yY])
         install_go "$latest"
@@ -82,7 +82,7 @@ main() {
   else
     if version_gt "$latest" "$current"; then
       echo "A newer version of Go is available: ${latest} (current: ${current})"
-      read -p "Do you want to upgrade? [y/N] " response
+      read -r -p "Do you want to upgrade? [y/N] " response
       case "$response" in
         [yY][eE][sS]|[yY])
           install_go "$latest"

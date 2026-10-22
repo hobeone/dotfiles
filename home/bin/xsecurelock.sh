@@ -9,7 +9,6 @@
 set -o nounset
 set -o pipefail
 
-readonly SCRIPT_NAME="${0##*/}"
 readonly LOCK_FILE="/run/user/${UID}/xsecurelock_${XDG_SESSION_ID:-unknown}_${DISPLAY:-unknown}"
 
 # Function to handle singleton execution using flock.
@@ -54,6 +53,7 @@ load_config() {
     fi
   elif [[ -f "${HOME}/.xsessionrc" ]]; then
     # Parse only XSECURELOCK exports from .xsessionrc.
+    # shellcheck source=/dev/null # user file, filtered to XSECURELOCK exports
     source <(grep -E '^export XSECURELOCK_' "${HOME}/.xsessionrc")
   fi
 }
