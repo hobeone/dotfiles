@@ -26,6 +26,7 @@ To maintain deep review rigor without wasting compute or introducing multi-minut
 A PR qualifies for Tier 1 **only if** one of the following holds:
 1. **Documentation-only**: All modified files match `\.(md|txt|rst|adoc)$`, `^docs/`, `^LICENSE`, or `README*`. Zero `.go` code files, test files, or scripts modified.
 2. **Comment-only diffs**: `git diff -U0` contains strictly comment lines (`//`, `/*`, `*`) or whitespace changes across the PR.
+3. **Provably trivial diffs**: Changes restricted solely to log message string literals (e.g., log line content only, with no changes to formatting verbs, arguments, conditions, control flow, or state) and any corresponding log-string test assertions.
 
 #### Tier 1 Review Procedure:
 1. Fetch PR and inspect diff or create worktree.

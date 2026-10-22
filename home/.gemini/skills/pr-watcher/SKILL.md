@@ -94,10 +94,10 @@ Run the tier classifier on the target PR:
 ```
 See [references/tier-routing.md](references/tier-routing.md) for full classification details:
 - **Tier 1 (Lightweight Fast-Path)**:
-  - Applicable: Documentation only (`.md`, `docs/*`, `README*`, `LICENSE*`) or comment-only diffs. Strictly NO `.go` code, test code, or scripts.
-  - Review: Fast sequential verification of doc and citation gates (`check_citations`, `check_doc_citations`). Single-pass evaluation in main context without subagents. 30–60s turnaround.
+  - Applicable: Documentation only (`.md`, `docs/*`, `README*`, `LICENSE*`), comment-only diffs, or provably trivial changes (e.g. log line content only with no control-flow, state, or formatting-verb changes).
+  - Review: Fast sequential verification of doc and citation gates (`check_citations`, `check_doc_citations`) and affected tests. Single-pass evaluation in main context without subagents. 30–60s turnaround.
 - **Tier 2 (Full Deep PR Review)**:
-  - Applicable: **Any PR touching Go code** (production or test files, single-line patches, non-core packages), build scripts, CI tooling, or runtime behavior.
+  - Applicable: **All other PRs touching Go code** (production or test files, single-line logic patches, non-core packages), build scripts, CI tooling, or runtime behavior.
   - Review: Detached ephemeral worktree in `/tmp/pr-<PR>-audit`, Pass 1 deterministic gates, Pass 2 mandatory 3-lane adversarial review via `<PRIMARY_REVIEW_MODEL>` swarm (`rev-1`, `rev-2`, `rev-3`), Pass 3 formal review / thread resolution.
 
 ---
