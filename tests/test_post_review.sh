@@ -77,6 +77,13 @@ body_an=$(jq -r .body <<<"$(awk 'f; /^## Review payload$/ {f=1}' <<<"$out_an")")
 grep -qF '**Static analyzers run:** shellcheck (3 files, 2 findings, 5 outside diff)' <<<"$body_an" || err "--analyzers body lacks the ran line"
 grep -qF '**Static analyzers NOT run:** semgrep — not installed (applies to 4 changed files)' <<<"$body_an" || err "--analyzers body lacks the NOT-run line"
 grep -qF 'not run for this review' <<<"$body_an" && err "--analyzers body still has the not-run default"
+# The coverage table survives into the body intact: rows contiguous, no blank
+# line splitting the table into paragraphs.
+grep -qF '<summary>🔍 Static analyzer coverage: ' <<<"$body_an" || err "--analyzers body lacks the coverage block"
+grep -qxF '| semgrep | — | ⚠️ not installed: 4 changed files unchecked | rule-based security and bug patterns in source code |' <<<"$body_an" \
+  || err "--analyzers body lacks the semgrep coverage row"
+[[ $(grep -A4 -xF '| Analyzer | Version | This diff | What it checks |' <<<"$body_an" | grep -c '^|') == 5 ]] \
+  || err "--analyzers coverage table rows are not contiguous"
 checks_ln=$(grep -n '^\*\*Checks run:\*\*' <<<"$body_an" | cut -d: -f1)
 ran_ln=$(grep -n '^\*\*Static analyzers run:' <<<"$body_an" | cut -d: -f1)
 nv_ln=$(grep -n '^\*\*Not verified:' <<<"$body_an" | cut -d: -f1)

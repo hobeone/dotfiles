@@ -65,6 +65,19 @@ surfacing. Do not drop a candidate for being "speculative."
 
 ## Phase 0 — Eligibility
 
+**First, before anything else, show the user the analyzer inventory:**
+
+```bash
+⟨skill-dir⟩/scripts/run-analyzers.sh --inventory
+```
+
+Print its output to the user verbatim, before resolving the target. It lists
+each static analyzer as found (with version) or missing, what each checks, and
+what a missing one means for this review; it needs no PR or diff and always
+exits 0. A missing analyzer never stops the review. The review body carries the
+same inventory as its 🔍 Static analyzer coverage table, built from
+`analyzers.json` in Gather, so nothing extra is passed to Post.
+
 Target resolution, in order: an explicit PR number → an explicit branch or path
 → the current branch's PR → the working tree.
 
@@ -232,6 +245,8 @@ continue without analyzers, and say so in the review body.
 
 Print the gaps to the user as soon as the run finishes:
 `⟨skill-dir⟩/scripts/run-analyzers.sh --summarize <run-dir>/analyzers.json`.
+Each NOT-run entry says what it left unchecked, and the coverage table shows
+every analyzer with its version and what it did on this diff.
 
 Save the diff you gathered to `<run-dir>/diff.patch` (Find sizes it from there,
 and Angle P is handed its text).

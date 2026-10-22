@@ -158,7 +158,8 @@ bin=$(mkbin wt shellcheck)
 : > "$STUB_LOG"
 ANALYZER_BIN_DIR=$bin "$script" --base main --head feature --out "$work/r7.json" >/dev/null 2>&1 || err "worktree case: run failed"
 [[ $(git worktree list) == "$before" ]] || err "worktree case: git worktree list changed: $(git worktree list)"
-grep -q "^shellcheck cwd=$repo " "$STUB_LOG" && err "worktree case: analysed the checked-out tree, not the head"
+# The version probe runs from the checkout; the analysis call (-x) must not.
+grep -q "^shellcheck cwd=$repo -x " "$STUB_LOG" && err "worktree case: analysed the checked-out tree, not the head"
 [[ $(tool_field "$work/r7.json" shellcheck findings) == 2 ]] || err "worktree case: want 2 findings"
 git checkout -q feature
 
@@ -169,6 +170,47 @@ ANALYZER_BIN_DIR=$bin "$script" --base main --out "$work/r8.json" >/dev/null 2>&
 [[ $(jq -r .head "$work/r8.json") == WORKTREE ]] || err "working-tree case: head is not WORKTREE"
 [[ $(tool_field "$work/r8.json" shellcheck files) == 2 ]] || err "working-tree case: want 2 shell files (a.sh + untracked new.sh)"
 rm -f new.sh
+
+# --- inventory fields: every record says whether its tool is installed -------
+[[ $(tool_field "$work/r1.json" shellcheck installed) == true ]] || err "inventory: shellcheck not marked installed"
+[[ $(tool_field "$work/r1.json" shellcheck version) == 1.0.0 ]] || err "inventory: shellcheck version not recorded"
+[[ $(tool_field "$work/r1.json" secrets version) == 1.0.0 ]] || err "inventory: secrets engine version not recorded"
+[[ $(tool_field "$work/r1.json" semgrep installed) == false ]] || err "inventory: semgrep (absent) not marked installed=false"
+[[ $(tool_field "$work/r1.json" semgrep version) == null ]] || err "inventory: absent semgrep has a version"
+[[ $(tool_field "$work/r1.json" hadolint installed) == false ]] || err "inventory: not_applicable hadolint lacks installed=false"
+
+# --- coverage in the summary: what a gap leaves unchecked --------------------
+sum=$("$script" --summarize "$work/r1.json")
+grep -F '**Static analyzers NOT run:**' <<<"$sum" | grep -qF 'semgrep — not installed (applies to 2 changed files) → unchecked: rule-based security' \
+  || err "coverage: NOT-run line does not say what semgrep would have checked: $sum"
+grep -qF '<summary>🔍 Static analyzer coverage: 3 of 8 available to the reviewer</summary>' <<<"$sum" \
+  || err "coverage: summary line wrong: $sum"
+grep -qxF '| semgrep | — | ⚠️ not installed: 2 changed files unchecked | rule-based security and bug patterns in source code |' <<<"$sum" \
+  || err "coverage: semgrep row wrong"
+grep -qxF '| hadolint | — | ➖ no matching files (not installed) | Dockerfile pitfalls: unpinned images and packages |' <<<"$sum" \
+  || err "coverage: not_applicable row wrong"
+grep -qF '| shellcheck | 1.0.0 | ✅ ran on 1 file: 2 findings, 1 outside diff |' <<<"$sum" || err "coverage: ran row wrong"
+[[ $(grep -A1 -xF '| Analyzer | Version | This diff | What it checks |' <<<"$sum" | tail -1) == '|---|---|---|---|' ]] \
+  || err "coverage: table header not followed by its separator"
+[[ $(grep -c '^|' <<<"$sum") == 10 ]] || err "coverage: want header + separator + 8 rows, contiguous"
+grep -qF 'reviewed by the agent angles only' <<<"$sum" || err "coverage: gap explanation missing"
+jq '.tools |= map(select(.status == "ran" or .status == "not_applicable"))' "$work/r1.json" > "$work/nogap.json"
+sum=$("$script" --summarize "$work/nogap.json")
+grep -qF 'every analyzer that applied to this diff ran' <<<"$sum" || err "coverage: no-gap explanation missing: $sum"
+
+# --- --inventory: what this machine has, before any diff exists ---------------
+inv=$(cd "$work" && ANALYZER_BIN_DIR=$(mkbin inv shellcheck gitleaks ruff) STUB_VERSION_RUFF=0.9.1 "$script" --inventory) \
+  || err "inventory: exited non-zero outside a git repository"
+grep -qE '^  ✓ shellcheck +1\.0\.0 +shell-script bugs' <<<"$inv" || err "inventory: shellcheck line wrong: $inv"
+grep -qE '^  ✓ secrets \(gitleaks\) +1\.0\.0 ' <<<"$inv" || err "inventory: secrets should name the gitleaks engine"
+grep -qE '^  ✓ ruff +0\.9\.1 ' <<<"$inv" || err "inventory: ruff version not probed"
+grep -qE '^  ✗ semgrep +missing +rule-based security' <<<"$inv" || err "inventory: semgrep should be missing"
+grep -qF '3 of 8 analyzers are available.' <<<"$inv" || err "inventory: count wrong"
+grep -qF 'What this means:' <<<"$inv" || err "inventory: no explanation of missing tools"
+grep -qF 'Install the missing ones with: ' <<<"$inv" || err "inventory: installer hint missing"
+inv=$(ANALYZER_BIN_DIR=$(mkbin invall shellcheck trufflehog semgrep golangci-lint ruff actionlint hadolint osv-scanner) "$script" --inventory)
+grep -qF 'All 8 analyzers are available' <<<"$inv" || err "inventory: all-present message missing: $inv"
+grep -q '✗' <<<"$inv" && err "inventory: nothing should be missing"
 
 # --- usage / empty summary ---------------------------------------------------------
 "$script" >/dev/null 2>&1 && err "no --base: should exit 1"

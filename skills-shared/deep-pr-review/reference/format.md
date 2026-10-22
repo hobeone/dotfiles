@@ -226,17 +226,32 @@ skipped angle with its reason. N is the number of angles in method.md, taken
 from the selection file; nothing in this format quotes it.
 
 `post-review.sh` places the static-analyzer status directly after **Checks run**
-(before **Not verified**), one paragraph per line, from
-`run-analyzers.sh --summarize`:
+(before **Not verified**), exactly as `run-analyzers.sh --summarize` prints it:
+two paragraphs, then a collapsed coverage table.
 
-```
+````
 **Static analyzers run:** shellcheck (3 files, 2 findings, 5 outside diff) · secrets/trufflehog (3 files, 0 findings, 0 outside diff)
-**Static analyzers NOT run:** semgrep — not installed (applies to 4 changed files)
-```
+
+**Static analyzers NOT run:** semgrep — not installed (applies to 4 changed files) → unchecked: rule-based security and bug patterns in source code
+
+<details>
+<summary>🔍 Static analyzer coverage: 2 of 3 available to the reviewer</summary>
+
+| Analyzer | Version | This diff | What it checks |
+|---|---|---|---|
+| shellcheck | 0.10.0 | ✅ ran on 3 files: 2 findings, 5 outside diff | shell-script bugs: quoting, word splitting, unsafe expansions |
+| semgrep | — | ⚠️ not installed: 4 changed files unchecked | rule-based security and bug patterns in source code |
+| hadolint | 2.15.1 | ➖ no matching files | Dockerfile pitfalls: unpinned images and packages |
+
+**What this means:** the ⚠️ rows applied to this diff but did not run, so those areas were reviewed by the agent angles only, with no deterministic tool behind them. Treat a clean result there as weaker evidence.
+
+</details>
+````
 
 A tool that applied to the diff and did not run (`not installed`, or `failed`
-with its reason) always appears in the NOT-run line; a tool with no matching
-changed file does not. When no analyzers file was supplied the body reads
+with its reason) always appears in the NOT-run line, with what it left
+unchecked; a tool with no matching changed file does not, but it still has a
+➖ row in the table. When no analyzers file was supplied the body reads
 `**Static analyzers:** not run for this review.`
 
 List any angle that failed outright (not "no findings" — an actual `gh api`

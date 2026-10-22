@@ -106,12 +106,11 @@ if [[ -n $missing ]]; then
   exit 1
 fi
 
-# Rendered once: the --summarize lines of run-analyzers.sh (blank line between
-# them so Markdown keeps two paragraphs), or an explicit statement that no
-# analyzers ran. Never silent about it.
+# Rendered once: run-analyzers.sh --summarize (run / NOT-run paragraphs and the
+# coverage table, already blank-line separated), or an explicit statement that
+# no analyzers ran. Never silent about it.
 if [[ -n $analyzers ]]; then
-  analyzer_lines=$("$(dirname "${BASH_SOURCE[0]}")/run-analyzers.sh" --summarize "$analyzers" \
-    | awk 'NR > 1 { print "" } { print }') \
+  analyzer_lines=$("$(dirname "${BASH_SOURCE[0]}")/run-analyzers.sh" --summarize "$analyzers") \
     || die "could not summarize analyzers file: $analyzers"
 else
   analyzer_lines='**Static analyzers:** not run for this review.'

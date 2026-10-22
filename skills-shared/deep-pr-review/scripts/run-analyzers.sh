@@ -7,6 +7,7 @@
 # Usage:
 #   run-analyzers.sh --base REF [--head REF] [--out FILE] [--all-lines]
 #   run-analyzers.sh --summarize FILE
+#   run-analyzers.sh --inventory
 #
 # --base REF     compare against REF (merge-base semantics: BASE...HEAD)
 # --head REF     analyse that commit. Without it, the working tree vs BASE plus
@@ -16,7 +17,11 @@
 # --out FILE     write the JSON there instead of stdout
 # --all-lines    keep findings on unchanged lines too (default: changed lines only;
 #                the rest are counted per tool as outside_diff)
-# --summarize F  print the two markdown lines for a review body and exit
+# --summarize F  print the review-body markdown (run / NOT-run lines and a
+#                coverage table) and exit
+# --inventory    print which analyzers this machine has, what each checks and
+#                what a missing one means for the review, then exit 0. Needs no
+#                git repository; the review shows it before it starts.
 #
 # Env ANALYZER_BIN_DIR: when set, ONLY executables in that directory count as
 # installed (test hook); otherwise PATH is searched.
@@ -46,27 +51,142 @@
 set -euo pipefail
 
 die() { printf '%s: %s\n' "${0##*/}" "$*" >&2; exit 1; }
-usage() { sed -n '2,24p' "$0"; }
+usage() { sed -n '2,30p' "$0"; }
 
 # ---------------------------------------------------------------------------
-# --summarize: two markdown lines from a result file.
+# What each analyzer checks. One source for the kick-off inventory and the
+# review body. "secrets" is trufflehog, else gitleaks.
+# ---------------------------------------------------------------------------
+ANALYZERS=(shellcheck secrets semgrep golangci-lint ruff actionlint hadolint osv-scanner)
+BINARIES=(shellcheck trufflehog gitleaks semgrep golangci-lint ruff actionlint hadolint osv-scanner)
+covers() {
+  case $1 in
+    shellcheck)    echo "shell-script bugs: quoting, word splitting, unsafe expansions" ;;
+    secrets)       echo "credentials and tokens committed in changed files" ;;
+    semgrep)       echo "rule-based security and bug patterns in source code" ;;
+    golangci-lint) echo "Go vet, staticcheck and common Go bugs" ;;
+    ruff)          echo "Python lint: unused or undefined names, common bugs" ;;
+    actionlint)    echo "GitHub Actions workflow errors and script injection" ;;
+    hadolint)      echo "Dockerfile pitfalls: unpinned images and packages" ;;
+    osv-scanner)   echo "known vulnerabilities (CVEs) in dependency manifests" ;;
+  esac
+}
+covers_json() {
+  local a
+  for a in "${ANALYZERS[@]}"; do jq -n --arg k "$a" --arg v "$(covers "$a")" '{($k): $v}'; done | jq -sc add
+}
+
+find_tool() {
+  if [[ -n ${ANALYZER_BIN_DIR+x} ]]; then
+    [[ -f $ANALYZER_BIN_DIR/$1 && -x $ANALYZER_BIN_DIR/$1 ]] && printf '%s' "$ANALYZER_BIN_DIR/$1"
+  else
+    command -v "$1"
+  fi
+}
+
+# probe_binaries — BIN_PATH[bin] / BIN_VER[bin] for every installed binary.
+# The version is the first dotted number the tool reports ("" if none).
+declare -A BIN_PATH=() BIN_VER=()
+probe_binaries() {
+  local b p
+  for b in "${BINARIES[@]}"; do
+    p=$(find_tool "$b") || continue
+    BIN_PATH[$b]=$p
+    BIN_VER[$b]=$({ SEMGREP_ENABLE_VERSION_CHECK=0 "$p" --version 2>&1 || "$p" version 2>&1; } </dev/null \
+      | grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?' | head -1 || true)
+  done
+}
+
+# engine_for ANALYZER — the installed binary that would run it, or "".
+engine_for() {
+  if [[ $1 == secrets ]]; then
+    if [[ -n ${BIN_PATH[trufflehog]:-} ]]; then echo trufflehog
+    elif [[ -n ${BIN_PATH[gitleaks]:-} ]]; then echo gitleaks; fi
+  elif [[ -n ${BIN_PATH[$1]:-} ]]; then
+    echo "$1"
+  fi
+}
+
+# ---------------------------------------------------------------------------
+# --inventory: plain text for the user before the review starts.
+# ---------------------------------------------------------------------------
+inventory() {
+  local a e have=0 missing=() what installer
+  probe_binaries
+  echo "Static analyzers available to deep-pr-review on this machine:"
+  for a in "${ANALYZERS[@]}"; do
+    e=$(engine_for "$a")
+    if [[ -n $e ]]; then
+      have=$((have + 1))
+      what=$e; [[ $a == secrets ]] && what="secrets ($e)"
+      printf '  ✓ %-22s %-9s %s\n' "$what" "${BIN_VER[$e]:-?}" "$(covers "$a")"
+    else
+      missing+=("$a")
+      printf '  ✗ %-22s %-9s %s\n' "$a" missing "$(covers "$a")"
+    fi
+  done
+  echo
+  if ((${#missing[@]} == 0)); then
+    echo "All ${#ANALYZERS[@]} analyzers are available: every one that applies to the diff will run."
+    return 0
+  fi
+  echo "$have of ${#ANALYZERS[@]} analyzers are available."
+  echo "What this means: a missing analyzer cannot run. If it applies to the diff (for"
+  echo "example semgrep when source files changed), that area is reviewed by the agent"
+  echo "angles only, with no deterministic tool behind them, and the review body lists"
+  echo "it under \"Static analyzers NOT run\". A missing analyzer that does not apply to"
+  echo "the diff costs nothing."
+  # Present only in the dotfiles checkout this skill ships from.
+  installer="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/../../../scripts/install_analyzers.sh"
+  if [[ -x $installer ]]; then
+    echo "Install the missing ones with: $(readlink -f "$installer")"
+  fi
+}
+
+# ---------------------------------------------------------------------------
+# --summarize: review-body markdown from a result file. Paragraphs are
+# separated by blank lines here, so callers print the output as-is.
 # ---------------------------------------------------------------------------
 summarize() {
   [[ -r $1 ]] || die "cannot read result file: $1"
-  jq -r '
+  jq -r --argjson covers "$(covers_json)" '
     def pl($n; $w): "\($n) \($w)\(if $n == 1 then "" else "s" end)";
     def lbl: if .tool == "secrets" and .engine then "secrets/\(.engine)" else .tool end;
     def join_or_none: if length == 0 then "none" else join(" · ") end;
-    "**Static analyzers run:** "
+    def gap: .status == "not_installed" or .status == "failed";
+    def what: $covers[.tool] // "";
+    def state:
+      if .status == "ran" then "✅ ran on \(pl(.files; "file")): \(pl(.findings; "finding")), \(.outside_diff) outside diff"
+      elif .status == "not_installed" then "⚠️ not installed: \(pl(.files; "changed file")) unchecked"
+      elif .status == "failed" then "⚠️ failed: \(pl(.files; "changed file")) unchecked"
+      else "➖ no matching files" + (if .installed == false then " (not installed)" else "" end) end;
+    (.tools | map(select(gap))) as $gaps
+    | "**Static analyzers run:** "
       + (.tools | map(select(.status == "ran")
           | "\(lbl) (\(pl(.files; "file")), \(pl(.findings; "finding")), \(.outside_diff) outside diff)")
         | join_or_none),
+    "",
     "**Static analyzers NOT run:** "
-      + (.tools | map(select(.status == "not_installed" or .status == "failed")
-          | if .status == "not_installed"
-            then "\(.tool) — not installed (applies to \(pl(.files; "changed file")))"
-            else "\(.tool) — failed: \(.reason // "unknown") (applies to \(pl(.files; "changed file")))" end)
-        | join_or_none)
+      + ($gaps | map(
+            (if .status == "not_installed"
+             then "\(.tool) — not installed (applies to \(pl(.files; "changed file")))"
+             else "\(.tool) — failed: \(.reason // "unknown") (applies to \(pl(.files; "changed file")))" end)
+            + (if what != "" then " → unchecked: \(what)" else "" end))
+        | join_or_none),
+    (if (.tools | length) == 0 then empty else
+      "",
+      "<details>",
+      "<summary>🔍 Static analyzer coverage: \(.tools | map(select(.installed == true or .status == "ran")) | length) of \(.tools | length) available to the reviewer</summary>",
+      "",
+      "| Analyzer | Version | This diff | What it checks |",
+      "|---|---|---|---|",
+      (.tools[] | "| \(lbl) | \(.version // "—") | \(state) | \(what) |"),
+      "",
+      (if ($gaps | length) > 0
+       then "**What this means:** the ⚠️ rows applied to this diff but did not run, so those areas were reviewed by the agent angles only, with no deterministic tool behind them. Treat a clean result there as weaker evidence."
+       else "**What this means:** every analyzer that applied to this diff ran; ➖ rows had no matching changed files." end),
+      "",
+      "</details>" end)
   ' "$1"
 }
 
@@ -78,6 +198,7 @@ while (($#)); do
     --out)        out="${2:?--out needs a file}"; shift 2 ;;
     --all-lines)  all_lines=1; shift ;;
     --summarize)  sum_file="${2:?--summarize needs a file}"; shift 2 ;;
+    --inventory)  inventory; exit 0 ;;
     -h|--help)    usage; exit 0 ;;
     *)            die "unknown argument: $1" ;;
   esac
@@ -151,20 +272,22 @@ done
 # ---------------------------------------------------------------------------
 : > "$tmp/tools.jsonl"
 : > "$tmp/findings.jsonl"
+probe_binaries
 
-find_tool() {
-  if [[ -n ${ANALYZER_BIN_DIR+x} ]]; then
-    [[ -f $ANALYZER_BIN_DIR/$1 && -x $ANALYZER_BIN_DIR/$1 ]] && printf '%s' "$ANALYZER_BIN_DIR/$1"
-  else
-    command -v "$1"
-  fi
-}
-
-# finish TOOL STATUS FILES [REASON] [ENGINE]
+# finish TOOL STATUS FILES [REASON] [ENGINE] — also records whether the tool is
+# installed and its version, so the review body can show the whole inventory,
+# not only the tools this diff needed.
 finish() {
+  local engine=${5:-}
+  [[ -n $engine ]] || engine=$(engine_for "$1")
+  local installed=false version=""
+  if [[ -n $engine && -n ${BIN_PATH[$engine]:-} ]]; then installed=true; version=${BIN_VER[$engine]:-}; fi
+  [[ $1 == secrets ]] || engine=""
   jq -nc --arg tool "$1" --arg status "$2" --argjson files "$3" \
-         --arg reason "${4:-}" --arg engine "${5:-}" \
-    '{tool: $tool, status: $status, files: $files}
+         --arg reason "${4:-}" --arg engine "$engine" \
+         --argjson installed "$installed" --arg version "$version" \
+    '{tool: $tool, status: $status, files: $files, installed: $installed}
+     + (if $version != "" then {version: $version} else {} end)
      + (if $reason != "" then {reason: $reason} else {} end)
      + (if $engine != "" then {engine: $engine} else {} end)' >> "$tmp/tools.jsonl"
 }
