@@ -240,6 +240,67 @@ inv=$(ANALYZER_BIN_DIR=$(mkbin invall shellcheck trufflehog semgrep golangci-lin
 grep -qF 'All 8 analyzers are available' <<<"$inv" || err "inventory: all-present message missing: $inv"
 grep -q '✗' <<<"$inv" && err "inventory: nothing should be missing"
 
+# --- semgrep skips test files: named targets bypass semgrep's own ignore list ---
+git checkout -q -b tests-only feature
+mkdir -p pkg/testdata tests
+printf 'package main\n' > main_test.go
+printf 'package pkg\n' > pkg/testdata/fix.go
+printf 'x = 1\n' > tests/helper.py
+printf 'export {}\n' > pkg/util.spec.ts
+git add -A && git commit -qm tests-only
+bin=$(mkbin sgt semgrep)
+: > "$STUB_LOG"
+ANALYZER_BIN_DIR=$bin "$script" --base feature --head tests-only --out "$work/rt.json" >/dev/null 2>&1 || err "tests-only: run failed"
+[[ $(tool_field "$work/rt.json" semgrep status) == not_applicable ]] \
+  || err "tests-only: semgrep status $(tool_field "$work/rt.json" semgrep status), want not_applicable"
+grep -q '^semgrep .* scan ' "$STUB_LOG" && err "tests-only: semgrep was run on test files only: $(cat "$STUB_LOG")"
+: > "$STUB_LOG"
+ANALYZER_BIN_DIR=$bin "$script" --base main --head tests-only --out "$work/rt2.json" >/dev/null 2>&1 || err "tests+src: run failed"
+sg_args=$(grep '^semgrep .* scan ' "$STUB_LOG")
+[[ $sg_args == *" app.py"* && $sg_args == *" main.go"* ]] || err "tests+src: source files not passed to semgrep: $sg_args"
+for f in main_test.go pkg/testdata/fix.go tests/helper.py pkg/util.spec.ts; do
+  [[ $sg_args == *" $f"* ]] && err "tests+src: test file $f passed to semgrep: $sg_args"
+done
+[[ $(tool_field "$work/rt2.json" semgrep files) == 2 ]] || err "tests+src: want semgrep files 2"
+git checkout -q feature
+
+# --- semgrep findings on lines a human already annotated are counted, not kept --
+git checkout -q -b annot main
+cat > sec.go <<'EOF'
+package main
+import "crypto/md5" //nolint:gosec // same line, security rule
+//nolint:gosec // comment-only line above, security rule
+var h = md5.New()
+var x = 1 //nolint:gosec // code line above does not cover the next line
+var y = 2
+var z = 3 //nolint:gosec // gosec marker, non-security rule
+var w = 4 //nolint // bare marker covers every rule
+var v = 5 // #nosec G401 -- nosec form, security rule
+var u = 6
+EOF
+git add -A && git commit -qm annot
+sg_hit() { printf '{"check_id":"%s","path":"sec.go","start":{"line":%d},"extra":{"message":"m","severity":"WARNING","lines":"requires login"}}' "$1" "$2"; }
+{ printf '{"results":['
+  sg_hit go.lang.security.audit.md5 2; printf ,
+  sg_hit go.lang.security.audit.md5 4; printf ,
+  sg_hit go.lang.security.audit.md5 6; printf ,
+  sg_hit go.lang.correctness.thing 7; printf ,
+  sg_hit go.lang.correctness.thing 8; printf ,
+  sg_hit go.lang.security.audit.md5 9; printf ,
+  sg_hit go.lang.security.audit.md5 10
+  printf '],"errors":[]}\n'; } > "$work/sg-annot.out"
+ANALYZER_BIN_DIR=$(mkbin sga semgrep) STUB_OUT_SEMGREP=$work/sg-annot.out \
+  "$script" --base main --head annot --out "$work/ra.json" >/dev/null 2>&1 || err "annotated: run failed"
+[[ $(jq -c '[.findings[] | select(.tool == "semgrep") | .line] | sort' "$work/ra.json") == '[6,7,10]' ]] \
+  || err "annotated: want kept lines [6,7,10], got $(jq -c '[.findings[] | select(.tool == "semgrep") | .line]' "$work/ra.json")"
+[[ $(tool_field "$work/ra.json" semgrep annotated) == 4 ]] || err "annotated: want 4 annotated, got $(tool_field "$work/ra.json" semgrep annotated)"
+[[ $(tool_field "$work/ra.json" semgrep findings) == 3 ]] || err "annotated: want 3 findings"
+jq -e '.findings | all(has("annotated") or has("inscope") | not)' "$work/ra.json" >/dev/null || err "annotated: internal fields leaked into findings"
+sum=$("$script" --summarize "$work/ra.json")
+grep -qF 'semgrep (1 file, 3 findings, 0 outside diff, 4 already annotated)' <<<"$sum" || err "annotated: ran line lacks the count: $sum"
+grep -qF '✅ ran on 1 file: 3 findings, 0 outside diff, 4 already annotated' <<<"$sum" || err "annotated: coverage row lacks the count"
+git checkout -q feature
+
 # --- usage / empty summary ---------------------------------------------------------
 "$script" >/dev/null 2>&1 && err "no --base: should exit 1"
 "$script" --base nosuchref >/dev/null 2>&1 && err "bad --base: should exit 1"

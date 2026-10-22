@@ -243,6 +243,14 @@ only on changed lines unless `--all-lines` is passed; the rest are counted as
 `outside_diff`. A non-zero exit is a usage or git error: report it and
 continue without analyzers, and say so in the review body.
 
+semgrep is not run on test files (`*_test.go`, `test_*.py`, `*.test.ts`,
+`test/`, `testdata/` and the like), so a diff that changes only tests reports
+it `not_applicable`. A semgrep finding whose line — or a comment-only line
+directly above it — already carries a matching suppression (`//nolint`,
+`nolint:all`, or, for a `.security.` rule, `nolint:gosec` / `#nosec`) is
+counted as `annotated` and not passed on: a human already triaged it. The
+review body shows that count, so the reader can see what was set aside.
+
 Print the gaps to the user as soon as the run finishes:
 `⟨skill-dir⟩/scripts/run-analyzers.sh --summarize <run-dir>/analyzers.json`.
 Each NOT-run entry says what it left unchecked, and the coverage table shows

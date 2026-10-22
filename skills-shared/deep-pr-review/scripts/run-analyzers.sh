@@ -41,7 +41,8 @@
 #                        --report-path F --redact --exit-code 0: array of
 #                        {RuleID,File,StartLine}
 #   semgrep        1.x   scan --json --metrics=off --quiet: {results:[{check_id,path,
-#                        start.line,extra.{message,severity}}],errors:[]}
+#                        start.line,extra.{message,severity}}],errors:[]}; extra.lines
+#                        can be "requires login", so a suppression is read from the file
 #   golangci-lint  v1 `--out-format json` (stdout) / v2 `--output.json.path F`:
 #                        {"Issues":[{FromLinter,Text,Pos.{Filename,Line}}]}; v2 run live
 #   ruff           0.x   check --output-format json --exit-zero: [{code,message,
@@ -158,15 +159,16 @@ summarize() {
     def join_or_none: if length == 0 then "none" else join(" · ") end;
     def gap: .status == "not_installed" or .status == "failed";
     def what: $covers[.tool] // "";
+    def annot: if (.annotated // 0) > 0 then ", \(.annotated) already annotated" else "" end;
     def state:
-      if .status == "ran" then "✅ ran on \(pl(.files; "file")): \(pl(.findings; "finding")), \(.outside_diff) outside diff"
+      if .status == "ran" then "✅ ran on \(pl(.files; "file")): \(pl(.findings; "finding")), \(.outside_diff) outside diff\(annot)"
       elif .status == "not_installed" then "⚠️ not installed: \(pl(.files; "changed file")) unchecked"
       elif .status == "failed" then "⚠️ failed: \(pl(.files; "changed file")) unchecked"
       else "➖ no matching files" + (if .installed == false then " (not installed)" else "" end) end;
     (.tools | map(select(gap))) as $gaps
     | "**Static analyzers run:** "
       + (.tools | map(select(.status == "ran")
-          | "\(lbl) (\(pl(.files; "file")), \(pl(.findings; "finding")), \(.outside_diff) outside diff)")
+          | "\(lbl) (\(pl(.files; "file")), \(pl(.findings; "finding")), \(.outside_diff) outside diff\(annot))")
         | join_or_none),
     "",
     "**Static analyzers NOT run:** "
@@ -359,6 +361,50 @@ for f in ${changed[@]+"${changed[@]}"}; do
   esac
 done
 
+# semgrep gets the source files minus tests. Its default ignore list (tests,
+# fixtures) applies only to directories it walks, and --exclude is ignored for
+# files named on the command line (both checked live on 1.182), so a named
+# test file is scanned in full — security rules on test fixtures are noise.
+sg_files=()
+for f in ${src_files[@]+"${src_files[@]}"}; do
+  case /$f in
+    */test/*|*/tests/*|*/__tests__/*|*/testdata/*) continue ;;
+    *_test.go|*/test_*.py|*_test.py|*.test.[jt]s|*.test.[jt]sx|*.spec.[jt]s|*.spec.[jt]sx) continue ;;
+  esac
+  sg_files+=("$f")
+done
+
+# Suppressions a human already wrote for the class of warning a semgrep rule
+# raises. A bare //nolint or nolint:all covers every rule; a gosec / nosec
+# marker covers only security rules (check_id containing ".security.").
+suppress_all_re='//nolint([^:[:alnum:]_]|$)|//nolint:([[:alnum:]_-]+,)*all([^[:alnum:]_-]|$)'
+suppress_sec_re='//nolint:([[:alnum:]_-]+,)*gosec([^[:alnum:]_-]|$)|#[[:space:]]*nosec([^[:alnum:]_]|$)'
+
+# mark_annotated TOOL — tags TOOL's findings with annotated:true when the
+# flagged line, or a comment-only line directly above it, carries a matching
+# suppression. Tagged findings are counted, not kept (see Assemble).
+mark_annotated() {
+  local tool=$1 i file line rule src prev re hits=()
+  while IFS=$'\t' read -r i file line rule; do
+    [[ $file == /* ]] || file=$root/$file
+    [[ -f $file && $line =~ ^[1-9][0-9]*$ ]] || continue
+    src=$(sed -n "${line}p" "$file")
+    prev=""
+    ((line > 1)) && prev=$(sed -n "$((line - 1))p" "$file")
+    [[ $prev =~ ^[[:space:]]*(//|#) ]] || prev=""
+    re=$suppress_all_re
+    [[ $rule == *.security.* ]] && re="$re|$suppress_sec_re"
+    if grep -qE "$re" <<<"$src"$'\n'"$prev"; then hits+=("$i"); fi
+  done < <(jq -rs --arg t "$tool" \
+    'to_entries[] | select(.value.tool == $t) | [.key, .value.file, (.value.line | tostring), .value.rule] | @tsv' \
+    "$tmp/findings.jsonl")
+  ((${#hits[@]})) || return 0
+  jq -cs --argjson idx "$(printf '%s\n' "${hits[@]}" | jq -sc .)" \
+    'to_entries[] | if (.key as $k | any($idx[]; . == $k)) then .value + {annotated: true} else .value end' \
+    "$tmp/findings.jsonl" > "$tmp/findings.marked"
+  mv "$tmp/findings.marked" "$tmp/findings.jsonl"
+}
+
 # ---------------------------------------------------------------------------
 # Tools.
 # ---------------------------------------------------------------------------
@@ -446,14 +492,15 @@ else
 fi
 
 # semgrep --------------------------------------------------------------------------
-if ((${#src_files[@]})); then
+if ((${#sg_files[@]})); then
   if t=$(find_tool semgrep); then
     cfg=p/default
     if [[ -e $root/.semgrep.yml ]]; then cfg=.semgrep.yml
     elif [[ -d $root/.semgrep ]]; then cfg=.semgrep; fi
     # A config/network failure must surface as `failed`: exit != 0, or an
-    # empty result alongside config/fetch-type errors.
-    simple_tool semgrep ${#src_files[@]} "0" \
+    # empty result alongside config/fetch-type errors. Rule crashes on single
+    # files are level "warn" with exit 0, and leave the rest of the scan valid.
+    simple_tool semgrep ${#sg_files[@]} "0" \
       'if ((.results | length) == 0) and ([.errors[]? | select(.level == "error" and (.type | tostring | test("Config|Fetch|Network|Rule"; "i")))] | length) > 0
          then error("semgrep config error")
          else .results[] | {tool: "semgrep", rule: .check_id, file: .path, line: .start.line,
@@ -461,10 +508,13 @@ if ((${#src_files[@]})); then
              | if . == "ERROR" or . == "CRITICAL" or . == "HIGH" then "high"
                elif . == "WARNING" or . == "MEDIUM" then "medium" else "low" end),
            message: .extra.message} end' \
-      "$t" scan --json --metrics=off --quiet --config "$cfg" "${src_files[@]}"
+      "$t" scan --json --metrics=off --quiet --config "$cfg" "${sg_files[@]}"
+    mark_annotated semgrep
   else
-    not_installed semgrep ${#src_files[@]} "semgrep not on PATH"
+    not_installed semgrep ${#sg_files[@]} "semgrep not on PATH"
   fi
+elif ((${#src_files[@]})); then
+  finish semgrep not_applicable 0 "only test files changed"
 else
   finish semgrep not_applicable 0
 fi
@@ -592,15 +642,18 @@ result=$(jq -n --arg base "$base_sha" --arg head "$head_label" --arg root "$root
   ($ranges | split("\n") | map(select(length > 0) | split("\t"))
     | reduce .[] as $r ({}; .[$r[0]] += [[($r[1] | tonumber), ($r[2] | tonumber)]])) as $rg
   | ($fnd | map(.file |= rel | .line = ((.line | tonumber? // 0))
-      | . + {keep: ($all == 1 or (.dep // false)
-              or (.file as $f | .line as $l | ($rg[$f] // []) | any(.[]; $l >= .[0] and $l <= .[1])))})) as $all_f
+      | . + {inscope: ($all == 1 or (.dep // false)
+              or (.file as $f | .line as $l | ($rg[$f] // []) | any(.[]; $l >= .[0] and $l <= .[1])))}
+      | . + {keep: (.inscope and ((.annotated // false) | not))})) as $all_f
   | ($all_f | map(select(.keep))) as $kept
   | {base: $base, head: $head,
      tools: ($tools | map(. as $t | if .status == "ran"
         then . + {findings: ($kept | map(select(.tool == $t.tool)) | length),
-                  outside_diff: ($all_f | map(select(.tool == $t.tool and (.keep | not))) | length)}
+                  outside_diff: ($all_f | map(select(.tool == $t.tool and (.inscope | not))) | length)}
+             + ($all_f | map(select(.tool == $t.tool and .inscope and (.annotated // false))) | length
+                | if . > 0 then {annotated: .} else {} end)
         else . end)),
-     findings: ($kept | map(del(.keep, .dep)))}')
+     findings: ($kept | map(del(.keep, .inscope, .dep, .annotated)))}')
 
 if [[ -n $out ]]; then
   printf '%s\n' "$result" > "$out"
