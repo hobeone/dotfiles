@@ -40,9 +40,11 @@ cat >"$stubs/uname" <<'EOF'
 #!/usr/bin/env bash
 case $1 in -s) echo "${STUB_OS:-Linux}" ;; -m) echo "${STUB_ARCH:-x86_64}" ;; esac
 EOF
+# uv / pipx / brew log the call and, like the real ones, leave the tool (the
+# last argument) behind as an executable unless STUB_NO_BIN is set.
 for t in uv pipx brew; do
 	# shellcheck disable=SC2016 # $* and $STUB_LOG belong to the generated stub
-	printf '#!/usr/bin/env bash\necho "%s $*" >>"$STUB_LOG"\n' "$t" >"$stubs/$t"
+	printf '#!/usr/bin/env bash\necho "%s $*" >>"$STUB_LOG"\n[[ -n ${STUB_NO_BIN:-} ]] || { mkdir -p "$ANALYZER_INSTALL_DIR"; printf "#!/bin/sh\\n" >"$ANALYZER_INSTALL_DIR/${!#}"; chmod +x "$ANALYZER_INSTALL_DIR/${!#}"; }\n' "$t" >"$stubs/$t"
 done
 chmod +x "$stubs"/*
 
@@ -94,6 +96,9 @@ grep -q 'Failed: actionlint' "$work/out" || err "gh failure: should report Faile
 # --- python tools: uv, else pipx --------------------------------------------
 run "uv preferred" 0 -- semgrep ruff
 grep -qx 'uv tool install semgrep' "$STUB_LOG" || err "semgrep should use uv: $(cat "$STUB_LOG")"
+run "installer lied" 1 STUB_NO_BIN=1 -- semgrep
+grep -q "semgrep: the installer reported success but no 'semgrep' binary was found" "$work/out" || err "missing binary after install not caught: $(cat "$work/out")"
+grep -q 'Failed: semgrep' "$work/out" || err "missing binary should be reported as Failed"
 HIDE=uv run "pipx fallback" 0 -- ruff
 grep -qx 'pipx install ruff' "$STUB_LOG" || err "ruff should fall back to pipx: $(cat "$STUB_LOG")"
 HIDE="uv pipx" run "no python installer" 1 -- ruff

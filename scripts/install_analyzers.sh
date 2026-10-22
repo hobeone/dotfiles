@@ -127,6 +127,14 @@ install_one() {
     esac
 }
 
+# installed_ok TOOL — the installer exiting 0 is not proof: the binary must now
+# be on PATH or in BIN_DIR.
+installed_ok() {
+    command -v "$1" >/dev/null || [[ -x $BIN_DIR/$1 ]] && return 0
+    log_error "$1: the installer reported success but no '$1' binary was found"
+    return 1
+}
+
 main() {
     local tools=() tool
     while [[ $# -gt 0 ]]; do
@@ -150,7 +158,7 @@ main() {
             present+=("$tool")
         elif $CHECK_ONLY; then
             failed+=("$tool")
-        elif install_one "$tool"; then
+        elif install_one "$tool" && { $DRY_RUN || installed_ok "$tool"; }; then
             installed+=("$tool")
         else
             failed+=("$tool")
