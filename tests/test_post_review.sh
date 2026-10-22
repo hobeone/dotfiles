@@ -408,6 +408,10 @@ refuses "heavy lift without rejected_alternative" 'map(del(.rejected_alternative
 refuses "blank counter_argument" 'map(.counter_argument = "  ")' 'counter_argument'
 refuses "moderate without rejected_alternative" 'map(.effort = "🔧 Moderate" | del(.rejected_alternative))' 'rejected_alternative'
 refuses "critical without counter_argument" 'map(.severity = "🔴 Critical" | del(.counter_argument))' 'counter_argument'
+# A label without its emoji must not slip past the rules above.
+refuses "severity without emoji" 'map(.severity = "Critical" | del(.counter_argument))' 'severity "Critical" is not one of'
+refuses "effort without emoji" 'map(.effort = "Heavy lift" | del(.rejected_alternative))' 'effort "Heavy lift" is not one of'
+refuses "missing severity" 'map(del(.severity))' 'severity null is not one of'
 # Not required: a Minor quick fix needs neither field.
 jq 'map(.severity = "🟡 Minor" | .effort = "🧹 Quick fix" | del(.counter_argument, .rejected_alternative))' "$fx/findings-sites.json" > "$work/gov-ok.json"
 "$script" 7 "$work/gov-ok.json" --repo o/r --dry-run >/dev/null 2>&1 || err "Minor quick fix was refused for lacking governance fields"

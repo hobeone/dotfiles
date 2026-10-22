@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Choose which Find angles to dispatch for a diff, from its size tier and from
 # patterns in the lines it adds, and say which angles were skipped and why.
-# A small docs-only change does not need sixteen subagents; a large one does.
+# A small docs-only change does not need every angle; a large one does.
 #
 # Usage:
 #   select-angles.sh --diff FILE [--full] [--github-remote yes|no]
@@ -25,7 +25,8 @@
 # and the gated angles) are policy, not the list, and
 # tests/test_select_angles.sh checks that each is a real heading.
 #
-# Tiers (documentation = *.md, *.txt, *.rst, or anything under a leading docs/):
+# Tiers (documentation = *.md, *.rst, or anything under a leading docs/; *.txt
+# is not, since requirements.txt and CMakeLists.txt are code):
 #   docs   every changed path is documentation
 #   tiny   under 50 changed lines and at most 3 files
 #   small  under 300 changed lines
@@ -51,7 +52,7 @@
 set -euo pipefail
 
 die() { printf '%s: %s\n' "${0##*/}" "$*" >&2; exit 1; }
-usage() { sed -n '2,10p' "$0"; }
+usage() { sed -n '2,51p' "$0"; }
 
 gate_E='wrapper|proxy|decorator|adapter|cache|delegate'
 gate_K='map|cache|latch|mutex|atomic|sync|once|state'
@@ -124,7 +125,7 @@ if [[ -r $diff_file ]] && grep -q '^diff --git ' "$diff_file"; then
   parsed=1
   read -r lines files modified all_docs < <(
     awk -v added="$work/added.txt" '
-      function is_doc(p) { return p ~ /\.(md|txt|rst)$/ || p ~ /^docs\// }
+      function is_doc(p) { return p ~ /\.(md|rst)$/ || p ~ /^docs\// }
       function close_file() { if (infile && !isnew) modified++ }
       /^diff --git / {
         close_file()

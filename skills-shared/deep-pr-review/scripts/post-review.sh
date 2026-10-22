@@ -3,8 +3,10 @@
 #
 # Usage:
 #   post-review.sh <pr-number> <findings.json> [--walkthrough FILE] [--repo O/R]
-#                  [--expect-head SHA] [--analyzers FILE] [--angles FILE]
-#                  [--sequential] [--draft] [--dry-run]
+#                  [--expect-head SHA] [--verdict V] [--since SHA] [--scope TEXT]
+#                  [--previously-raised TEXT] [--checks TEXT] [--not-verified TEXT]
+#                  [--analyzers FILE] [--angles FILE] [--sequential] [--draft]
+#                  [--dry-run]
 #
 # --angles FILE is select-angles.sh's JSON. The Method line then says
 # "ran K of N angles (tier: T)" and lists each skipped angle with its reason;
@@ -66,7 +68,7 @@ while (($#)); do
     --dry-run)           dry_run=1; shift ;;
     --sequential)        sequential=1; shift ;;
     --draft)             draft=1; shift ;;
-    -h|--help)           sed -n '2,22p' "$0"; exit 0 ;;
+    -h|--help)           sed -n '2,24p' "$0"; exit 0 ;;
     -*)                  die "unknown flag: $1" ;;
     *)
       if [[ -z $pr ]]; then pr="$1"
@@ -93,10 +95,18 @@ jq -e 'type == "array"' "$findings" >/dev/null || die "findings file must contai
 # (counter_argument), and a finding whose fix is Moderate or a Heavy lift must
 # name one fix that was considered and rejected (rejected_alternative). Checked
 # before any network call, so a refusal never leaves a half-posted review.
+# Severity and effort must be exact values from reference/format.md: a label
+# written without its emoji would otherwise slip past both rules.
 missing=$(jq -r '
   def blank: (. // "") | (type != "string") or (gsub("\\s"; "") == "");
-  to_entries[] | .key as $i | .value as $f
-  | ( if ($f.severity == "🔴 Critical" or $f.severity == "🟠 Major") and ($f.counter_argument | blank)
+  ["🔴 Critical", "🟠 Major", "🟡 Minor", "🔵 Nitpick"] as $sev
+  | ["🧹 Quick fix", "🔧 Moderate", "🏗️ Heavy lift"] as $eff
+  | to_entries[] | .key as $i | .value as $f
+  | ( if ($sev | index([$f.severity]) | not)
+      then "finding [\($i)] (\($f.title // "untitled") at \($f.path // "?"):\($f.line // "?")): severity \($f.severity | tojson) is not one of \($sev | join(", "))" else empty end ),
+    ( if ($eff | index([$f.effort]) | not)
+      then "finding [\($i)] (\($f.title // "untitled") at \($f.path // "?"):\($f.line // "?")): effort \($f.effort | tojson) is not one of \($eff | join(", "))" else empty end ),
+    ( if ($f.severity == "🔴 Critical" or $f.severity == "🟠 Major") and ($f.counter_argument | blank)
       then "finding [\($i)] (\($f.title // "untitled") at \($f.path // "?"):\($f.line // "?")): severity \($f.severity) requires counter_argument" else empty end ),
     ( if ($f.effort == "🔧 Moderate" or $f.effort == "🏗️ Heavy lift") and ($f.rejected_alternative | blank)
       then "finding [\($i)] (\($f.title // "untitled") at \($f.path // "?"):\($f.line // "?")): effort \($f.effort) requires rejected_alternative" else empty end )

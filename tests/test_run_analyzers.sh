@@ -171,6 +171,34 @@ ANALYZER_BIN_DIR=$bin "$script" --base main --out "$work/r8.json" >/dev/null 2>&
 [[ $(tool_field "$work/r8.json" shellcheck files) == 2 ]] || err "working-tree case: want 2 shell files (a.sh + untracked new.sh)"
 rm -f new.sh
 
+# --- output that cannot be trusted is `failed`, never "ran, 0 findings" -------
+: > "$work/empty.out"
+printf 'Error: format changed\n{"detector":"AWS"}\n' > "$work/th-garbage.out"
+printf '{"results":[],"errors":[{"level":"error","type":"InvalidRuleSchemaError","message":"bad rule"}]}\n' > "$work/sg-cfgerr.out"
+# expect_failed DESC TOOL REASON-SUBSTRING ENV... — run with ENV, assert failed.
+expect_failed() {
+  local desc=$1 tool=$2 want=$3
+  shift 3
+  env "$@" "$script" --base main --head feature --out "$work/rf.json" >/dev/null 2>&1 || { err "$desc: run failed"; return; }
+  [[ $(tool_field "$work/rf.json" "$tool" status) == failed ]] || err "$desc: $tool status $(tool_field "$work/rf.json" "$tool" status), want failed"
+  tool_field "$work/rf.json" "$tool" reason | grep -qF -- "$want" || err "$desc: reason lacks '$want': $(tool_field "$work/rf.json" "$tool" reason)"
+}
+expect_failed "trufflehog unrecognised output" secrets "not recognised" \
+  ANALYZER_BIN_DIR="$(mkbin thg trufflehog)" STUB_OUT_TRUFFLEHOG="$work/th-garbage.out"
+expect_failed "gitleaks wrote no report" secrets "no report" \
+  ANALYZER_BIN_DIR="$(mkbin gle gitleaks)" STUB_VERSION_GITLEAKS=8.21.0 STUB_OUT_GITLEAKS="$work/empty.out"
+expect_failed "ruff printed nothing" ruff "no output" \
+  ANALYZER_BIN_DIR="$(mkbin rfe ruff)" STUB_OUT_RUFF="$work/empty.out"
+expect_failed "semgrep config error with exit 0" semgrep "config error" \
+  ANALYZER_BIN_DIR="$(mkbin sgc semgrep)" STUB_OUT_SEMGREP="$work/sg-cfgerr.out"
+expect_failed "semgrep non-zero exit" semgrep "exit 7" \
+  ANALYZER_BIN_DIR="$(mkbin sge semgrep)" STUB_EXIT_SEMGREP=7
+# A clean trufflehog scan prints nothing at all: that is a real "ran, 0".
+ANALYZER_BIN_DIR=$(mkbin thc trufflehog) STUB_OUT_TRUFFLEHOG=$work/empty.out \
+  "$script" --base main --head feature --out "$work/rc.json" >/dev/null 2>&1 || err "clean trufflehog: run failed"
+[[ $(tool_field "$work/rc.json" secrets status)/$(tool_field "$work/rc.json" secrets findings) == ran/0 ]] \
+  || err "clean trufflehog: want ran/0, got $(tool_field "$work/rc.json" secrets status)/$(tool_field "$work/rc.json" secrets findings)"
+
 # --- inventory fields: every record says whether its tool is installed -------
 [[ $(tool_field "$work/r1.json" shellcheck installed) == true ]] || err "inventory: shellcheck not marked installed"
 [[ $(tool_field "$work/r1.json" shellcheck version) == 1.0.0 ]] || err "inventory: shellcheck version not recorded"

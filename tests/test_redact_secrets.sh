@@ -87,6 +87,22 @@ keep "kebab words" 'see risk-assessment-and-task-planning-documentation-for-the-
 keep "sha and uuid" 'commit 5f4aadd0c0ffee1234567890abcdef1234567890 id 123e4567-e89b-12d3-a456-426614174000'
 keep "go code" 'func (s *Server) Handle(w http.ResponseWriter, r *http.Request) { s.mu.Lock() }'
 
+# Values followed by a closer, passphrases, Bearer tokens and URL credentials:
+# each of these went through unredacted before the patterns were widened.
+v="abc123$(rep d 12)"
+check "unquoted value before )" "see (token=$v) here" 1 "$v"
+check "unquoted value before ]" "[token=$v]" 1 "$v"
+pp="correct horse battery $(rep 7 4)"
+check "quoted passphrase" "{\"password\":\"$pp\"}" 1 "$pp"
+check "quoted api_key with spaces" "api_key = \"$pp\"" 1 "$pp"
+bt=$(rep aB9 8)
+check "bearer token" "Authorization: Bearer $bt" 1 "$bt"
+up="p4ss$(rep w 8)"
+check "url userinfo" "postgres://admin:$up@db.internal/app" 1 "$up"
+keep "ssh url without password" 'ssh://git@github.com/owner/repo.git'
+keep "bearer in code" 'headers["Authorization"] = "Bearer " + token'
+keep "short quoted token in json" '{"token":"short","name":"a long ordinary value"}'
+
 # Idempotent: redacting redacted text changes nothing.
 once=$("$script" <<<"x $(printf 'gh%s_%s' p "$a36") y" 2>/dev/null)
 twice=$("$script" <<<"$once" 2>/dev/null)

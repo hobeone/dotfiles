@@ -5,6 +5,8 @@
 #
 # Logs "<name> cwd=<pwd> <args>" to $STUB_LOG, answers version queries from
 # $STUB_VERSION_<NAME> (default 1.0.0), exits with $STUB_EXIT_<NAME> (default 0).
+# $STUB_OUT_<NAME>, when set, is used instead of the canned output (an empty
+# file means "printed nothing" / "wrote no report").
 # @SECRET@ and @ROOT@ in the canned output are replaced at runtime so no
 # token-shaped literal is ever committed. Tools that write a report file
 # (gitleaks --report-path, golangci-lint v2 --output.json.path) get the
@@ -29,7 +31,13 @@ for a in "$@"; do
   prev=$a
 done
 
-content=$(cat "$(dirname "$(readlink -f "$0")")/../out/$name.out")
+o="STUB_OUT_$upper"
+if [[ -n ${!o:-} ]]; then
+  content=$(cat "${!o}")
+  [[ -n $content ]] || exit 0
+else
+  content=$(cat "$(dirname "$(readlink -f "$0")")/../out/$name.out")
+fi
 content=${content//@SECRET@/${STUB_SECRET:-}}
 content=${content//@ROOT@/$PWD}
 if [[ -n $out_file ]]; then printf '%s\n' "$content" > "$out_file"; else printf '%s\n' "$content"; fi

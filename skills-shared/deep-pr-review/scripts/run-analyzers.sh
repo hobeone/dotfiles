@@ -9,7 +9,8 @@
 #   run-analyzers.sh --summarize FILE
 #   run-analyzers.sh --inventory
 #
-# --base REF     compare against REF (merge-base semantics: BASE...HEAD)
+# --base REF     compare against REF. With --head: BASE...HEAD (merge-base
+#                semantics). Without it: the working tree against REF itself.
 # --head REF     analyse that commit. Without it, the working tree vs BASE plus
 #                untracked files. A --head other than the checked-out HEAD (or a
 #                dirty tree) is analysed in a throwaway detached worktree; the
@@ -29,29 +30,31 @@
 # Exit 0 whenever analysis completed, even if every tool was missing; 1 on
 # usage or git errors.
 #
-# Upstream formats implemented (verified against docs/--help where available;
-# those marked (memory) could not be fetched or run on the authoring machine):
+# Upstream formats implemented. Verified live against these versions (clean
+# and seeded files): shellcheck 0.10.0, trufflehog 3.99.3, gitleaks 8.30.1,
+# semgrep 1.182.0, golangci-lint 2.15.0, ruff 0.17.1, actionlint 1.7.12,
+# hadolint 2.15.1, osv-scanner 2.7.0. (memory) marks a detail not yet observed:
 #   ShellCheck     0.10  -f json1 -> {"comments":[{file,line,level,code,message}]}
 #   trufflehog     3.x   filesystem --json --no-update --no-verification: NDJSON,
-#                        SourceMetadata.Data.Filesystem.{file,line}, DetectorName (memory)
+#                        SourceMetadata.Data.Filesystem.{file,line}, DetectorName
 #   gitleaks       8.19+ `dir` / <8.19 `detect --no-git`; --report-format json
 #                        --report-path F --redact --exit-code 0: array of
-#                        {RuleID,File,StartLine} (memory for shape)
+#                        {RuleID,File,StartLine}
 #   semgrep        1.x   scan --json --metrics=off --quiet: {results:[{check_id,path,
-#                        start.line,extra.{message,severity}}],errors:[]} (memory)
+#                        start.line,extra.{message,severity}}],errors:[]}
 #   golangci-lint  v1 `--out-format json` (stdout) / v2 `--output.json.path F`:
 #                        {"Issues":[{FromLinter,Text,Pos.{Filename,Line}}]}; v2 run live
 #   ruff           0.x   check --output-format json --exit-zero: [{code,message,
-#                        filename(abs),location.row}] (memory)
+#                        filename(abs),location.row}]
 #   actionlint     1.7   -format '{{json .}}': [{message,filepath,line,kind}] (docs: array)
-#   hadolint       2.x   -f json --no-fail: [{code,file,level,line,message}] (memory)
+#   hadolint       2.x   -f json --no-fail: [{code,file,level,line,message}]
 #   osv-scanner    v1 `--format json -L F` / v2 `scan source --format json -L F`:
 #                        {results:[{source.path,packages:[{package,vulnerabilities:[{id,summary}]}]}]};
-#                        exit 1 = vulnerabilities found, 128 = no packages (memory)
+#                        exit 1 = vulnerabilities found, 128 = no packages (memory: 128)
 set -euo pipefail
 
 die() { printf '%s: %s\n' "${0##*/}" "$*" >&2; exit 1; }
-usage() { sed -n '2,30p' "$0"; }
+usage() { sed -n '2,31p' "$0"; }
 
 # ---------------------------------------------------------------------------
 # What each analyzer checks. One source for the kick-off inventory and the
@@ -316,8 +319,15 @@ simple_tool() {
     finish "$tool" failed "$n" "exit $rc: $(tail_of "$tmp/$tool.err")"
     return
   fi
-  if ! jq -c "$prog" "$tmp/$tool.out" > "$tmp/f.$tool" 2>/dev/null; then
-    finish "$tool" failed "$n" "unparseable output: $(tail_of "$tmp/$tool.err")"
+  # Every tool run through here prints JSON even on a clean file (checked
+  # live), so empty output means it did not really run.
+  if [[ ! -s $tmp/$tool.out ]]; then
+    finish "$tool" failed "$n" "no output: $(tail_of "$tmp/$tool.err")"
+    return
+  fi
+  # A program's own error() (semgrep's config check) is the clearest reason.
+  if ! jq -c "$prog" "$tmp/$tool.out" > "$tmp/f.$tool" 2>"$tmp/jq.$tool.err"; then
+    finish "$tool" failed "$n" "unparseable output: $(tail_of "$tmp/jq.$tool.err") $(tail_of "$tmp/$tool.err")"
     return
   fi
   cat "$tmp/f.$tool" >> "$tmp/findings.jsonl"
@@ -375,8 +385,15 @@ if ((${#changed[@]})); then
   nc=${#changed[@]}
   if t=$(find_tool trufflehog); then
     run_in "$root" "$tmp/th.out" "$tmp/th.err" "$t" filesystem --json --no-update --no-verification "${changed[@]}"
+    # A clean scan prints nothing. Every line it does print must be a result
+    # object; anything else means the format changed, which must read as a
+    # failure, not as "no secrets".
+    th_bad=$(jq -R 'select(test("\\S")) | (fromjson? // null) | select(type != "object" or (has("DetectorName") | not))' \
+      "$tmp/th.out" 2>/dev/null | head -c 1) || th_bad=x
     if ((rc != 0)); then
       finish secrets failed "$nc" "trufflehog exit $rc" trufflehog
+    elif [[ -n $th_bad ]]; then
+      finish secrets failed "$nc" "trufflehog output not recognised" trufflehog
     elif jq -cR 'fromjson? | select(type == "object" and has("DetectorName"))
         | ((.SourceMetadata.Data // {}) | [.[]] | .[0] // {}) as $m
         | {tool: "secrets", rule: .DetectorName, file: ($m.file // "unknown"), line: ($m.line // 0),
@@ -397,7 +414,7 @@ if ((${#changed[@]})); then
       mkdir -p "$scan/$(dirname "$f")"
       cp "$root/$f" "$scan/$f"
     done
-    gv=$("$t" version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+' | head -1 || true)
+    gv=${BIN_VER[gitleaks]:-}
     gmaj=${gv%%.*}; gmin=${gv#*.}
     if [[ -n $gv ]] && ((gmaj > 8 || (gmaj == 8 && gmin >= 19))); then
       gcmd=("$t" dir . --no-banner)
@@ -409,8 +426,10 @@ if ((${#changed[@]})); then
     if ((rc != 0)); then
       finish secrets failed "$nc" "gitleaks exit $rc" gitleaks
     else
-      [[ -s $tmp/gl.json ]] || echo '[]' > "$tmp/gl.json"
-      if jq -c '.[] | {tool: "secrets", rule: .RuleID, file: .File, line: .StartLine, severity: "high",
+      # gitleaks writes [] when it finds nothing, so a missing report is a failure.
+      if [[ ! -s $tmp/gl.json ]]; then
+        finish secrets failed "$nc" "gitleaks wrote no report" gitleaks
+      elif jq -c '.[] | {tool: "secrets", rule: .RuleID, file: .File, line: .StartLine, severity: "high",
           message: ("Possible secret detected by gitleaks, rule " + .RuleID + " (value withheld)")}' \
           "$tmp/gl.json" > "$tmp/f.secrets" 2>/dev/null; then
         cat "$tmp/f.secrets" >> "$tmp/findings.jsonl"
@@ -453,7 +472,7 @@ fi
 # golangci-lint --------------------------------------------------------------------
 if ((${#go_files[@]})); then
   if t=$(find_tool golangci-lint); then
-    gv=$("$t" --version 2>/dev/null | grep -oE 'version v?[0-9]+' | head -1 | grep -oE '[0-9]+' || true)
+    gv=${BIN_VER[golangci-lint]:-}; gv=${gv%%.*}
     declare -A mod_pkgs=()
     for f in "${go_files[@]}"; do
       d=$(dirname "$f"); m=$d
@@ -545,7 +564,7 @@ if ((${#manifests[@]})); then
     case " ${osv_args[*]:-} " in *" $f "*) ;; *) osv_args+=("$f") ;; esac
   done
   if t=$(find_tool osv-scanner); then
-    ov=$("$t" --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+' | head -1 || true)
+    ov=${BIN_VER[osv-scanner]:-}
     if [[ ${ov%%.*} == 1 ]]; then ocmd=("$t" --format json); else ocmd=("$t" scan source --format json); fi
     largs=(); for f in "${osv_args[@]}"; do largs+=(-L "$f"); done
     # Exit 128 = no packages found in the given files: ran, nothing to report.

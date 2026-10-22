@@ -78,13 +78,17 @@ done
 d=$work/docs.diff; : >"$d"
 add_file "$d" README.md mod 'hello'
 add_file "$d" docs/notes.go new 'package docs'
-add_file "$d" notes.txt new 'x'
+add_file "$d" notes.rst new 'x'
 json=$(run "$d") && expect docs "$json" docs "A B J O P" "C D E F G H I K L M N"
 jq -e '.skipped[] | select(.angle == "C") | .reason == "docs tier"' <<<"$json" >/dev/null || err "docs: skip reason is not 'docs tier'"
 d=$work/notdocs.diff; : >"$d"
 add_file "$d" README.md mod 'hello'
 add_file "$d" main.sh mod 'x=1'
 [[ $(tier_of "$d") == tiny ]] || err "README.md plus code is not a docs-only change"
+# *.txt is not documentation: a dependency bump must keep the code angles.
+d=$work/reqs.diff; : >"$d"
+add_file "$d" requirements.txt mod 'django==4.2.17'
+[[ $(tier_of "$d") == tiny ]] || err "requirements.txt alone was classed as docs (tier $(tier_of "$d"))"
 
 # --- tiny tier: base set plus gates ---
 d=$work/tiny.diff; : >"$d"

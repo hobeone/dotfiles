@@ -25,13 +25,20 @@
 #                     hyphens in the plain form, so words like "task-..." or
 #                     "risk-assessment-..." are left alone.
 #   JWT               eyJ<b64url>.eyJ<b64url>.<b64url>, each part 8+ chars
+#   Bearer            "Bearer " + 20 or more token characters; only the token
+#                     is replaced
+#   URL credentials   scheme://user:PASSWORD@ with a password of 6+ characters;
+#                     only the password is replaced
 #   generic           (api_key|apikey|api-key|secret|token|password|passwd) with
 #                     an optional short suffix (GITHUB_TOKEN, client_secret,
 #                     authToken), an optional closing quote, then : or =, then a
-#                     value of 12+ characters; ONLY the value is replaced. The
-#                     value may not contain whitespace, quotes, or ( ) { } [ ]
-#                     < > $ , ; so code such as `token = getToken(req)` or
-#                     `password = $PASSWORD` is left alone. A quoted value is
+#                     value of 12+ characters; ONLY the value is replaced. A
+#                     quoted value may hold spaces (a passphrase) but not a
+#                     newline. An unquoted value may not contain whitespace,
+#                     quotes, or ( ) { } [ ] < > $ , ; so code such as
+#                     `token = getToken(req)` or `password = $PASSWORD` is left
+#                     alone, and it may be followed by one of those closers, as
+#                     in prose like "(token=...)". A quoted value is
 #                     redacted whatever it looks like; an unquoted one must
 #                     also contain a digit, which a bare identifier
 #                     (`secret = some_long_name`) rarely does and a generated
@@ -61,14 +68,16 @@ exec perl -0777 -e '
   plain(qr/(?<![A-Za-z0-9_-])sk-ant-[A-Za-z0-9_-]{20,}/);
   plain(qr/(?<![A-Za-z0-9_-])(?:sk-proj-[A-Za-z0-9_-]{32,}|sk-[A-Za-z0-9]{32,})/);
   plain(qr/(?<![A-Za-z0-9_-])eyJ[A-Za-z0-9_-]{8,}\.eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}/);
+  $n += ($t =~ s/(\bBearer\s+)[A-Za-z0-9._~+\/=-]{20,}/$1$R/g);
+  $n += ($t =~ s/(:\/\/[^\/\s:@]+:)[^@\s\/]{6,}(?=@)/$1$R/g);
 
   my $key = qr/(?:api[_-]?key|secret|token|password|passwd)[A-Za-z0-9_-]{0,20}[\x27\x22]?\s*[:=]\s*/i;
   my $val = qr/[^\s\x27\x22(){}\[\]<>\$,;]{12,}/;
   # Quoted: redact whatever the value looks like.
-  $n += ($t =~ s/($key)([\x27\x22])([^\s\x27\x22]{12,})\2/$1$2$R$2/g);
+  $n += ($t =~ s/($key)([\x27\x22])((?:(?!\2)[^\n]){12,})\2/$1$2$R$2/g);
   # Unquoted: needs a digit and must be a whole word-ish run, not the start of
   # an expression.
-  $n += ($t =~ s/($key)(?![\x27\x22])(?=[^\s\x27\x22]*\d)($val)(?=[,;]?(?:[\s\x27\x22]|\z))/$1$R/g);
+  $n += ($t =~ s/($key)(?![\x27\x22])(?=[^\s\x27\x22]*\d)($val)(?=[,;)\]}>]|[\s\x27\x22]|\z)/$1$R/g);
 
   print $t;
   print STDERR "$n\n";

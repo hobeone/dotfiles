@@ -28,7 +28,7 @@ while (($#)); do
   case "$1" in
     --repo)      repo="${2:?--repo needs OWNER/NAME}"; shift 2 ;;
     --review-id) review_id="${2:?--review-id needs an id}"; shift 2 ;;
-    -h|--help)   sed -n '2,17p' "$0"; exit 0 ;;
+    -h|--help)   sed -n '2,18p' "$0"; exit 0 ;;
     -*)          die "unknown flag: $1" ;;
     *)
       [[ -z $pr ]] || die "unexpected argument: $1"
