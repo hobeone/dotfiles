@@ -10,6 +10,7 @@ Modular and modernized dotfiles for Zsh, Vim, and system-level configurations. S
 ```bash
 ./install.sh           # Full sync: pull, install/update packages, sync dotfiles
 ./install.sh -c        # Full sync including Claude Code configurations
+./install.sh -a        # Also install deep-pr-review's static analyzers (optional tools)
 ./install.sh -n        # Dry-run mode
 ./install.sh -v        # Verbose output
 ./scripts/update.sh    # Synchronize all submodules and update Oh My Zsh

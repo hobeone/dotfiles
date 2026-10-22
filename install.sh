@@ -10,6 +10,7 @@ VERBOSE=false
 INSTALL_DESKTOP=false
 INSTALL_CLAUDE=false
 INSTALL_SKILLS=false
+INSTALL_ANALYZERS=false
 
 usage() {
     cat <<EOF
@@ -21,6 +22,7 @@ Options:
     -d, --desktop   Desktop mode.  Install X11 desktop packages.
     -c, --claude    Claude mode. Install Claude CLI configurations.
     -s, --skills    Skills mode. Install agent plugins and curated external skills.
+    -a, --analyzers Install the static analyzers deep-pr-review can run.
     -h, --help      Show this help message and exit.
 
 EOF
@@ -34,6 +36,7 @@ while [[ $# -gt 0 ]]; do
         -d|--desktop) INSTALL_DESKTOP=true; shift ;;
         -c|--claude)  INSTALL_CLAUDE=true; shift ;;
         -s|--skills)  INSTALL_SKILLS=true; shift ;;
+        -a|--analyzers) INSTALL_ANALYZERS=true; shift ;;
         -h|--help)    usage; exit 0 ;;
         *)            echo "Unknown option: $1" >&2; usage; exit 1 ;;
     esac
@@ -771,6 +774,17 @@ main() {
             skill_args+=("--dry-run")
         fi
         execute "$DOTFILES_DIR/scripts/install_skills.sh" "${skill_args[@]}"
+    fi
+
+    # 10. Install static analyzers for deep-pr-review (with -a flag). A tool
+    # that fails to install is only a warning: the review flags it as NOT run.
+    if $INSTALL_ANALYZERS; then
+        local analyzer_args=()
+        if $DRY_RUN; then
+            analyzer_args+=("--dry-run")
+        fi
+        "$DOTFILES_DIR/scripts/install_analyzers.sh" "${analyzer_args[@]}" \
+            || log_warn "Some analyzers did not install; see above."
     fi
 
     log_info "Dotfiles installation complete!"

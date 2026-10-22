@@ -52,6 +52,7 @@ jobs:
             tests/test_redact_secrets.sh \
             tests/test_resolve_model.sh \
             tests/test_agy_review.sh \
+            tests/test_install_analyzers.sh \
             tests/fixtures/post_review/gh \
             tests/fixtures/run_analyzers/bin/stub \
             tests/fixtures/resolve_model/agy \
@@ -102,6 +103,9 @@ jobs:
 
       - name: agy-review.sh model handling
         run: bash tests/test_agy_review.sh
+
+      - name: install_analyzers.sh behavior
+        run: bash tests/test_install_analyzers.sh
 
   structure:
     name: Verify structure

@@ -9,6 +9,7 @@ Supports Debian/Ubuntu, Arch Linux, Fedora, and macOS.
 ./install.sh           # Full install: packages, fonts, symlinks
 ./install.sh -d        # Also install desktop/compositor packages
 ./install.sh -c        # Also install Claude Code configuration
+./install.sh -a        # Also install deep-pr-review's static analyzers (optional tools)
 ./install.sh -n        # Dry-run (preview changes without applying)
 ./install.sh -v        # Verbose output
 
