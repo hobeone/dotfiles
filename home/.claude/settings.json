@@ -102,5 +102,6 @@
       "**Org-specific CLIs**: None configured",
       "routine git/gh/go/npm/build-tooling operations under this repo's working tree are expected and low-risk per project conventions (PRs required, no direct push to main)"
     ]
-  }
+  },
+  "agentPushNotifEnabled": true
 }

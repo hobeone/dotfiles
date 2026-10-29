@@ -319,3 +319,6 @@ export NVM_DIR="$HOME/.nvm"
 
 # Powerlevel10k Configuration (Last)
 [[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh
+
+# bun completions
+[ -s "/home/hobe/.bun/_bun" ] && source "/home/hobe/.bun/_bun"
