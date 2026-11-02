@@ -105,7 +105,7 @@ want_log "kit --latest" "bun ui prune"
 want_log "kit --latest" "bun ui x svelte-kit sync"
 no_log "kit --skip-verify" "go build"
 
-run_main "$work/kit"
+STUB_BUMP=1 run_main "$work/kit"
 [[ $rc -eq 0 ]] || err "kit verify: exit $rc: $(cat "$work/out")"
 want_log "kit plain update" "bun ui update"
 no_log "kit plain update" "update --latest"
@@ -125,6 +125,36 @@ want_log "plain" "bun frontend update --latest !typescript"
 want_log "plain" "bun frontend prune"
 no_log "plain" "svelte-kit"
 
+# --- verification is skipped when the update changed nothing ----------------
+make_repo "$work/same" ui 1
+run_main "$work/same"
+[[ $rc -eq 0 ]] || err "unchanged: exit $rc: $(cat "$work/out")"
+grep -qF "Skipping verification: no dependency file changed" "$work/out" ||
+	err "unchanged: skip not reported: $(cat "$work/out")"
+want_log "unchanged" "bun ui update"
+no_log "unchanged" "install --frozen-lockfile"
+no_log "unchanged" "run check"
+no_log "unchanged" "go build"
+
+# A dependency edit made before the run is not a change by this run: it still
+# skips, and a --commit of it says why it went unverified.
+make_repo "$work/predirty" ui 0
+sed -i.bak 's/foo@1.0.0/foo@1.0.5/' "$work/predirty/ui/bun.lock" && rm -f "$work/predirty/ui/bun.lock.bak"
+run_main "$work/predirty" --commit --yes
+[[ $rc -eq 0 ]] || err "pre-edited: exit $rc: $(cat "$work/out")"
+no_log "pre-edited" "go build"
+msg=$(git -C "$work/predirty" log -1 --format=%B)
+grep -qxF -- "- foo 1.0.0 -> 1.0.5" <<<"$msg" || err "pre-edited: no foo change in message: '$msg'"
+grep -qxF "Not verified: the update itself changed no dependency file." <<<"$msg" ||
+	err "pre-edited: unverified reason missing: '$msg'"
+
+make_repo "$work/verified" ui 0
+STUB_BUMP=1 run_main "$work/verified" --commit --yes
+[[ $rc -eq 0 ]] || err "verified commit: exit $rc: $(cat "$work/out")"
+want_log "verified commit" "go verified build ./..."
+msg=$(git -C "$work/verified" log -1 --format=%B)
+grep -q "^Verified with go build" <<<"$msg" || err "verified commit: message: '$msg'"
+
 # --- --commit commits only the dependency files -----------------------------
 make_repo "$work/commit" ui 0
 echo "local edit" >"$work/commit/sub/.keep"
@@ -133,7 +163,8 @@ STUB_BUMP=1 run_main "$work/commit" --skip-verify --commit --yes
 msg=$(git -C "$work/commit" log -1 --format=%B)
 [[ $msg == "chore(deps): update go and bun dependencies"* ]] || err "commit: subject: '$msg'"
 grep -qxF -- "- foo 1.0.0 -> 1.1.0" <<<"$msg" || err "commit: no foo bump in message: '$msg'"
-grep -qF "Not verified" <<<"$msg" || err "commit: --skip-verify not noted"
+grep -qxF "Not verified: update ran with --skip-verify." <<<"$msg" ||
+	err "commit: --skip-verify not noted: '$msg'"
 [[ $(git -C "$work/commit" show --name-only --format= HEAD) == "ui/bun.lock" ]] ||
 	err "commit: committed $(git -C "$work/commit" show --name-only --format= HEAD | paste -sd' ' -)"
 git -C "$work/commit" diff --quiet -- sub/.keep && err "commit: unrelated edit was committed"

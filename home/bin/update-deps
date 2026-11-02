@@ -7,7 +7,8 @@
 # Usage: update-deps [--latest] [--skip-verify] [--commit] [--yes]
 #   --latest       also cross major versions for bun (rewrites package.json);
 #                  packages in BUN_LATEST_EXCLUDES are skipped
-#   --skip-verify  skip the build/test checks after updating
+#   --skip-verify  skip the build/test checks after updating (they are also
+#                  skipped when the update changed no dependency file)
 #   --commit       commit the dependency files with a summary of what changed;
 #                  shows the message and asks for confirmation first
 #   --yes          with --commit, skip the confirmation prompt (also skipped
@@ -100,6 +101,13 @@ prune_ui() {
   fi
 }
 
+# dep_snapshot: prints checksums of the dependency files as they are now, so
+# comparing two snapshots tells whether anything changed in between. Edits
+# made before the run don't count, unlike with git diff.
+dep_snapshot() {
+  cksum "${DEP_FILES[@]}" 2>/dev/null || true
+}
+
 # summarize_changes <mode> <file>
 # Reads the uncommitted diff of <file> and prints one line per dependency that
 # was bumped, added or removed. <mode> is "go" (go.mod) or "bun" (bun.lock).
@@ -143,24 +151,26 @@ section() {
   printf '\n'
 }
 
-# build_commit_message <verified: 0|1>
+# build_commit_message <verification: verified|skip-flag|unchanged>
 build_commit_message() {
-  local verified="$1" go_summary bun_summary
+  local verification="$1" go_summary bun_summary
   go_summary="$(summarize_changes go go.mod)"
   bun_summary="$(summarize_changes bun "${UI_DIR}/bun.lock")"
 
   printf 'chore(deps): update go and bun dependencies\n\n'
   section "Go modules" "${go_summary}"
   section "Bun packages" "${bun_summary}"
-  if [[ "${verified}" -eq 1 ]]; then
-    printf 'Verified with go build, go test, bun run check, bun run build and bun run test.\n'
-  else
-    printf 'Not verified: update ran with --skip-verify.\n'
-  fi
+  case "${verification}" in
+    verified)
+      printf 'Verified with go build, go test, bun run check, bun run build and bun run test.\n'
+      ;;
+    skip-flag) printf 'Not verified: update ran with --skip-verify.\n' ;;
+    unchanged) printf 'Not verified: the update itself changed no dependency file.\n' ;;
+  esac
 }
 
 main() {
-  local latest=0 verify=1 commit=0 yes=0 arg root
+  local latest=0 verify=1 commit=0 yes=0 arg root before verification
   for arg in "$@"; do
     case "${arg}" in
       --latest) latest=1 ;;
@@ -182,6 +192,7 @@ main() {
     exit 1
   fi
   configure
+  before="$(dep_snapshot)"
 
   echo "=== [1/4] Updating Go modules ==="
   run go get -u -v -t ./...
@@ -195,7 +206,14 @@ main() {
   fi
   prune_ui
 
-  if [[ "${verify}" -eq 1 ]]; then
+  if [[ "${verify}" -eq 0 ]]; then
+    verification=skip-flag
+    echo "=== Skipping verification (--skip-verify) ==="
+  elif [[ "$(dep_snapshot)" == "${before}" ]]; then
+    verification=unchanged
+    echo "=== Skipping verification: no dependency file changed ==="
+  else
+    verification=verified
     # The frontend goes first: its build output is what the Go code embeds,
     # so go build fails in a fresh clone without it, and go test would
     # otherwise run against a stale build.
@@ -211,8 +229,6 @@ main() {
     echo "=== [4/4] Verifying Go ==="
     run go build ./...
     run go test ./...
-  else
-    echo "=== Skipping verification (--skip-verify) ==="
   fi
 
   if [[ "${commit}" -eq 1 ]]; then
@@ -225,7 +241,7 @@ main() {
       # Expand now: `msg` is local and out of scope when the EXIT trap fires.
       # shellcheck disable=SC2064
       trap "rm -f '${msg}'" EXIT
-      build_commit_message "${verify}" >"${msg}"
+      build_commit_message "${verification}" >"${msg}"
 
       echo
       git --no-pager diff --stat -- "${DEP_FILES[@]}"
