@@ -32,7 +32,9 @@ jobs:
             home/bin/keyboard-settings \
             home/bin/keyboard-watch \
             home/bin/start-xss-lock \
-            home/bin/*.sh
+            home/bin/update-deps \
+            home/bin/*.sh \
+            tests/test_update_deps.sh
 
       - name: Run shellcheck on Claude hooks
         run: |
@@ -106,6 +108,9 @@ jobs:
 
       - name: install_analyzers.sh behavior
         run: bash tests/test_install_analyzers.sh
+
+      - name: update-deps behavior
+        run: bash tests/test_update_deps.sh
 
   structure:
     name: Verify structure
