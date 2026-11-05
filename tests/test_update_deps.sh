@@ -29,6 +29,12 @@ printf '%s %s %s\n' "$(basename "$0")" "$(basename "$PWD")" "$*" >>"$STUB_LOG"
 if [[ $(basename "$0") == bun && ${1:-} == update && -n ${STUB_BUMP:-} ]]; then
 	sed -i.bak 's/foo@1.0.0/foo@1.1.0/' bun.lock && rm -f bun.lock.bak
 fi
+if [[ $(basename "$0") == go && ${1:-} == get && -n ${STUB_GO_BUMP:-} ]]; then
+	sed -i.bak 's/v1.0.0/v1.1.0/' go.mod && rm -f go.mod.bak
+fi
+if [[ $(basename "$0") == go && ${1:-} == list ]]; then
+	sed -n 's/^[[:space:]]*require[[:space:]]*\([^[:space:]]*\).*/\1/p' go.mod
+fi
 EOF
 	chmod +x "$work/bin/$cmd"
 done
@@ -173,7 +179,43 @@ make_repo "$work/clean" ui 0
 run_main "$work/clean" --skip-verify --commit --yes
 grep -qF "No dependency changes to commit." "$work/out" || err "clean commit: no-op not reported"
 
+# --- direct dependencies from go.mod ----------------------------------------
+make_repo "$work/direct" ui 0
+printf 'module example.com/m\n\ngo 1.27\n\nrequire example.com/pkg v1.0.0\n' >"$work/direct/go.mod"
+git -C "$work/direct" commit -q -a -m "add dependency"
+run_main "$work/direct" --skip-verify
+[[ $rc -eq 0 ]] || err "direct: exit $rc: $(cat "$work/out")"
+want_log "direct deps" "go direct get -u -v -t example.com/pkg"
+no_log "direct deps" "get -u -v -t ./..."
+
+# --- --go-only / --bun-only filtering ---------------------------------------
+make_repo "$work/filter" ui 0
+printf 'module example.com/m\n\ngo 1.27\n\nrequire example.com/pkg v1.0.0\n' >"$work/filter/go.mod"
+git -C "$work/filter" commit -q -a -m "add dependency"
+STUB_GO_BUMP=1 run_main "$work/filter" --go-only --commit --yes
+[[ $rc -eq 0 ]] || err "go-only: exit $rc: $(cat "$work/out")"
+want_log "go-only" "go filter get -u -v -t example.com/pkg"
+want_log "go-only" "go filter build ./..."
+no_log "go-only" "bun ui"
+msg=$(git -C "$work/filter" log -1 --format=%B)
+[[ $msg == "chore(deps): update go dependencies"* ]] || err "go-only: subject: '$msg'"
+
+make_repo "$work/filterbun" ui 0
+STUB_BUMP=1 run_main "$work/filterbun" --bun-only --commit --yes
+[[ $rc -eq 0 ]] || err "bun-only: exit $rc: $(cat "$work/out")"
+want_log "bun-only" "bun ui update"
+want_log "bun-only" "bun ui run check"
+no_log "bun-only" "go filterbun get"
+no_log "bun-only" "go filterbun build"
+msg=$(git -C "$work/filterbun" log -1 --format=%B)
+[[ $msg == "chore(deps): update bun dependencies"* ]] || err "bun-only: subject: '$msg'"
+
 # --- arguments and preconditions --------------------------------------------
+run_main "$work/kit" --go-only --bun-only
+[[ $rc -eq 2 ]] || err "conflicting args: exit $rc, want 2"
+grep -qF "cannot specify both --go-only and --bun-only" "$work/out" ||
+	err "conflicting args: expected message: $(cat "$work/out")"
+
 run_main "$work/kit" --bogus
 [[ $rc -eq 2 ]] || err "unknown argument: exit $rc, want 2"
 

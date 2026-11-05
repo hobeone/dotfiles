@@ -4,7 +4,11 @@
 # Updates Go and bun dependencies of a Go repo with a bun frontend, then
 # verifies the result. Run it from anywhere inside the repo.
 #
-# Usage: update-deps [--latest] [--skip-verify] [--commit] [--yes]
+# Usage: update-deps [--latest] [--skip-verify] [--commit] [--yes] [--go-only | --bun-only]
+#   --go-only, --go
+#                  only update Go modules
+#   --bun-only, --bun, --node-only, --node
+#                  only update bun/node packages
 #   --latest       also cross major versions for bun (rewrites package.json);
 #                  packages in BUN_LATEST_EXCLUDES are skipped
 #   --skip-verify  skip the build/test checks after updating (they are also
@@ -33,6 +37,8 @@ BUN_LATEST_EXCLUDES=('!typescript')
 UI_DIR=""
 DEP_FILES=()
 DIFF_FILES=()
+UPDATE_GO=1
+UPDATE_BUN=1
 
 # run <cmd...>: prints the command, then runs it.
 run() {
@@ -83,11 +89,23 @@ uses_sveltekit() {
   grep -q '"@sveltejs/kit"' "$1/package.json"
 }
 
-# configure: finds the frontend and sets UI_DIR, DEP_FILES and DIFF_FILES.
+# configure: finds the frontend (if updating bun) and sets UI_DIR, DEP_FILES and DIFF_FILES.
 configure() {
-  UI_DIR="$(detect_ui_dir)"
-  DEP_FILES=(go.mod go.sum "${UI_DIR}/package.json" "${UI_DIR}/bun.lock")
-  DIFF_FILES=(go.mod "${UI_DIR}/package.json" "${UI_DIR}/bun.lock")
+  DEP_FILES=()
+  DIFF_FILES=()
+
+  if [[ "${UPDATE_GO}" -eq 1 ]]; then
+    DEP_FILES+=(go.mod go.sum)
+    DIFF_FILES+=(go.mod)
+  fi
+
+  if [[ "${UPDATE_BUN}" -eq 1 ]]; then
+    UI_DIR="$(detect_ui_dir)"
+    DEP_FILES+=("${UI_DIR}/package.json" "${UI_DIR}/bun.lock")
+    DIFF_FILES+=("${UI_DIR}/package.json" "${UI_DIR}/bun.lock")
+  else
+    UI_DIR="$(detect_ui_dir 2>/dev/null || true)"
+  fi
 }
 
 # prune_ui: drops unused packages. For SvelteKit it then regenerates
@@ -153,16 +171,39 @@ section() {
 
 # build_commit_message <verification: verified|skip-flag|unchanged>
 build_commit_message() {
-  local verification="$1" go_summary bun_summary
-  go_summary="$(summarize_changes go go.mod)"
-  bun_summary="$(summarize_changes bun "${UI_DIR}/bun.lock")"
+  local verification="$1" go_summary="" bun_summary=""
+  if [[ "${UPDATE_GO}" -eq 1 ]]; then
+    go_summary="$(summarize_changes go go.mod)"
+  fi
+  if [[ "${UPDATE_BUN}" -eq 1 && -n "${UI_DIR}" ]]; then
+    bun_summary="$(summarize_changes bun "${UI_DIR}/bun.lock")"
+  fi
 
-  printf 'chore(deps): update go and bun dependencies\n\n'
-  section "Go modules" "${go_summary}"
-  section "Bun packages" "${bun_summary}"
+  local title_target
+  if [[ "${UPDATE_GO}" -eq 1 && "${UPDATE_BUN}" -eq 1 ]]; then
+    title_target="go and bun"
+  elif [[ "${UPDATE_GO}" -eq 1 ]]; then
+    title_target="go"
+  else
+    title_target="bun"
+  fi
+
+  printf 'chore(deps): update %s dependencies\n\n' "${title_target}"
+  if [[ "${UPDATE_GO}" -eq 1 ]]; then
+    section "Go modules" "${go_summary}"
+  fi
+  if [[ "${UPDATE_BUN}" -eq 1 ]]; then
+    section "Bun packages" "${bun_summary}"
+  fi
   case "${verification}" in
     verified)
-      printf 'Verified with go build, go test, bun run check, bun run build and bun run test.\n'
+      if [[ "${UPDATE_GO}" -eq 1 && "${UPDATE_BUN}" -eq 1 ]]; then
+        printf 'Verified with go build, go test, bun run check, bun run build and bun run test.\n'
+      elif [[ "${UPDATE_GO}" -eq 1 ]]; then
+        printf 'Verified with go build and go test.\n'
+      else
+        printf 'Verified with bun run check, bun run build and bun run test.\n'
+      fi
       ;;
     skip-flag) printf 'Not verified: update ran with --skip-verify.\n' ;;
     unchanged) printf 'Not verified: the update itself changed no dependency file.\n' ;;
@@ -171,8 +212,23 @@ build_commit_message() {
 
 main() {
   local latest=0 verify=1 commit=0 yes=0 arg root before verification
+  local mode="all"
   for arg in "$@"; do
     case "${arg}" in
+      --go|--go-only)
+        if [[ "${mode}" == "bun" ]]; then
+          echo "update-deps: cannot specify both --go-only and --bun-only" >&2
+          exit 2
+        fi
+        mode="go"
+        ;;
+      --bun|--bun-only|--node|--node-only)
+        if [[ "${mode}" == "go" ]]; then
+          echo "update-deps: cannot specify both --go-only and --bun-only" >&2
+          exit 2
+        fi
+        mode="bun"
+        ;;
       --latest) latest=1 ;;
       --skip-verify) verify=0 ;;
       --commit) commit=1 ;;
@@ -182,29 +238,53 @@ main() {
     esac
   done
 
+  if [[ "${mode}" == "go" ]]; then
+    UPDATE_BUN=0
+  elif [[ "${mode}" == "bun" ]]; then
+    UPDATE_GO=0
+  fi
+
   if ! root="$(git rev-parse --show-toplevel 2>/dev/null)"; then
     echo "update-deps: not inside a git repository" >&2
     exit 1
   fi
   cd "${root}"
-  if [[ ! -f go.mod ]]; then
+  if [[ "${UPDATE_GO}" -eq 1 && ! -f go.mod ]]; then
     echo "update-deps: no go.mod in ${root}" >&2
     exit 1
   fi
   configure
   before="$(dep_snapshot)"
 
-  echo "=== [1/4] Updating Go modules ==="
-  run go get -u -v -t ./...
-  run go mod tidy
-
-  echo "=== [2/4] Updating bun packages ==="
-  if [[ "${latest}" -eq 1 ]]; then
-    run_in "${UI_DIR}" bun update --latest "${BUN_LATEST_EXCLUDES[@]}"
-  else
-    run_in "${UI_DIR}" bun update
+  if [[ "${UPDATE_GO}" -eq 1 ]]; then
+    if [[ "${UPDATE_BUN}" -eq 1 ]]; then
+      echo "=== [1/4] Updating Go modules ==="
+    else
+      echo "=== Updating Go modules ==="
+    fi
+    local direct_deps=()
+    mapfile -t direct_deps < <(go list -m -f '{{if not (or .Main .Indirect)}}{{.Path}}{{end}}' all 2>/dev/null | sed '/^$/d')
+    if [[ ${#direct_deps[@]} -gt 0 ]]; then
+      run go get -u -v -t "${direct_deps[@]}"
+    else
+      run go get -u -v -t ./...
+    fi
+    run go mod tidy
   fi
-  prune_ui
+
+  if [[ "${UPDATE_BUN}" -eq 1 ]]; then
+    if [[ "${UPDATE_GO}" -eq 1 ]]; then
+      echo "=== [2/4] Updating bun packages ==="
+    else
+      echo "=== Updating bun packages ==="
+    fi
+    if [[ "${latest}" -eq 1 ]]; then
+      run_in "${UI_DIR}" bun update --latest "${BUN_LATEST_EXCLUDES[@]}"
+    else
+      run_in "${UI_DIR}" bun update
+    fi
+    prune_ui
+  fi
 
   if [[ "${verify}" -eq 0 ]]; then
     verification=skip-flag
@@ -217,18 +297,30 @@ main() {
     # The frontend goes first: its build output is what the Go code embeds,
     # so go build fails in a fresh clone without it, and go test would
     # otherwise run against a stale build.
-    echo "=== [3/4] Verifying ${UI_DIR} ==="
-    # Install exactly what bun.lock records, so the checks below run against
-    # the locked versions; it also fails if bun.lock and package.json disagree.
-    run_in "${UI_DIR}" bun install --frozen-lockfile
-    prune_ui
-    run_in "${UI_DIR}" bun run check
-    run_in "${UI_DIR}" bun run build
-    run_in "${UI_DIR}" bun run test
+    if [[ "${UPDATE_BUN}" -eq 1 ]]; then
+      if [[ "${UPDATE_GO}" -eq 1 ]]; then
+        echo "=== [3/4] Verifying ${UI_DIR} ==="
+      else
+        echo "=== Verifying ${UI_DIR} ==="
+      fi
+      # Install exactly what bun.lock records, so the checks below run against
+      # the locked versions; it also fails if bun.lock and package.json disagree.
+      run_in "${UI_DIR}" bun install --frozen-lockfile
+      prune_ui
+      run_in "${UI_DIR}" bun run check
+      run_in "${UI_DIR}" bun run build
+      run_in "${UI_DIR}" bun run test
+    fi
 
-    echo "=== [4/4] Verifying Go ==="
-    run go build ./...
-    run go test ./...
+    if [[ "${UPDATE_GO}" -eq 1 ]]; then
+      if [[ "${UPDATE_BUN}" -eq 1 ]]; then
+        echo "=== [4/4] Verifying Go ==="
+      else
+        echo "=== Verifying Go ==="
+      fi
+      run go build ./...
+      run go test ./...
+    fi
   fi
 
   if [[ "${commit}" -eq 1 ]]; then
