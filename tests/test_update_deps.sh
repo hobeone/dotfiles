@@ -32,6 +32,10 @@ fi
 if [[ $(basename "$0") == go && ${1:-} == get && -n ${STUB_GO_BUMP:-} ]]; then
 	sed -i.bak 's/v1.0.0/v1.1.0/' go.mod && rm -f go.mod.bak
 fi
+if [[ $(basename "$0") == go && ${1:-} == list && -n ${STUB_GO_LIST_FAIL:-} ]]; then
+	echo "go: stub list failure" >&2
+	exit 1
+fi
 if [[ $(basename "$0") == go && ${1:-} == list ]]; then
 	sed -n 's/^[[:space:]]*require[[:space:]]*\([^[:space:]]*\).*/\1/p' go.mod
 fi
@@ -105,7 +109,11 @@ uses_sveltekit "$work/d/one/ui" || err "uses_sveltekit: kit dependency not seen"
 make_repo "$work/kit" ui 1
 run_main "$work/kit" --latest --skip-verify
 [[ $rc -eq 0 ]] || err "kit --latest: exit $rc: $(cat "$work/out")"
-want_log "kit --latest" "go kit get -u -v -t ./..."
+# No direct dependencies: nothing to upgrade, and never a blanket get -u ./...
+no_log "kit --latest" "^go kit get"
+want_log "kit --latest" "go kit mod tidy"
+grep -qF "No direct Go dependencies to update." "$work/out" ||
+	err "kit --latest: no-deps skip not reported: $(cat "$work/out")"
 want_log "kit --latest" "bun ui update --latest !typescript"
 want_log "kit --latest" "bun ui prune"
 want_log "kit --latest" "bun ui x svelte-kit sync"
@@ -181,12 +189,22 @@ grep -qF "No dependency changes to commit." "$work/out" || err "clean commit: no
 
 # --- direct dependencies from go.mod ----------------------------------------
 make_repo "$work/direct" ui 0
-printf 'module example.com/m\n\ngo 1.27\n\nrequire example.com/pkg v1.0.0\n' >"$work/direct/go.mod"
-git -C "$work/direct" commit -q -a -m "add dependency"
+printf 'module example.com/m\n\ngo 1.27\n\nrequire example.com/pkg v1.0.0\nrequire example.com/other v0.1.0\n' \
+	>"$work/direct/go.mod"
+git -C "$work/direct" commit -q -a -m "add dependencies"
 run_main "$work/direct" --skip-verify
 [[ $rc -eq 0 ]] || err "direct: exit $rc: $(cat "$work/out")"
-want_log "direct deps" "go direct get -u -v -t example.com/pkg"
-no_log "direct deps" "get -u -v -t ./..."
+# Each direct module goes to @upgrade with no -u, which would also raise
+# transitive modules past what their dependents require.
+want_log "direct deps" "go direct get -v -t example.com/pkg@upgrade example.com/other@upgrade"
+no_log "direct deps" "get -u"
+
+# A failing go list stops the run instead of falling back to some other get.
+make_repo "$work/listfail" ui 0
+STUB_GO_LIST_FAIL=1 run_main "$work/listfail" --go-only --skip-verify
+[[ $rc -ne 0 ]] || err "go list failure: exit 0, want non-zero"
+grep -qF "stub list failure" "$work/out" || err "go list failure: error not shown: $(cat "$work/out")"
+no_log "go list failure" "^go listfail get"
 
 # --- --go-only / --bun-only filtering ---------------------------------------
 make_repo "$work/filter" ui 0
@@ -194,7 +212,7 @@ printf 'module example.com/m\n\ngo 1.27\n\nrequire example.com/pkg v1.0.0\n' >"$
 git -C "$work/filter" commit -q -a -m "add dependency"
 STUB_GO_BUMP=1 run_main "$work/filter" --go-only --commit --yes
 [[ $rc -eq 0 ]] || err "go-only: exit $rc: $(cat "$work/out")"
-want_log "go-only" "go filter get -u -v -t example.com/pkg"
+want_log "go-only" "go filter get -v -t example.com/pkg@upgrade"
 want_log "go-only" "go filter build ./..."
 no_log "go-only" "bun ui"
 msg=$(git -C "$work/filter" log -1 --format=%B)

@@ -262,12 +262,19 @@ main() {
     else
       echo "=== Updating Go modules ==="
     fi
-    local direct_deps=()
-    mapfile -t direct_deps < <(go list -m -f '{{if not (or .Main .Indirect)}}{{.Path}}{{end}}' all 2>/dev/null | sed '/^$/d')
+    # Each direct module goes to @upgrade; there is no -u. -u would also raise
+    # every transitive module to its latest version, past what the modules
+    # that depend on it require, and a v0 module may break its API in any
+    # release. Transitive modules move only as far as an upgraded direct
+    # module requires. @upgrade, unlike @latest, never downgrades a module
+    # already ahead of its latest release.
+    local listed direct_deps=()
+    listed="$(go list -m -f '{{if not (or .Main .Indirect)}}{{.Path}}{{end}}' all)"
+    mapfile -t direct_deps < <(sed '/^$/d' <<<"${listed}")
     if [[ ${#direct_deps[@]} -gt 0 ]]; then
-      run go get -u -v -t "${direct_deps[@]}"
+      run go get -v -t "${direct_deps[@]/%/@upgrade}"
     else
-      run go get -u -v -t ./...
+      echo "No direct Go dependencies to update."
     fi
     run go mod tidy
   fi
