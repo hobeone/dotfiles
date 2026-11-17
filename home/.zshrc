@@ -2,6 +2,10 @@
 # .zshrc - ZSH Configuration File
 # ==============================================================================
 
+# Unread-mail notice. It prints at startup, so it must run before instant prompt.
+[[ -o interactive && -r $HOME/dotfiles/home/.zsh_custom/lib/maildir-notify.zsh ]] &&
+  source "$HOME/dotfiles/home/.zsh_custom/lib/maildir-notify.zsh"
+
 # ------------------------------------------------------------------------------
 # 1. Powerlevel10k Instant Prompt
 # ------------------------------------------------------------------------------
