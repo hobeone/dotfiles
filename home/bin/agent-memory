@@ -9,7 +9,8 @@
 #
 # <key> is the origin remote's owner/repo (hobeone/gonzbd), so every
 # checkout of a repo shares one folder on every machine. A repo with no
-# origin, or a directory outside git, gets local/<folder name>.
+# origin, an origin with no owner/repo in its path, or a directory outside
+# git gets local/<folder name>.
 #
 # Usage: agent-memory <command> [dir]
 #   key [dir]     print the project key for dir (default: current directory)
@@ -43,6 +44,8 @@
 set -euo pipefail
 
 STORE="${AGENT_MEMORY_HOME:-${HOME}/.agents/memory}"
+# sync changes into the store, so a relative path would resolve twice.
+[[ "${STORE}" == /* ]] || STORE="${PWD}/${STORE}"
 CLAUDE_PROJECTS="${CLAUDE_PROJECTS_DIR:-${HOME}/.claude/projects}"
 
 # The index being written, removed on exit (see the trap at the bottom) so
@@ -72,30 +75,40 @@ main_worktree() {
   fi
 }
 
-# key_from_url <url>: prints owner/repo from a git remote URL in scp
-# (git@host:o/r.git), URL (https://host/o/r, ssh://git@host:22/o/r.git) or
-# path form: the last two components, without .git, lowercased because
-# GitHub owner and repo names are case-insensitive. The host is dropped, so
-# the same owner/repo on two hosts shares a folder.
+# key_from_url <url>: prints owner/repo from a git remote URL in URL form
+# (https://host/o/r, ssh://git@host:22/o/r.git), scp form (git@host:o/r.git)
+# or path form: the last two path components, without .git, lowercased
+# because GitHub owner and repo names are case-insensitive. Scheme, user,
+# host and port are dropped first, so the same owner/repo on two hosts
+# shares a folder. Fails when the path has fewer than two components.
 key_from_url() {
-  local url="$1" owner repo
-  url="${url%/}"
-  url="${url%.git}"
-  url="$(sed -E 's#[:/]+#/#g' <<<"${url}")"
-  repo="${url##*/}"
-  url="${url%/*}"
-  owner="${url##*/}"
-  if [[ "${owner}" == "${url}" ]] || ! safe_component "${owner}" || ! safe_component "${repo}"; then
-    return 1
+  local url="$1" path owner repo
+  if [[ "${url}" =~ ^[A-Za-z][A-Za-z0-9+.-]*:// ]]; then
+    path="${url#*://}"
+    [[ "${path}" == */* ]] || return 1
+    path="${path#*/}"
+  elif [[ "${url}" =~ ^[^/]*: ]]; then
+    path="${url#*:}"
+  else
+    path="${url}"
   fi
+  path="${path%/}"
+  path="${path%.git}"
+  path="${path#/}"
+  [[ "${path}" == */* ]] || return 1
+  repo="${path##*/}"
+  owner="${path%/*}"
+  owner="${owner##*/}"
+  safe_component "${owner}" && safe_component "${repo}" || return 1
   printf '%s/%s\n' "${owner}" "${repo}" | tr '[:upper:]' '[:lower:]'
 }
 
-# project_key <dir>: prints the project key for <dir>.
+# project_key <dir>: prints the project key for <dir>: owner/repo from its
+# origin, or local/<folder> when there is no origin or no owner/repo in it.
 project_key() {
   local dir="$1" top url name
-  if top="$(main_worktree "${dir}")" && url="$(git -C "${top}" remote get-url origin 2>/dev/null)"; then
-    key_from_url "${url}" || die "cannot derive owner/repo from origin '${url}'"
+  if top="$(main_worktree "${dir}")" && url="$(git -C "${top}" remote get-url origin 2>/dev/null)" &&
+    key_from_url "${url}"; then
     return 0
   fi
   name="$(basename "${top:-$(cd "${dir}" && pwd -P)}")"
@@ -243,6 +256,8 @@ cmd_context() {
   if ! problems="$(cmd_check "${dir}")"; then
     printf '\n## Memory files to fix\n\n%s\n' "${problems}"
   fi
+  problems="$(pending_rescue)"
+  [[ -z "${problems}" ]] || printf '\n## Rescued edits to restore\n\n%s\n' "${problems}"
 }
 
 cmd_key() {
@@ -262,6 +277,9 @@ cmd_link() {
   key="$(project_key "${dir}")"
   target="${STORE}/projects/${key}"
   mkdir -p "${target}"
+  # A project new to the store gets its (empty) index now; session start
+  # skips the full rebuild when a sync has just done one.
+  [[ -f "${target}/MEMORY.md" ]] || index_dir "${target}"
   cdir="$(claude_project_dir "${dir}")"
   mem="${cdir}/memory"
   mkdir -p "${cdir}"
@@ -281,7 +299,9 @@ cmd_link() {
   elif [[ -e "${mem}" ]]; then
     die "${mem} exists and is not a folder or a link"
   fi
-  ln -s "${target}" "${mem}"
+  # -n: a concurrent link made since the checks above is replaced, not
+  # followed into the target folder.
+  ln -sfn "${target}" "${mem}"
 }
 
 cmd_index() {
@@ -308,22 +328,37 @@ commit_all() {
 # abort_rebase: cancels a rebase, which resets tracked files to the commit
 # the rebase started from. An agent may have edited a memory after the
 # rebase stopped; git's own half-applied changes are staged, the agent's
-# are not, so every file differing from the index (conflicted ones aside)
-# is copied out first. When anything was copied the sync stops and says
-# where, because the store no longer holds those edits.
+# are not, so every file differing from the index is copied out first.
+# Conflicted files are skipped: they differ from the index without anyone
+# editing them, and the local version is in the commit being replayed.
+# When anything was copied the sync stops and says where, because the
+# store no longer holds those edits; session start keeps reporting the
+# folder until it is deleted.
 abort_rebase() {
-  local rescue f n=0
+  local rescue f entry n=0 unmerged=$'\n'
   rescue=".git/agent-memory-rescue/$(date +%Y%m%dT%H%M%S)"
-  while IFS= read -r f; do
-    [[ -n "${f}" && -f "${f}" ]] || continue
+  while IFS= read -r -d '' entry; do
+    unmerged+="${entry#*$'\t'}"$'\n'
+  done < <(git ls-files -u -z)
+  while IFS= read -r -d '' f; do
+    [[ "${unmerged}" == *$'\n'"${f}"$'\n'* ]] && continue
+    [[ -f "${f}" ]] || continue
     mkdir -p "${rescue}/$(dirname "${f}")"
     cp -p "${f}" "${rescue}/${f}"
     n=$((n + 1))
-  done < <(git diff --name-only --diff-filter=MT)
+  done < <(git diff -z --name-only --diff-filter=MT)
   git rebase --abort
   if [[ "${n}" -gt 0 ]]; then
     die "cancelled a rebase that would have reverted ${n} edited memory file(s); copies are in ${STORE}/${rescue}: restore them by hand, then sync"
   fi
+}
+
+# pending_rescue: prints a notice while abort_rebase's copies are waiting.
+# A stop hook cannot show its own errors, so session start repeats this.
+pending_rescue() {
+  local dir="${STORE}/.git/agent-memory-rescue"
+  [[ -d "${dir}" && -n "$(ls -A "${dir}")" ]] || return 0
+  printf 'agent-memory: memory edits copied out before a rebase was cancelled are waiting in %s: restore what is still needed, then delete that folder\n' "${dir}"
 }
 
 # needs_sync: succeeds when the store has something to commit or push.
@@ -339,8 +374,16 @@ needs_sync() {
 }
 
 cmd_sync() {
-  local if_needed=0 branch
-  [[ "${1:-}" == "--if-needed" ]] && if_needed=1
+  local if_needed=0 branch arg has_origin=0 remote=0
+  for arg in "$@"; do
+    case "${arg}" in
+      --if-needed) if_needed=1 ;;
+      *)
+        echo "Usage: agent-memory sync [--if-needed]" >&2
+        exit 2
+        ;;
+    esac
+  done
   [[ -d "${STORE}/.git" ]] || die "${STORE} is not a git repository"
   cd "${STORE}"
   # Claude and agy can finish a turn at the same moment: the second sync
@@ -349,11 +392,17 @@ cmd_sync() {
   if command -v flock >/dev/null 2>&1; then
     exec 9>"${STORE}/.git/agent-memory.lock"
     flock -w 20 9 || die "another sync held the lock for 20s"
+    # git's children (a credential cache daemon, say) must not inherit the
+    # lock and hold it after this run ends.
+    git() { command git "$@" 9>&-; }
   fi
   # A run killed mid-rebase leaves it in progress; only sync rebases here.
   if [[ -d .git/rebase-merge || -d .git/rebase-apply ]]; then
     abort_rebase
   fi
+  # Before anything is committed: a commit on a detached HEAD is stranded.
+  branch="$(git symbolic-ref -q --short HEAD)" || die "${STORE} has a detached HEAD; check out a branch"
+  git remote get-url origin >/dev/null 2>&1 && has_origin=1
   # Hooks run sync unattended: never wait for credentials, and give up on
   # a stalled transfer instead of holding up the session.
   export GIT_TERMINAL_PROMPT=0
@@ -361,25 +410,50 @@ cmd_sync() {
   local net=(-c http.lowSpeedLimit=1000 -c http.lowSpeedTime=10)
 
   ensure_gitignore
-  index_all
   if [[ "${if_needed}" -eq 1 ]] && ! needs_sync; then
     return 0
   fi
+
+  if [[ "${has_origin}" -eq 1 ]]; then
+    # 0: the branch exists; 2: reachable, no branch yet (a new repo);
+    # anything else: the remote could not be asked at all.
+    git "${net[@]}" ls-remote --exit-code --heads origin "${branch}" >/dev/null 2>&1 || remote=$?
+    case "${remote}" in
+      0 | 2) ;;
+      *) die "cannot reach origin (git ls-remote exit ${remote}); local changes are kept" ;;
+    esac
+    # A store with no commits yet takes the remote's history first, so its
+    # own first commit does not start an unrelated root that conflicts.
+    # reset leaves the working tree alone, so the remote's files that are
+    # not on disk here are checked out; otherwise the next commit records
+    # them as deleted. A file both sides have keeps the local version.
+    if [[ "${remote}" -eq 0 ]] && ! git rev-parse -q --verify HEAD >/dev/null; then
+      git "${net[@]}" fetch -q origin "${branch}"
+      git reset -q FETCH_HEAD
+      local missing=() f
+      while IFS= read -r -d '' f; do missing+=("${f}"); done < <(git ls-files -z --deleted)
+      [[ ${#missing[@]} -eq 0 ]] || git checkout -q -- "${missing[@]}"
+      ensure_gitignore
+    fi
+  fi
+
   commit_all
-  git remote get-url origin >/dev/null 2>&1 || return 0
-  branch="$(git symbolic-ref -q --short HEAD)" || die "${STORE} has a detached HEAD; check out a branch"
+  if [[ "${has_origin}" -eq 0 ]]; then
+    index_all
+    return 0
+  fi
 
   # An agent may write between the commit and the pull, and pull --rebase
   # refuses a dirty tree. Commit once more; if files are still changing,
   # leave them for the next run rather than fail.
   commit_all
   if [[ -n "$(git status --porcelain)" ]]; then
+    index_all
     echo "agent-memory: files changed during sync; they go out with the next run"
     return 0
   fi
 
-  # An empty remote (a newly created repo) has no branch to pull yet.
-  if git "${net[@]}" ls-remote --exit-code --heads origin "${branch}" >/dev/null 2>&1; then
+  if [[ "${remote}" -eq 0 ]]; then
     if ! git "${net[@]}" pull -q --rebase origin "${branch}"; then
       if [[ -d .git/rebase-merge || -d .git/rebase-apply ]]; then
         abort_rebase
@@ -388,8 +462,9 @@ cmd_sync() {
       die "pull from origin failed; local commits are kept"
     fi
   fi
-  git "${net[@]}" push -q -u origin "${branch}"
+  # Before the push, so a failed push leaves no index older than the files.
   index_all
+  git "${net[@]}" push -q -u origin "${branch}"
 }
 
 # hook_cwd <json>: prints the session's working directory from a hook's
@@ -400,7 +475,9 @@ hook_cwd() {
   if command -v jq >/dev/null 2>&1; then
     cwd="$(jq -r '.cwd // empty' <<<"$1" 2>/dev/null || true)"
   else
-    cwd="$(sed -n 's/.*"cwd"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' <<<"$1" | head -n 1)"
+    # Bash matches leftmost: the first "cwd", not a nested one.
+    local re='"cwd"[[:space:]]*:[[:space:]]*"([^"]*)"'
+    [[ "$1" =~ ${re} ]] && cwd="${BASH_REMATCH[1]}"
   fi
   [[ -n "${cwd}" && -d "${cwd}" ]] || cwd="${PWD}"
   printf '%s\n' "${cwd}"
@@ -430,14 +507,19 @@ cmd_hook() {
     return 0
   fi
 
+  local synced=1
   if ! out="$("${self}" sync </dev/null 2>&1)"; then
+    synced=0
     notes+="agent-memory: sync failed, working from the local copy: ${out}"$'\n'
   fi
   if [[ "${tool}" == claude ]]; then
+    notes+="$(pending_rescue)"
+    [[ -z "${notes}" || "${notes}" == *$'\n' ]] || notes+=$'\n'
     if ! out="$("${self}" link "${cwd}" </dev/null 2>&1)"; then
       notes+="agent-memory: shared memory is not wired up for this project: ${out}"$'\n'
     fi
-    "${self}" index </dev/null >/dev/null 2>&1 || true
+    # A sync that got through has just rebuilt every index.
+    [[ "${synced}" -eq 1 ]] || "${self}" index </dev/null >/dev/null 2>&1 || true
     if ! out="$("${self}" check "${cwd}" </dev/null 2>&1)"; then
       notes+="agent-memory: memory files to fix:"$'\n'"${out}"$'\n'
     fi
@@ -465,7 +547,7 @@ main() {
     context) cmd_context "$@" ;;
     sync) cmd_sync "$@" ;;
     hook) cmd_hook "$@" ;;
-    -h | --help | help) sed -n '2,$ { /^#/!q; s/^# \{0,1\}//; p }' "${BASH_SOURCE[0]}" ;;
+    -h | --help | help) sed -n '2,$ { /^#/!q; s/^# \{0,1\}//; p; }' "${BASH_SOURCE[0]}" ;;
     *)
       echo "Usage: agent-memory key|paths|link|index|check|context|sync|hook ...  (--help for details)" >&2
       exit 2

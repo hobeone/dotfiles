@@ -53,7 +53,10 @@ check_url "https://github.com/HobeOne/GoNZBD.git" "hobeone/gonzbd"
 # Sourcing must not replace the caller's EXIT trap (this file relies on one).
 got=$(bash -c 'trap "echo caller-cleanup" EXIT; source "$1"' _ "$script")
 [[ $got == caller-cleanup ]] || err "sourcing replaced the caller's EXIT trap: '$got'"
-for bad in "https://example.com/../x" "https://example.com/a/.." "https://example.com/.git/x" "gonzbd"; do
+check_url "hobeone/gonzbd" "hobeone/gonzbd"
+# One path segment: no owner, and the host or port must not stand in for one.
+for bad in "https://example.com/../x" "https://example.com/a/.." "https://example.com/.git/x" "gonzbd" \
+	"https://example.com/repo.git" "ssh://git@host:2222/repo.git" "https://example.com"; do
 	key_from_url "$bad" >/dev/null 2>&1 && err "key_from_url accepted '$bad'"
 done
 
@@ -65,6 +68,11 @@ printf -- '---\nname: plain\ndescription: "quoted: with colon"\nmetadata:\n  typ
 [[ -z $(front_matter_field "$work/fm/a.md" type) ]] || err "front matter: nested field read as top-level"
 printf 'no front matter\nname: x\n' >"$work/fm/b.md"
 [[ -z $(front_matter_field "$work/fm/b.md" name) ]] || err "front matter read from a file without it"
+
+# Without jq the first "cwd" wins, not a nested one.
+mkdir -p "$work/cwd-a" "$work/cwd-b"
+got=$(PATH=/nonexistent hook_cwd "{\"cwd\":\"$work/cwd-a\",\"x\":{\"cwd\":\"$work/cwd-b\"}}")
+[[ $got == "$work/cwd-a" ]] || err "hook_cwd without jq: got '$got'"
 
 # --- key --------------------------------------------------------------------
 make_repo "$work/src/gonzbd" "git@github.com:hobeone/gonzbd.git"
@@ -84,6 +92,9 @@ am key "$work/src/gonzbd_agy"
 [[ $(cat "$work/out") == hobeone/gonzbd ]] || err "key of a second checkout: $(cat "$work/out")"
 am key "$work/src/no remote"
 [[ $(cat "$work/out") == local/no-remote ]] || err "key without origin: $(cat "$work/out")"
+make_repo "$work/src/OneSeg" "https://example.com/oneseg.git"
+am key "$work/src/OneSeg"
+[[ $rc -eq 0 && $(cat "$work/out") == local/oneseg ]] || err "key with a one-segment origin: rc=$rc $(cat "$work/out")"
 am key "$work/src/plain dir/sub"
 [[ $(cat "$work/out") == local/sub ]] || err "key outside git: $(cat "$work/out")"
 
@@ -185,11 +196,19 @@ echo junk >"$work/m1/global/.MEMORY.md.Stray1"
 AGENT_MEMORY_HOME="$work/m1" am sync
 git -C "$work/m1" ls-files | grep 'Stray1' >/dev/null && err "sync: committed a stray temp index"
 
-# A new machine whose store has no commits yet takes the remote's.
+# A new machine whose store has no commits yet takes the remote's, even
+# when the remote's .gitignore has lines this script would not write.
+printf '.DS_Store\n' >>"$work/m1/.gitignore"
+AGENT_MEMORY_HOME="$work/m1" am sync
 mkdir -p "$work/m3" && git -C "$work/m3" init -q && git -C "$work/m3" remote add origin "$work/remote.git"
+mkdir -p "$work/m3/global" && echo "new here" >"$work/m3/global/from-m3.md"
 git -C "$work/m3" symbolic-ref HEAD "refs/heads/$(git -C "$work/m1" symbolic-ref --short HEAD)"
 AGENT_MEMORY_HOME="$work/m3" am sync
 [[ $rc -eq 0 && -f $work/m3/global/from-m1.md ]] || err "sync unborn store: rc=$rc $(cat "$work/out")"
+[[ $(git -C "$work/m3" rev-list --max-parents=0 HEAD | wc -l) -eq 1 ]] || err "sync unborn store: started a second root"
+git -C "$work/remote.git" log --format= --name-only | grep -x global/from-m3.md >/dev/null ||
+	err "sync unborn store: its own memory was not pushed"
+git -C "$work/remote.git" show HEAD:global/from-m1.md >/dev/null 2>&1 || err "sync unborn store: deleted the remote's memory"
 
 # Files still changing during the sync wait for the next run; it is not a failure.
 cat >"$work/m1/.git/hooks/post-commit" <<'HOOK'
@@ -210,18 +229,30 @@ echo "m2 edit" >"$work/m2/global/from-m1.md"
 AGENT_MEMORY_HOME="$work/m1" am sync
 AGENT_MEMORY_HOME="$work/m2" am sync
 [[ $rc -ne 0 ]] || err "sync conflict: exit 0"
-grep -qF "conflicted" "$work/out" || err "sync conflict message: $(cat "$work/out")"
+# The script's own line: git's hint also says "conflicted_files".
+grep -qF "agent-memory: pull --rebase conflicted" "$work/out" || err "sync conflict message: $(cat "$work/out")"
+[[ ! -d $work/m2/.git/agent-memory-rescue ]] || err "sync conflict: rescued an unedited conflicted file"
 [[ $(git -C "$work/m2" show HEAD:global/from-m1.md) == "m2 edit" ]] || err "sync conflict: local edit lost"
 [[ ! -d $work/m2/.git/rebase-merge && ! -d $work/m2/.git/rebase-apply ]] || err "sync conflict: rebase left in progress"
 
-# A store with no remote just commits.
+# A store with no remote just commits; a relative AGENT_MEMORY_HOME works.
 git init -q "$work/solo"
 echo x >"$work/solo/fact.md"
-AGENT_MEMORY_HOME="$work/solo" am sync
+(cd "$work" && AGENT_MEMORY_HOME=solo "$script" sync) >"$work/out" 2>&1
+rc=$?
 [[ $rc -eq 0 && -n $(git -C "$work/solo" ls-files fact.md) ]] || err "sync without origin: rc=$rc $(cat "$work/out")"
 
+echo y >"$work/solo/other.md"
+AGENT_MEMORY_HOME="$work/solo" am sync --if-neded
+[[ $rc -eq 2 ]] || err "sync with an unknown flag: exit $rc, want 2"
+[[ -z $(git -C "$work/solo" ls-files other.md) ]] || err "sync with an unknown flag committed anyway"
+
+# Detached HEAD: refuse before committing anything.
 git -C "$work/m3" checkout -q --detach
+before=$(git -C "$work/m3" rev-parse HEAD)
+echo z >"$work/m3/global/detached-edit.md"
 AGENT_MEMORY_HOME="$work/m3" am sync
+[[ $(git -C "$work/m3" rev-parse HEAD) == "$before" ]] || err "sync detached: committed before refusing"
 if [[ $rc -eq 0 ]] || ! grep -qF "detached HEAD" "$work/out"; then
 	err "sync detached: rc=$rc $(cat "$work/out")"
 fi
@@ -275,6 +306,7 @@ am sync --if-needed
 [[ $rc -eq 0 ]] || err "sync --if-needed with nothing to do touched the network: $(cat "$work/out")"
 am sync
 [[ $rc -ne 0 ]] || err "sync against a missing origin succeeded: the --if-needed check above proves nothing"
+grep -qF "cannot reach origin" "$work/out" || err "unreachable origin not reported as such: $(cat "$work/out")"
 git -C "$work/hs" remote set-url origin "$work/hremote.git"
 
 # A second sync waits for the lock instead of failing. Without flock there
@@ -295,6 +327,8 @@ fi
 # A rebase left in progress by a killed run is cancelled before syncing,
 # and the local commit survives. A memory an agent edited after the rebase
 # stopped is copied out first, since the abort reverts it.
+printf -- '---\nname: café\ndescription: x\n---\n' >"$work/hs/global/café.md"
+AGENT_MEMORY_HOME="$work/hs" am sync
 git clone -q "$work/hremote.git" "$work/stale" 2>/dev/null
 mkdir -p "$work/stale/global"
 echo theirs >"$work/hs/global/clash.md"
@@ -304,12 +338,19 @@ git -C "$work/stale" add -A && git -C "$work/stale" commit -q -m mine
 git -C "$work/stale" pull -q --rebase >/dev/null 2>&1
 [[ -d $work/stale/.git/rebase-merge || -d $work/stale/.git/rebase-apply ]] || err "stale rebase: fixture made no rebase"
 printf -- '---\nname: waited\ndescription: behind the lock\n---\nedited mid-rebase\n' >"$work/stale/global/waited.md"
+printf -- '---\nname: café\ndescription: x\n---\naccented edit\n' >"$work/stale/global/café.md"
 AGENT_MEMORY_HOME="$work/stale" am sync
 if [[ $rc -eq 0 ]] || ! grep -qF "copies are in" "$work/out"; then
 	err "stale rebase: rescue not reported: rc=$rc $(cat "$work/out")"
 fi
 grep -rqF "edited mid-rebase" "$work/stale/.git/agent-memory-rescue" 2>/dev/null ||
 	err "stale rebase: the edit made after the rebase stopped was not rescued"
+grep -rqF "accented edit" "$work/stale/.git/agent-memory-rescue" 2>/dev/null ||
+	err "stale rebase: an edit to a non-ASCII file name was not rescued"
+# Rescued copies are reported at every session start until deleted.
+AGENT_MEMORY_HOME="$work/stale" am context "$work/src/gonzbd"
+grep -qF "are waiting in $work/stale/.git/agent-memory-rescue" "$work/out" ||
+	err "pending rescue not reported: $(cat "$work/out")"
 if [[ -d $work/stale/.git/rebase-merge || -d $work/stale/.git/rebase-apply ]]; then
 	err "stale rebase: still in progress after sync: $(cat "$work/out")"
 fi
@@ -332,6 +373,9 @@ if [[ $rc -eq 0 ]] || ! grep -qF "copies are in" "$work/out"; then
 fi
 grep -rqF "written during the pull" "$work/stale/.git/agent-memory-rescue" 2>/dev/null ||
 	err "conflicting pull: the edit made during the rebase was not rescued"
+rm -rf "$work/stale/.git/agent-memory-rescue"
+AGENT_MEMORY_HOME="$work/stale" am context "$work/src/gonzbd"
+grep -qF "are waiting in" "$work/out" && err "pending rescue still reported after the folder was deleted"
 rm "$work/hs/global/clash.md"
 AGENT_MEMORY_HOME="$work/hs" am sync
 
@@ -358,6 +402,40 @@ printf -- '---\nname: learned\ndescription: from a turn\n---\n' >"$work/hs/proje
 run_hook claude stop "$work/src/hooked"
 [[ $rc -eq 0 && ! -s $work/out ]] || err "claude stop: rc=$rc out=$(cat "$work/out")"
 pushed projects/hobeone/hooked/learned.md || err "claude stop: new memory not pushed"
+
+# A stop with nothing to sync does no other work: it leaves the indexes alone.
+echo sentinel >>"$work/hs/global/MEMORY.md"
+run_hook claude stop "$work/src/hooked"
+grep -qx sentinel "$work/hs/global/MEMORY.md" || err "claude stop with nothing to sync rebuilt the indexes"
+
+# Session start reports rescued copies still waiting.
+mkdir -p "$work/hs/.git/agent-memory-rescue/x" && echo kept >"$work/hs/.git/agent-memory-rescue/x/m.md"
+run_hook claude start "$work/src/hooked"
+grep -qF "are waiting in $work/hs/.git/agent-memory-rescue" "$work/out" || err "claude start: pending rescue not reported: $(cat "$work/out")"
+rm -rf "$work/hs/.git/agent-memory-rescue"
+
+# A failed push still leaves the indexes matching what the pull brought.
+git clone -q "$work/hremote.git" "$work/hs2" 2>/dev/null
+printf -- '---\nname: from-hs2\ndescription: pulled\n---\n' >"$work/hs2/global/from-hs2.md"
+AGENT_MEMORY_HOME="$work/hs2" am sync
+printf '#!/bin/sh\nexit 1\n' >"$work/hremote.git/hooks/pre-receive" && chmod +x "$work/hremote.git/hooks/pre-receive"
+echo local >"$work/hs/global/local-only.md"
+am sync
+rm -f "$work/hremote.git/hooks/pre-receive"
+[[ $rc -ne 0 ]] || err "sync with a rejected push: exit 0"
+grep -qF "[from-hs2](from-hs2.md)" "$work/hs/global/MEMORY.md" || err "rejected push: index older than the pulled files"
+rm "$work/hs/global/local-only.md"
+am sync
+
+# git's children do not inherit the lock (a credential daemon would keep it).
+if command -v flock >/dev/null 2>&1 && [[ -d /proc/self/fd ]]; then
+	printf '#!/bin/sh\n[ -e /proc/$$/fd/9 ] && echo inherited >"%s"\nexit 0\n' "$work/fd9" >"$work/hs/.git/hooks/post-commit"
+	chmod +x "$work/hs/.git/hooks/post-commit"
+	echo fd >"$work/hs/global/fd-check.md"
+	am sync
+	rm -f "$work/hs/.git/hooks/post-commit"
+	[[ ! -e $work/fd9 ]] || err "a git child inherited the sync lock's file descriptor"
+fi
 
 printf -- '---\nname: wrong\n---\n' >"$work/hs/projects/hobeone/hooked/broken.md"
 run_hook claude start "$work/src/hooked"
