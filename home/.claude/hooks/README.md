@@ -17,6 +17,19 @@ Shell scripts that run at specific points in the Claude Code lifecycle. Configur
 
 **Output:** None (tmux status line only)
 
+### agent-memory-session.sh
+**Trigger:** `SessionStart`
+
+**Purpose:** Wire the session's project into the shared two-tier memory store (`~/.agents/memory`, see `agent-memory --help`).
+
+**Actions:**
+- `agent-memory link <cwd>`: point this project's Claude memory folder at `projects/<owner>/<repo>/` in the store
+- `agent-memory index`: regenerate every `MEMORY.md` from its folder's front matter
+
+**Input:** Reads `cwd` from the hook JSON (falls back to `$PWD`).
+
+**Output:** Nothing on success. On failure, one line of session context saying what went wrong; it still exits 0, so the session always starts. Does nothing on a machine without the store or without `agent-memory` on `PATH`.
+
 ## Writing Hooks
 
 ### Requirements

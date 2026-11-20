@@ -33,8 +33,10 @@ jobs:
             home/bin/keyboard-watch \
             home/bin/start-xss-lock \
             home/bin/update-deps \
+            home/bin/agent-memory \
             home/bin/*.sh \
-            tests/test_update_deps.sh
+            tests/test_update_deps.sh \
+            tests/test_agent_memory.sh
 
       - name: Run shellcheck on Claude hooks
         run: |
@@ -111,6 +113,9 @@ jobs:
 
       - name: update-deps behavior
         run: bash tests/test_update_deps.sh
+
+      - name: agent-memory behavior
+        run: bash tests/test_agent_memory.sh
 
   structure:
     name: Verify structure

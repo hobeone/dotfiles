@@ -114,25 +114,33 @@ Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
 
 **Never** use ad-hoc prefixes like `Step X.Y:`, `Fix:`, or `Refactor:`. The description MUST be lowercase (except proper nouns and acronyms).
 
-## Memory is shared across the Go repos
+## Memory has two tiers, shared with agy and across machines
 
-Cross-cutting memories live in one pool at `~/.claude/memory-shared/go/`, symlinked into
-every Go project's memory directory as `shared/`. Read `shared/MEMORY-shared.md` alongside
-the project's own `MEMORY.md` — it is the other half of what is known, and the project index
-points at it.
+The store is `~/.agents/memory/`, a git repo that `agent-memory sync` keeps in step between
+machines; agy reads and writes the same files. **Read `~/.agents/memory/README.md` before
+saving a memory** — it holds the rules for both tiers and both harnesses.
 
-**When a lesson is not specific to one repo, write it to `shared/` and index it there.** The
-test is whether the lesson would still be true in a different repo, not whether it was learned
-in this one — a repo name inside the body is fine as evidence. Repo-specific facts (this
-codebase's invariants, its CI setup, its scripts) stay in the project's own pool.
+- **Global tier**, `~/.agents/memory/global/`: lessons that hold in any project. Its index is
+  imported at the end of this section.
+- **Project tier**: your auto-memory directory. A SessionStart hook links it to
+  `~/.agents/memory/projects/<owner>/<repo>/`, keyed by the `origin` remote, so every checkout
+  of a repo on every machine shares one folder. Worktrees resolve to their main checkout.
 
-All checkouts of one repo share a pool: the secondary `gonzbd` checkouts symlink their memory
-directory to the primary. Worktrees already resolve to the parent repo automatically.
+**When a lesson is not specific to one repo, write it to the global tier.** The test is
+whether the lesson would still be true in a different repo, not whether it was learned in this
+one — a repo name inside the body is fine as evidence. Repo-specific facts (this codebase's
+invariants, its CI setup, its scripts) stay in the project tier.
+
+Each `MEMORY.md` is generated from the memory files' front matter by `agent-memory index`, so
+a line added by hand is overwritten: the file's `name` and `description` are what the index
+shows.
+
+@~/.agents/memory/global/MEMORY.md
 
 ### Working agreements these repos have repeatedly proved
 
 Recorded here rather than only as memories because missing them is expensive and recall is not
-guaranteed. Each has a fuller memory in `shared/`.
+guaranteed. Each has a fuller memory in the global tier.
 
 - **A green test is not evidence until you have seen it red.** Revert the fix, or delete the
   mechanism, and confirm THIS test fails — while writing it, not as a later audit. A test can

@@ -1,0 +1,227 @@
+#!/usr/bin/env bash
+# agent-memory against throwaway repos, a throwaway store and a local bare
+# remote. Nothing touches the real store or ~/.claude.
+set -uo pipefail
+cd "$(dirname "$0")/.." || exit 1
+
+script="$PWD/home/bin/agent-memory"
+work=$(mktemp -d)
+trap 'rm -rf "$work"' EXIT
+work=$(cd "$work" && pwd -P) # macOS: /var -> /private/var
+
+fail=0
+err() { printf 'FAIL: %s\n' "$*"; fail=1; touch "$work/failed"; }
+
+export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
+export GIT_AUTHOR_NAME=test GIT_AUTHOR_EMAIL=test@example.com
+export GIT_COMMITTER_NAME=test GIT_COMMITTER_EMAIL=test@example.com
+export AGENT_MEMORY_HOME="$work/store" CLAUDE_PROJECTS_DIR="$work/claude-projects"
+
+# am ARGS...: runs agent-memory; output to $work/out, exit code to $rc.
+am() {
+	"$script" "$@" >"$work/out" 2>&1
+	rc=$?
+}
+
+# make_repo DIR [ORIGIN]: a git repo with one commit and, optionally, origin.
+make_repo() {
+	mkdir -p "$1"
+	git -C "$1" init -q
+	git -C "$1" commit -q --allow-empty -m init
+	[[ -n ${2:-} ]] && git -C "$1" remote add origin "$2"
+	return 0
+}
+
+# --- helpers, sourced -------------------------------------------------------
+# shellcheck source=home/bin/agent-memory
+source "$script"
+set +e
+
+check_url() {
+	local got
+	got=$(key_from_url "$1")
+	[[ $got == "$2" ]] || err "key_from_url '$1': got '$got', want '$2'"
+}
+check_url "git@github.com:hobeone/gonzbd.git" "hobeone/gonzbd"
+check_url "https://github.com/hobeone/gonzbd" "hobeone/gonzbd"
+check_url "https://github.com/hobeone/gonzbd.git/" "hobeone/gonzbd"
+check_url "ssh://git@example.com:2222/team/tool.git" "team/tool"
+check_url "/srv/git/team/tool.git" "team/tool"
+# A key becomes a path under the store, so nothing may climb out of it.
+for bad in "https://example.com/../x" "https://example.com/a/.." "gonzbd"; do
+	key_from_url "$bad" >/dev/null 2>&1 && err "key_from_url accepted '$bad'"
+done
+
+mkdir -p "$work/fm"
+printf -- '---\nname: plain\ndescription: "quoted: with colon"\nmetadata:\n  type: user\n---\nname: body-not-frontmatter\n' >"$work/fm/a.md"
+[[ $(front_matter_field "$work/fm/a.md" name) == plain ]] || err "front matter name"
+[[ $(front_matter_field "$work/fm/a.md" description) == "quoted: with colon" ]] ||
+	err "front matter description: '$(front_matter_field "$work/fm/a.md" description)'"
+[[ -z $(front_matter_field "$work/fm/a.md" type) ]] || err "front matter: nested field read as top-level"
+printf 'no front matter\nname: x\n' >"$work/fm/b.md"
+[[ -z $(front_matter_field "$work/fm/b.md" name) ]] || err "front matter read from a file without it"
+
+# --- key --------------------------------------------------------------------
+make_repo "$work/src/gonzbd" "git@github.com:hobeone/gonzbd.git"
+git -C "$work/src/gonzbd" worktree add -q "$work/src/gonzbd-wt" 2>/dev/null
+make_repo "$work/src/gonzbd_agy" "https://github.com/hobeone/gonzbd"
+make_repo "$work/src/no remote"
+mkdir -p "$work/src/plain dir/sub"
+
+am key "$work/src/gonzbd"
+[[ $rc -eq 0 && $(cat "$work/out") == hobeone/gonzbd ]] || err "key ssh origin: $(cat "$work/out")"
+mkdir -p "$work/src/gonzbd/deep/er"
+am key "$work/src/gonzbd/deep/er"
+[[ $(cat "$work/out") == hobeone/gonzbd ]] || err "key from a subdirectory: $(cat "$work/out")"
+am key "$work/src/gonzbd-wt"
+[[ $(cat "$work/out") == hobeone/gonzbd ]] || err "key from a linked worktree: $(cat "$work/out")"
+am key "$work/src/gonzbd_agy"
+[[ $(cat "$work/out") == hobeone/gonzbd ]] || err "key of a second checkout: $(cat "$work/out")"
+am key "$work/src/no remote"
+[[ $(cat "$work/out") == local/no-remote ]] || err "key without origin: $(cat "$work/out")"
+am key "$work/src/plain dir/sub"
+[[ $(cat "$work/out") == local/sub ]] || err "key outside git: $(cat "$work/out")"
+
+# --- paths ------------------------------------------------------------------
+am paths "$work/src/gonzbd"
+want="global: $work/store/global
+project: $work/store/projects/hobeone/gonzbd"
+[[ $(cat "$work/out") == "$want" ]] || err "paths: $(cat "$work/out")"
+[[ -d $work/store/projects/hobeone/gonzbd && -d $work/store/global ]] || err "paths: folders not created"
+
+# --- link -------------------------------------------------------------------
+enc() { sed -E 's/[^A-Za-z0-9]/-/g' <<<"$1"; }
+mem_of() { printf '%s/%s/memory' "$CLAUDE_PROJECTS_DIR" "$(enc "$1")"; }
+target="$work/store/projects/hobeone/gonzbd"
+
+am link "$work/src/gonzbd"
+[[ $rc -eq 0 ]] || err "link: exit $rc: $(cat "$work/out")"
+[[ $(readlink -f "$(mem_of "$work/src/gonzbd")") == "$target" ]] || err "link: not pointing at the project folder"
+am link "$work/src/gonzbd"
+[[ $rc -eq 0 ]] || err "link again: exit $rc"
+
+# A linked worktree's memory is its main checkout's: no folder of its own.
+am link "$work/src/gonzbd-wt"
+[[ $rc -eq 0 ]] || err "link worktree: exit $rc: $(cat "$work/out")"
+[[ ! -e $(mem_of "$work/src/gonzbd-wt") ]] || err "link worktree: made a folder for the worktree path"
+
+# A stale link (the old hand-made gonzbd_agy -> gonzbd link) is replaced.
+mkdir -p "$(dirname "$(mem_of "$work/src/gonzbd_agy")")" "$work/elsewhere"
+ln -s "$work/elsewhere" "$(mem_of "$work/src/gonzbd_agy")"
+am link "$work/src/gonzbd_agy"
+[[ $rc -eq 0 && $(readlink -f "$(mem_of "$work/src/gonzbd_agy")") == "$target" ]] ||
+	err "link: stale link not replaced: $(cat "$work/out")"
+
+# An empty folder, or one holding only an empty MEMORY.md, is replaced.
+m=$(mem_of "$work/src/no remote")
+mkdir -p "$m" && : >"$m/MEMORY.md"
+am link "$work/src/no remote"
+[[ $rc -eq 0 && -L $m ]] || err "link: empty folder not replaced: $(cat "$work/out")"
+
+# A folder holding memories is never replaced.
+make_repo "$work/src/keep" "git@github.com:hobeone/keep.git"
+m=$(mem_of "$work/src/keep")
+mkdir -p "$m" && echo data >"$m/fact.md"
+am link "$work/src/keep"
+[[ $rc -ne 0 ]] || err "link: replaced a folder holding memories"
+grep -qF "holds memories" "$work/out" || err "link refusal: $(cat "$work/out")"
+[[ -f $m/fact.md && ! -L $m ]] || err "link refusal: folder was changed"
+
+# --- index ------------------------------------------------------------------
+g="$work/store/global"
+printf -- '---\nname: zeta-rule\ndescription: last one\n---\nbody\n' >"$g/z.md"
+printf -- '---\nname: alpha-rule\ndescription: "first: one"\n---\nbody\n' >"$g/a.md"
+printf 'no front matter\n' >"$g/m.md"
+echo "hand-written" >"$g/MEMORY.md"
+echo "# readme" >"$g/README.md"
+echo "x" >"$target/proj.md"
+am index
+[[ $rc -eq 0 ]] || err "index: exit $rc: $(cat "$work/out")"
+got=$(grep '^- ' "$g/MEMORY.md")
+want="- [alpha-rule](a.md) — first: one
+- [m](m.md)
+- [zeta-rule](z.md) — last one"
+[[ $got == "$want" ]] || err "index global: got
+$got"
+grep -qF "hand-written" "$g/MEMORY.md" && err "index: hand edits survived"
+grep -qF "[proj](proj.md)" "$target/MEMORY.md" || err "index: project folder not indexed"
+for f in "$g"/.MEMORY*; do [[ -e $f ]] && err "index: temp file left behind: $f"; done
+
+# --- sync -------------------------------------------------------------------
+git init -q --bare "$work/remote.git"
+mk_store() {
+	git clone -q "$work/remote.git" "$1" 2>/dev/null
+	printf 'MEMORY.md\n' >"$1/.gitignore"
+}
+mk_store "$work/m1"
+mk_store "$work/m2"
+
+AGENT_MEMORY_HOME="$work/m1" am sync
+[[ $rc -eq 0 ]] || err "sync first push: exit $rc: $(cat "$work/out")"
+
+mkdir -p "$work/m1/global" "$work/m2/projects/hobeone/gonzbd"
+echo one >"$work/m1/global/from-m1.md"
+echo two >"$work/m2/projects/hobeone/gonzbd/from-m2.md"
+AGENT_MEMORY_HOME="$work/m1" am sync
+[[ $rc -eq 0 ]] || err "sync m1: exit $rc: $(cat "$work/out")"
+AGENT_MEMORY_HOME="$work/m2" am sync
+[[ $rc -eq 0 ]] || err "sync m2: exit $rc: $(cat "$work/out")"
+AGENT_MEMORY_HOME="$work/m1" am sync
+[[ -f $work/m1/projects/hobeone/gonzbd/from-m2.md && -f $work/m2/global/from-m1.md ]] ||
+	err "sync: machines did not converge"
+grep -qF "from-m1.md" "$work/m2/global/MEMORY.md" || err "sync: index not rebuilt after pull"
+git -C "$work/m1" ls-files | grep -q 'MEMORY.md' && err "sync: committed a generated index"
+
+# The same memory edited on both machines: the run fails, nothing is lost.
+echo "m1 edit" >"$work/m1/global/from-m1.md"
+echo "m2 edit" >"$work/m2/global/from-m1.md"
+AGENT_MEMORY_HOME="$work/m1" am sync
+AGENT_MEMORY_HOME="$work/m2" am sync
+[[ $rc -ne 0 ]] || err "sync conflict: exit 0"
+grep -qF "conflicted" "$work/out" || err "sync conflict message: $(cat "$work/out")"
+[[ $(git -C "$work/m2" show HEAD:global/from-m1.md) == "m2 edit" ]] || err "sync conflict: local edit lost"
+[[ ! -d $work/m2/.git/rebase-merge && ! -d $work/m2/.git/rebase-apply ]] || err "sync conflict: rebase left in progress"
+
+AGENT_MEMORY_HOME="$work/not-a-repo" am sync
+if [[ $rc -eq 0 ]] || ! grep -qF "not a git repository" "$work/out"; then
+	err "sync outside git: $(cat "$work/out")"
+fi
+
+# --- SessionStart hook ------------------------------------------------------
+hook="$PWD/home/.claude/hooks/agent-memory-session.sh"
+mkdir -p "$work/hookbin"
+ln -sf "$script" "$work/hookbin/agent-memory"
+# run_hook CWD: feeds the hook Claude's SessionStart JSON; stdout to $work/out.
+run_hook() {
+	printf '{"session_id":"s","cwd":"%s","hook_event_name":"SessionStart"}' "$1" |
+		PATH="$work/hookbin:$PATH" "$hook" >"$work/out" 2>&1
+	rc=$?
+}
+make_repo "$work/src/hooked" "git@github.com:hobeone/hooked.git"
+run_hook "$work/src/hooked"
+[[ $rc -eq 0 && ! -s $work/out ]] || err "hook: exit $rc, output: $(cat "$work/out")"
+[[ $(readlink -f "$(mem_of "$work/src/hooked")") == "$work/store/projects/hobeone/hooked" ]] ||
+	err "hook: project not linked"
+[[ -f $work/store/projects/hobeone/hooked/MEMORY.md ]] || err "hook: index not built"
+
+# A failure is one line of context, and the session still starts.
+run_hook "$work/src/keep"
+[[ $rc -eq 0 ]] || err "hook failure: exit $rc, want 0"
+grep -qF "shared memory is not wired up" "$work/out" || err "hook failure not reported: $(cat "$work/out")"
+
+# No store on this machine: nothing happens.
+make_repo "$work/src/nostore" "git@github.com:hobeone/nostore.git"
+AGENT_MEMORY_HOME="$work/absent" run_hook "$work/src/nostore"
+[[ $rc -eq 0 && ! -s $work/out && ! -e $(mem_of "$work/src/nostore") ]] ||
+	err "hook without a store: rc=$rc out=$(cat "$work/out")"
+
+# --- arguments --------------------------------------------------------------
+am bogus
+[[ $rc -eq 2 ]] || err "unknown command: exit $rc"
+ln -s "$script" "$work/agent-memory"
+"$work/agent-memory" --help >"$work/out" 2>&1
+grep -q "^Usage: agent-memory" "$work/out" || err "--help via symlink: $(cat "$work/out")"
+
+[[ -e $work/failed ]] && fail=1
+[[ $fail -eq 0 ]] && echo "PASS"
+exit "$fail"

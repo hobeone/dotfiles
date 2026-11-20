@@ -1,0 +1,7 @@
+[Unit]
+Description=Sync the shared agent memory store (~/.agents/memory)
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=%h/bin/agent-memory sync

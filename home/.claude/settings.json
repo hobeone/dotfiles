@@ -29,6 +29,16 @@
           }
         ]
       }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/agent-memory-session.sh"
+          }
+        ]
+      }
     ]
   },
   "statusLine": {
