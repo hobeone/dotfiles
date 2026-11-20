@@ -119,6 +119,9 @@ jobs:
       - name: agent-memory behavior
         run: bash tests/test_agent_memory.sh
 
+      - name: Install zsh for window_title hook tests
+        run: sudo apt-get update && sudo apt-get install -y zsh
+
       - name: window_title and tmux reset behavior
         run: bash tests/test_window_title.sh
 

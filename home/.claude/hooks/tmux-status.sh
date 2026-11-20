@@ -38,18 +38,20 @@ fi
 
 case "$STATE" in
     working)
-        # Mark pane as Claude-managed and lock rename while active
-        tmux set-option -p -t "$PANE_ID" @claude_title "⏳ $DIR_NAME" 2>/dev/null || true
-        tmux set-window-option -t "$WINDOW_ID" automatic-rename off 2>/dev/null || true
-        tmux set-window-option -t "$WINDOW_ID" allow-rename off 2>/dev/null || true
-        tmux rename-window -t "$WINDOW_ID" "⏳ $DIR_NAME" 2>/dev/null || true
+        TITLE="⏳ $DIR_NAME"
         ;;
     waiting)
-        # Remove hourglass indicator; zsh precmd clears @claude_title and restores automatic-rename on exit
-        tmux set-option -p -t "$PANE_ID" @claude_title "$DIR_NAME" 2>/dev/null || true
-        tmux rename-window -t "$WINDOW_ID" "$DIR_NAME" 2>/dev/null || true
+        TITLE="$DIR_NAME"
         ;;
     *)
         echo "tmux-status.sh: unknown state '$STATE', expected 'working' or 'waiting'" >&2
+        exit 0
         ;;
 esac
+
+# Store @claude_title and keep automatic-rename on so tmux.conf renders it for claude
+# and sibling panes or exits reset cleanly without locking the window name.
+tmux set-option -p -t "$PANE_ID" @claude_title "$TITLE" 2>/dev/null || true
+tmux set-window-option -t "$WINDOW_ID" allow-rename off 2>/dev/null || true
+tmux rename-window -t "$WINDOW_ID" "$TITLE" 2>/dev/null || true
+tmux set-window-option -t "$WINDOW_ID" automatic-rename on 2>/dev/null || true
