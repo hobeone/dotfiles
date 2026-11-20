@@ -184,6 +184,13 @@ check_dir() {
     if [[ -n "${name}" && "${name}" != "${base}" ]]; then
       printf '%s/%s.md: name '\''%s'\'' does not match the file name\n' "${label}" "${base}" "${name}"
     fi
+    # An unquoted value with ": " in it is invalid YAML, which tools that
+    # parse front matter properly reject.
+    if awk 'NR == 1 { next } $0 == "---" { exit }
+      /^(name|description):[ \t]+[^"'\''].*: / { found = 1; exit }
+      END { exit !found }' "${f}"; then
+      printf '%s/%s.md: a value containing ": " must be quoted\n' "${label}" "${base}"
+    fi
     if [[ "${label}" != global && -f "${STORE}/global/${base}.md" ]]; then
       printf '%s/%s.md: global/%s.md has the same name\n' "${label}" "${base}" "${base}"
     fi

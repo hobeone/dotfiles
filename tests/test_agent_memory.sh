@@ -240,16 +240,19 @@ printf -- '---\nname: nodesc\n---\n' >"$p/nodesc.md"
 printf -- '---\ndescription: x\n---\n' >"$p/noname.md"
 printf -- '---\nname: other-name\ndescription: x\n---\n' >"$p/renamed.md"
 printf -- '---\nname: dup\ndescription: x\n---\n' >"$p/dup.md"
+printf -- '---\nname: colon\ndescription: always brace: "x"\n---\n' >"$p/colon.md"
+printf -- '---\nname: quoted\ndescription: "fine: quoted"\n---\nbody: with colon\n' >"$p/quoted.md"
 AGENT_MEMORY_HOME="$cs" am check "$work/src/gonzbd"
 [[ $rc -eq 1 ]] || err "check problems: exit $rc, want 1"
 for want in "projects/hobeone/gonzbd/bare.md: no front matter" \
 	"projects/hobeone/gonzbd/nodesc.md: front matter has no description" \
 	"projects/hobeone/gonzbd/noname.md: front matter has no name" \
 	"projects/hobeone/gonzbd/renamed.md: name 'other-name' does not match the file name" \
-	"projects/hobeone/gonzbd/dup.md: global/dup.md has the same name"; do
+	"projects/hobeone/gonzbd/dup.md: global/dup.md has the same name" \
+	'projects/hobeone/gonzbd/colon.md: a value containing ": " must be quoted'; do
 	grep -qxF -- "$want" "$work/out" || err "check: missing '$want' in: $(cat "$work/out")"
 done
-[[ $(wc -l <"$work/out") -eq 5 ]] || err "check: want exactly 5 problems: $(cat "$work/out")"
+[[ $(wc -l <"$work/out") -eq 6 ]] || err "check: want exactly 6 problems: $(cat "$work/out")"
 
 # --- sync --if-needed and the lock ------------------------------------------
 git init -q --bare "$work/hremote.git"
