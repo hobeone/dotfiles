@@ -28,6 +28,26 @@
             "command": "~/.claude/hooks/tmux-status.sh waiting"
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "test -x ~/bin/agent-memory && ~/bin/agent-memory hook claude stop || true",
+            "timeout": 60
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "test -x ~/bin/agent-memory && ~/bin/agent-memory hook claude start || true",
+            "timeout": 60
+          }
+        ]
       }
     ]
   },

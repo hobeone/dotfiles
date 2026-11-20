@@ -1,0 +1,572 @@
+#!/bin/bash
+#
+# agent-memory
+# Two-tier memory shared by coding agents (Claude Code, agy) across
+# projects and machines. The store is a git repo:
+#
+#   $AGENT_MEMORY_HOME/global/              applies to every project
+#   $AGENT_MEMORY_HOME/projects/<key>/      one project, every checkout of it
+#
+# <key> is the origin remote's owner/repo (hobeone/gonzbd), so every
+# checkout of a repo shares one folder on every machine. A repo with no
+# origin, an origin with no owner/repo in its path, or a directory outside
+# git gets local/<folder name>.
+#
+# Usage: agent-memory <command> [dir]
+#   key [dir]     print the project key for dir (default: current directory)
+#   paths [dir]   print "global: <path>" and "project: <path>", creating the
+#                 project folder if it is missing
+#   link [dir]    point Claude Code's memory folder for dir's project at the
+#                 project folder; refuses to replace a folder holding files
+#   index         regenerate every MEMORY.md from its folder's front matter
+#   check [dir]   report memory files in the global tier and dir's project
+#                 with broken front matter; exits 1 when there are any
+#   context [dir] print both indexes, the folders and any problems: what an
+#                 agent needs at the start of a session
+#   sync [--if-needed]
+#                 index, commit, pull --rebase and push the store; with
+#                 --if-needed, do nothing unless there is something to commit
+#                 or push
+#   hook <claude|agy> <start|stop>
+#                 the session hooks: read the hook's JSON on stdin, sync, and
+#                 wire up or report memory. Never fails the session.
+#
+# Environment:
+#   AGENT_MEMORY_HOME     the store (default ~/.agents/memory)
+#   CLAUDE_PROJECTS_DIR   Claude Code's per-project folders
+#                         (default ~/.claude/projects)
+#
+# MEMORY.md is derived from the memory files' front matter, so the store's
+# .gitignore excludes it and every machine regenerates its own: it never
+# conflicts and never drifts from the files it lists.
+#
+
+set -euo pipefail
+
+STORE="${AGENT_MEMORY_HOME:-${HOME}/.agents/memory}"
+# sync changes into the store, so a relative path would resolve twice.
+[[ "${STORE}" == /* ]] || STORE="${PWD}/${STORE}"
+CLAUDE_PROJECTS="${CLAUDE_PROJECTS_DIR:-${HOME}/.claude/projects}"
+
+# The index being written, removed on exit (see the trap at the bottom) so
+# a failed run leaves no stray file for sync to commit.
+INDEX_TMP=""
+
+die() {
+  echo "agent-memory: $*" >&2
+  exit 1
+}
+
+# safe_component <s>: succeeds when <s> can be one path component of a key.
+# Keys become paths under the store, so nothing may climb out of it.
+safe_component() {
+  [[ "$1" =~ ^[A-Za-z0-9._-]+$ && "$1" != "." && "$1" != ".." && "$1" != ".git" ]]
+}
+
+# main_worktree <dir>: prints the top of the main worktree holding <dir>, so
+# a linked worktree resolves to the checkout it belongs to. Fails outside git.
+main_worktree() {
+  local common
+  common="$(git -C "$1" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" || return 1
+  if [[ "$(basename "${common}")" == ".git" ]]; then
+    dirname "${common}"
+  else
+    git -C "$1" rev-parse --show-toplevel 2>/dev/null
+  fi
+}
+
+# key_from_url <url>: prints owner/repo from a git remote URL in URL form
+# (https://host/o/r, ssh://git@host:22/o/r.git), scp form (git@host:o/r.git)
+# or path form: the last two path components, without .git, lowercased
+# because GitHub owner and repo names are case-insensitive. Scheme, user,
+# host and port are dropped first, so the same owner/repo on two hosts
+# shares a folder. Fails when the path has fewer than two components.
+key_from_url() {
+  local url="$1" path owner repo
+  if [[ "${url}" =~ ^[A-Za-z][A-Za-z0-9+.-]*:// ]]; then
+    path="${url#*://}"
+    [[ "${path}" == */* ]] || return 1
+    path="${path#*/}"
+  elif [[ "${url}" =~ ^[^/]*: ]]; then
+    path="${url#*:}"
+  else
+    path="${url}"
+  fi
+  path="${path%/}"
+  path="${path%.git}"
+  path="${path#/}"
+  [[ "${path}" == */* ]] || return 1
+  repo="${path##*/}"
+  owner="${path%/*}"
+  owner="${owner##*/}"
+  safe_component "${owner}" && safe_component "${repo}" || return 1
+  printf '%s/%s\n' "${owner}" "${repo}" | tr '[:upper:]' '[:lower:]'
+}
+
+# project_key <dir>: prints the project key for <dir>: owner/repo from its
+# origin, or local/<folder> when there is no origin or no owner/repo in it.
+project_key() {
+  local dir="$1" top url name
+  if top="$(main_worktree "${dir}")" && url="$(git -C "${top}" remote get-url origin 2>/dev/null)" &&
+    key_from_url "${url}"; then
+    return 0
+  fi
+  name="$(basename "${top:-$(cd "${dir}" && pwd -P)}")"
+  name="$(sed -E 's/[^A-Za-z0-9._-]/-/g' <<<"${name}" | tr '[:upper:]' '[:lower:]')"
+  safe_component "${name}" || die "cannot derive a project key from '${dir}'"
+  printf 'local/%s\n' "${name}"
+}
+
+# claude_project_dir <dir>: prints Claude Code's per-project folder for the
+# project holding <dir>: its absolute path with every character other than
+# a letter or digit replaced by '-'.
+claude_project_dir() {
+  local top
+  top="$(main_worktree "$1" || (cd "$1" && pwd -P))"
+  printf '%s/%s\n' "${CLAUDE_PROJECTS}" "$(sed -E 's/[^A-Za-z0-9]/-/g' <<<"${top}")"
+}
+
+# front_matter_field <file> <field>: prints a top-level field from the YAML
+# front matter at the start of <file>, without surrounding quotes. Prints
+# nothing unless the block is closed, so body lines never count as fields.
+front_matter_field() {
+  awk -v field="$2" '
+    NR == 1 { if ($0 != "---") exit; next }
+    $0 == "---" { closed = 1; exit }
+    !found && index($0, field ":") == 1 {
+      v = substr($0, length(field) + 2)
+      sub(/^[ \t]+/, "", v); sub(/[ \t]+$/, "", v)
+      if (v ~ /^".*"$/ || v ~ /^'\''.*'\''$/) v = substr(v, 2, length(v) - 2)
+      found = 1
+    }
+    END { if (closed && found) print v }' "$1"
+}
+
+# front_matter_closed <file>: succeeds when the front matter that opens
+# <file> has its closing "---".
+front_matter_closed() {
+  awk 'NR == 1 { next } $0 == "---" { closed = 1; exit } END { exit !closed }' "$1"
+}
+
+# index_dir <dir>: rewrites <dir>/MEMORY.md, one line per memory file,
+# sorted by file name.
+index_dir() {
+  local dir="$1" f name desc
+  INDEX_TMP="$(mktemp "${dir}/.MEMORY.md.XXXXXX")"
+  {
+    printf '# Memory index\n\n'
+    printf '<!-- Generated by agent-memory from each file'\''s front matter. Edit the files, not this index. -->\n\n'
+    for f in "${dir}"/*.md; do
+      [[ -f "${f}" ]] || continue
+      case "$(basename "${f}")" in MEMORY.md | README.md) continue ;; esac
+      name="$(front_matter_field "${f}" name)"
+      desc="$(front_matter_field "${f}" description)"
+      [[ -n "${name}" ]] || name="$(basename "${f}" .md)"
+      if [[ -n "${desc}" ]]; then
+        printf -- '- [%s](%s) — %s\n' "${name}" "$(basename "${f}")" "${desc}"
+      else
+        printf -- '- [%s](%s)\n' "${name}" "$(basename "${f}")"
+      fi
+    done
+  } >"${INDEX_TMP}"
+  mv -f "${INDEX_TMP}" "${dir}/MEMORY.md"
+  INDEX_TMP=""
+}
+
+# index_all: regenerates the global index and every project's.
+index_all() {
+  local d
+  mkdir -p "${STORE}/global"
+  index_dir "${STORE}/global"
+  [[ -d "${STORE}/projects" ]] || return 0
+  while IFS= read -r d; do
+    index_dir "${d}"
+  done < <(find "${STORE}/projects" -mindepth 2 -maxdepth 2 -type d | sort)
+}
+
+# check_dir <dir> <label>: prints "<label>/<file>: <problem>" for each
+# memory file in <dir> whose front matter the index cannot use.
+check_dir() {
+  local dir="$1" label="$2" f base name
+  for f in "${dir}"/*.md; do
+    [[ -f "${f}" ]] || continue
+    base="$(basename "${f}" .md)"
+    case "${base}" in MEMORY | README) continue ;; esac
+    if [[ "$(head -n 1 "${f}")" != "---" ]]; then
+      printf '%s/%s.md: no front matter\n' "${label}" "${base}"
+      continue
+    fi
+    if ! front_matter_closed "${f}"; then
+      printf '%s/%s.md: front matter has no closing ---\n' "${label}" "${base}"
+      continue
+    fi
+    name="$(front_matter_field "${f}" name)"
+    [[ -n "${name}" ]] || printf '%s/%s.md: front matter has no name\n' "${label}" "${base}"
+    [[ -n "$(front_matter_field "${f}" description)" ]] ||
+      printf '%s/%s.md: front matter has no description\n' "${label}" "${base}"
+    if [[ -n "${name}" && "${name}" != "${base}" ]]; then
+      printf '%s/%s.md: name '\''%s'\'' does not match the file name\n' "${label}" "${base}" "${name}"
+    fi
+    # An unquoted value with ": " in it is invalid YAML, which tools that
+    # parse front matter properly reject.
+    if awk 'NR == 1 { next } $0 == "---" { exit }
+      /^(name|description):[ \t]+[^"'\''].*: / { found = 1; exit }
+      END { exit !found }' "${f}"; then
+      printf '%s/%s.md: a value containing ": " must be quoted\n' "${label}" "${base}"
+    fi
+    if [[ "${label}" != global && -f "${STORE}/global/${base}.md" ]]; then
+      printf '%s/%s.md: global/%s.md has the same name\n' "${label}" "${base}" "${base}"
+    fi
+  done
+}
+
+cmd_check() {
+  local key problems
+  key="$(project_key "${1:-.}")"
+  problems="$(check_dir "${STORE}/global" global; check_dir "${STORE}/projects/${key}" "projects/${key}")"
+  [[ -z "${problems}" ]] && return 0
+  printf '%s\n' "${problems}"
+  return 1
+}
+
+# index_lines <dir>: prints the entries of <dir>'s index, or a placeholder.
+index_lines() {
+  if [[ -f "$1/MEMORY.md" ]] && grep -q '^- ' "$1/MEMORY.md"; then
+    grep '^- ' "$1/MEMORY.md"
+  else
+    echo "(no memories yet)"
+  fi
+}
+
+cmd_context() {
+  local dir="${1:-.}" key global project problems
+  key="$(project_key "${dir}")"
+  global="${STORE}/global"
+  project="${STORE}/projects/${key}"
+  mkdir -p "${global}" "${project}"
+  index_dir "${global}"
+  index_dir "${project}"
+  printf '# Shared agent memory\n\n'
+  printf 'Memories saved by earlier sessions, shared with other agents and machines.\n'
+  printf 'Open a file when its line bears on the task. Read %s/README.md before saving one.\n\n' "${STORE}"
+  printf '## Global: %s\n\n' "${global}"
+  index_lines "${global}"
+  printf '\n## Project %s: %s\n\n' "${key}" "${project}"
+  index_lines "${project}"
+  if ! problems="$(cmd_check "${dir}")"; then
+    printf '\n## Memory files to fix\n\n%s\n' "${problems}"
+  fi
+  problems="$(pending_rescue)"
+  [[ -z "${problems}" ]] || printf '\n## Rescued edits to restore\n\n%s\n' "${problems}"
+}
+
+cmd_key() {
+  project_key "${1:-.}"
+}
+
+cmd_paths() {
+  local key
+  key="$(project_key "${1:-.}")"
+  mkdir -p "${STORE}/global" "${STORE}/projects/${key}"
+  printf 'global: %s/global\n' "${STORE}"
+  printf 'project: %s/projects/%s\n' "${STORE}" "${key}"
+}
+
+cmd_link() {
+  local dir="${1:-.}" key target cdir mem
+  key="$(project_key "${dir}")"
+  target="${STORE}/projects/${key}"
+  mkdir -p "${target}"
+  # A project new to the store gets its (empty) index now; session start
+  # skips the full rebuild when a sync has just done one.
+  [[ -f "${target}/MEMORY.md" ]] || index_dir "${target}"
+  cdir="$(claude_project_dir "${dir}")"
+  mem="${cdir}/memory"
+  mkdir -p "${cdir}"
+
+  if [[ -L "${mem}" ]]; then
+    if [[ "$(readlink -f "${mem}")" == "$(readlink -f "${target}")" ]]; then
+      return 0
+    fi
+    rm -f "${mem}"
+  elif [[ -d "${mem}" ]]; then
+    if [[ -n "$(find "${mem}" -mindepth 1 -maxdepth 1 ! -name MEMORY.md -print -quit)" ]] ||
+      [[ -s "${mem}/MEMORY.md" ]]; then
+      die "${mem} holds memories; move them into ${target} first"
+    fi
+    rm -f "${mem}/MEMORY.md"
+    rmdir "${mem}"
+  elif [[ -e "${mem}" ]]; then
+    die "${mem} exists and is not a folder or a link"
+  fi
+  # -n: a concurrent link made since the checks above is replaced, not
+  # followed into the target folder.
+  ln -sfn "${target}" "${mem}"
+}
+
+cmd_index() {
+  index_all
+}
+
+# ensure_gitignore: the generated indexes and their temp files stay out of
+# the store's history, so they never conflict between machines.
+ensure_gitignore() {
+  local pattern
+  for pattern in 'MEMORY.md' '.MEMORY.md.*'; do
+    grep -qxF -- "${pattern}" .gitignore 2>/dev/null || printf '%s\n' "${pattern}" >>.gitignore
+  done
+}
+
+# commit_all: commits every change in the store, if there is one.
+commit_all() {
+  git add -A
+  if ! git diff --cached --quiet; then
+    git commit -q -m "chore: sync memory from $(hostname -s 2>/dev/null || hostname)"
+  fi
+}
+
+# abort_rebase: cancels a rebase, which resets tracked files to the commit
+# the rebase started from. An agent may have edited a memory after the
+# rebase stopped; git's own half-applied changes are staged, the agent's
+# are not, so every file differing from the index is copied out first.
+# A conflicted file differs from the index without anyone editing it, so
+# it is copied only when written after git stopped: git writes it just
+# before .git/rebase-merge/stopped-sha. Without that marker it is copied.
+# When anything was copied the sync stops and says where, because the
+# store no longer holds those edits; session start keeps reporting the
+# folder until it is deleted.
+abort_rebase() {
+  local rescue f entry n=0 unmerged=$'\n' stopped=.git/rebase-merge/stopped-sha
+  rescue=".git/agent-memory-rescue/$(date +%Y%m%dT%H%M%S)"
+  while IFS= read -r -d '' entry; do
+    unmerged+="${entry#*$'\t'}"$'\n'
+  done < <(git ls-files -u -z)
+  while IFS= read -r -d '' f; do
+    if [[ "${unmerged}" == *$'\n'"${f}"$'\n'* && -e "${stopped}" &&
+      -z "$(find "./${f}" -newer "${stopped}" 2>/dev/null)" ]]; then
+      continue
+    fi
+    [[ -f "${f}" ]] || continue
+    mkdir -p "${rescue}/$(dirname "${f}")"
+    cp -p "${f}" "${rescue}/${f}"
+    n=$((n + 1))
+  done < <(git diff -z --name-only --diff-filter=MT)
+  git rebase --abort
+  if [[ "${n}" -gt 0 ]]; then
+    die "cancelled a rebase that would have reverted ${n} edited memory file(s); copies are in ${STORE}/${rescue}: restore them by hand, then sync"
+  fi
+}
+
+# pending_rescue: prints a notice while abort_rebase's copies are waiting.
+# A stop hook cannot show its own errors, so session start repeats this.
+pending_rescue() {
+  local dir="${STORE}/.git/agent-memory-rescue"
+  [[ -d "${dir}" && -n "$(ls -A "${dir}")" ]] || return 0
+  printf 'agent-memory: memory edits copied out before a rebase was cancelled are waiting in %s: restore what is still needed, then delete that folder\n' "${dir}"
+}
+
+# needs_sync: succeeds when the store has something to commit or push.
+needs_sync() {
+  [[ -n "$(git status --porcelain)" ]] && return 0
+  git remote get-url origin >/dev/null 2>&1 || return 1
+  local ahead
+  if ahead="$(git rev-list --count '@{u}..HEAD' 2>/dev/null)"; then
+    [[ "${ahead}" -gt 0 ]]
+  else
+    git rev-parse -q --verify HEAD >/dev/null
+  fi
+}
+
+cmd_sync() {
+  local if_needed=0 branch arg has_origin=0 remote=0
+  for arg in "$@"; do
+    case "${arg}" in
+      --if-needed) if_needed=1 ;;
+      *)
+        echo "Usage: agent-memory sync [--if-needed]" >&2
+        exit 2
+        ;;
+    esac
+  done
+  [[ -d "${STORE}/.git" ]] || die "${STORE} is not a git repository"
+  cd "${STORE}"
+  # Claude and agy can finish a turn at the same moment: the second sync
+  # waits for the first rather than skipping, so it carries whatever the
+  # first missed.
+  if command -v flock >/dev/null 2>&1; then
+    exec 9>"${STORE}/.git/agent-memory.lock"
+    flock -w 20 9 || die "another sync held the lock for 20s"
+    # git's children (a credential cache daemon, say) must not inherit the
+    # lock and hold it after this run ends.
+    git() { command git "$@" 9>&-; }
+  fi
+  # A run killed mid-rebase leaves it in progress; only sync rebases here.
+  if [[ -d .git/rebase-merge || -d .git/rebase-apply ]]; then
+    abort_rebase
+  fi
+  # Before anything is committed: a commit on a detached HEAD is stranded.
+  branch="$(git symbolic-ref -q --short HEAD)" || die "${STORE} has a detached HEAD; check out a branch"
+  git remote get-url origin >/dev/null 2>&1 && has_origin=1
+  # Hooks run sync unattended: never wait for credentials, and give up on
+  # a stalled transfer instead of holding up the session.
+  export GIT_TERMINAL_PROMPT=0
+  export GIT_SSH_COMMAND="${GIT_SSH_COMMAND:-ssh -o BatchMode=yes -o ConnectTimeout=10}"
+  local net=(-c http.lowSpeedLimit=1000 -c http.lowSpeedTime=10)
+
+  # A store with no commits adopts the remote's .gitignore below; writing
+  # ours first would make it a local edit that overwrites the remote's.
+  if git rev-parse -q --verify HEAD >/dev/null; then
+    ensure_gitignore
+  fi
+  if [[ "${if_needed}" -eq 1 ]] && ! needs_sync; then
+    return 0
+  fi
+
+  if [[ "${has_origin}" -eq 1 ]]; then
+    # 0: the branch exists; 2: reachable, no branch yet (a new repo);
+    # anything else: the remote could not be asked at all.
+    git "${net[@]}" ls-remote --exit-code --heads origin "${branch}" >/dev/null 2>&1 || remote=$?
+    case "${remote}" in
+      0 | 2) ;;
+      *) die "cannot reach origin (git ls-remote exit ${remote}); local changes are kept" ;;
+    esac
+    # A store with no commits yet takes the remote's history first, so its
+    # own first commit does not start an unrelated root that conflicts.
+    # reset leaves the working tree alone, so the remote's files that are
+    # not on disk here are checked out; otherwise the next commit records
+    # them as deleted. A file both sides have keeps the local version.
+    if [[ "${remote}" -eq 0 ]] && ! git rev-parse -q --verify HEAD >/dev/null; then
+      git "${net[@]}" fetch -q origin "${branch}"
+      git reset -q FETCH_HEAD
+      local missing=() f
+      while IFS= read -r -d '' f; do missing+=("${f}"); done < <(git ls-files -z --deleted)
+      [[ ${#missing[@]} -eq 0 ]] || git checkout -q -- "${missing[@]}"
+    fi
+  fi
+
+  ensure_gitignore
+  commit_all
+  if [[ "${has_origin}" -eq 0 ]]; then
+    index_all
+    return 0
+  fi
+
+  # An agent may write between the commit and the pull, and pull --rebase
+  # refuses a dirty tree. Commit once more; if files are still changing,
+  # leave them for the next run rather than fail.
+  commit_all
+  if [[ -n "$(git status --porcelain)" ]]; then
+    index_all
+    echo "agent-memory: files changed during sync; they go out with the next run"
+    return 0
+  fi
+
+  if [[ "${remote}" -eq 0 ]]; then
+    if ! git "${net[@]}" pull -q --rebase origin "${branch}"; then
+      if [[ -d .git/rebase-merge || -d .git/rebase-apply ]]; then
+        abort_rebase
+        die "pull --rebase conflicted; local commits are kept, resolve by hand in ${STORE}"
+      fi
+      die "pull from origin failed; local commits are kept"
+    fi
+  fi
+  # Before the push, so a failed push leaves no index older than the files.
+  index_all
+  git "${net[@]}" push -q -u origin "${branch}"
+}
+
+# hook_cwd <json>: prints the session's working directory from a hook's
+# input. Both Claude Code and agy send it as "cwd"; agy runs the hook from
+# its config folder, so $PWD is no substitute there.
+hook_cwd() {
+  local cwd=""
+  if command -v jq >/dev/null 2>&1; then
+    cwd="$(jq -r '.cwd // empty' <<<"$1" 2>/dev/null || true)"
+  else
+    # Bash matches leftmost: the first "cwd", not a nested one.
+    local re='"cwd"[[:space:]]*:[[:space:]]*"([^"]*)"'
+    [[ "$1" =~ ${re} ]] && cwd="${BASH_REMATCH[1]}"
+  fi
+  [[ -n "${cwd}" && -d "${cwd}" ]] || cwd="${PWD}"
+  printf '%s\n' "${cwd}"
+}
+
+# cmd_hook <claude|agy> <start|stop>: each step runs as its own process so
+# its errors stay fatal to it and are reported, never to the session.
+cmd_hook() {
+  local tool="${1:-}" event="${2:-}" self="${BASH_SOURCE[0]}" input cwd out notes=""
+  case "${tool}:${event}" in
+    claude:start | claude:stop | agy:start | agy:stop) ;;
+    *)
+      echo "Usage: agent-memory hook <claude|agy> <start|stop>" >&2
+      exit 2
+      ;;
+  esac
+  input="$(cat)"
+  if [[ ! -d "${STORE}" ]]; then
+    [[ "${tool}" == agy ]] && echo '{}'
+    return 0
+  fi
+  cwd="$(hook_cwd "${input}")"
+
+  if [[ "${event}" == stop ]]; then
+    "${self}" sync --if-needed </dev/null >/dev/null 2>&1 || true
+    [[ "${tool}" == agy ]] && echo '{}'
+    return 0
+  fi
+
+  local synced=1
+  if ! out="$("${self}" sync </dev/null 2>&1)"; then
+    synced=0
+    notes+="agent-memory: sync failed, working from the local copy: ${out}"$'\n'
+  fi
+  if [[ "${tool}" == claude ]]; then
+    notes+="$(pending_rescue)"
+    [[ -z "${notes}" || "${notes}" == *$'\n' ]] || notes+=$'\n'
+    if ! out="$("${self}" link "${cwd}" </dev/null 2>&1)"; then
+      notes+="agent-memory: shared memory is not wired up for this project: ${out}"$'\n'
+    fi
+    # A sync that got through has just rebuilt every index.
+    [[ "${synced}" -eq 1 ]] || "${self}" index </dev/null >/dev/null 2>&1 || true
+    if ! out="$("${self}" check "${cwd}" </dev/null 2>&1)"; then
+      notes+="agent-memory: memory files to fix:"$'\n'"${out}"$'\n'
+    fi
+    printf '%s' "${notes}"
+    return 0
+  fi
+
+  out="$("${self}" context "${cwd}" </dev/null 2>&1)" || true
+  if command -v jq >/dev/null 2>&1; then
+    jq -n --arg m "${notes}${out}" '{injectSteps: [{systemMessage: {systemMessage: $m}}]}'
+  else
+    echo '{}'
+  fi
+}
+
+main() {
+  local cmd="${1:-}"
+  [[ $# -gt 0 ]] && shift
+  case "${cmd}" in
+    key) cmd_key "$@" ;;
+    paths) cmd_paths "$@" ;;
+    link) cmd_link "$@" ;;
+    index) cmd_index ;;
+    check) cmd_check "$@" ;;
+    context) cmd_context "$@" ;;
+    sync) cmd_sync "$@" ;;
+    hook) cmd_hook "$@" ;;
+    -h | --help | help) sed -n '2,$ { /^#/!q; s/^# \{0,1\}//; p; }' "${BASH_SOURCE[0]}" ;;
+    *)
+      echo "Usage: agent-memory key|paths|link|index|check|context|sync|hook ...  (--help for details)" >&2
+      exit 2
+      ;;
+  esac
+}
+
+# Run only when executed directly, so the helpers can be sourced for testing.
+# The trap is installed here, not at load, so sourcing this file does not
+# replace the caller's own EXIT trap.
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+  trap '[[ -n "${INDEX_TMP}" ]] && rm -f "${INDEX_TMP}"' EXIT
+  main "$@"
+fi

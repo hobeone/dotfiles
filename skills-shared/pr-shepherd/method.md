@@ -63,7 +63,7 @@ Persist tracking state in `⟨state-dir⟩/state.json`.
 ## 3. Worktree Isolation & Stacked-Branch Hygiene
 
 - **Never `git stash`**: The stash stack is shared across sessions in the repository.
-- **Multi-PR Worktree Isolation**: When shepherding multiple open PRs (or when the main checkout is on another branch in `.agents/shared/active_sessions.md`), never `git switch` / `git checkout` in the main working copy. Create an isolated worktree per PR:
+- **Multi-PR Worktree Isolation**: When shepherding multiple open PRs (or when the main checkout is on another branch), never `git switch` / `git checkout` in the main working copy. Create an isolated worktree per PR:
   ```bash
   git fetch origin
   git worktree add ⟨worktree-root⟩/pr-<PR>-work <headRefName>

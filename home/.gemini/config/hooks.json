@@ -1,0 +1,18 @@
+{
+  "agent-memory": {
+    "SessionStart": [
+      {
+        "type": "command",
+        "command": "test -x ~/bin/agent-memory && ~/bin/agent-memory hook agy start || echo '{}'",
+        "timeout": 60
+      }
+    ],
+    "Stop": [
+      {
+        "type": "command",
+        "command": "test -x ~/bin/agent-memory && ~/bin/agent-memory hook agy stop || echo '{}'",
+        "timeout": 60
+      }
+    ]
+  }
+}

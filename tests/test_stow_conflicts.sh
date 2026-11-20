@@ -97,6 +97,36 @@ if [[ ! -L "$MOCK_TARGET/broken_symlink.txt.bak" ]]; then
     err "Broken symlink was not backed up to broken_symlink.txt.bak"
 fi
 
+# migrate_gemini_dir unfolds a ~/.gemini/config that Stow folded into a
+# link to the repo, and moves agy's runtime files back out of the repo.
+# install.sh turns on errexit, so the subshell's status is caught by `if`.
+gem_rc=0
+if (
+    export GIT_CONFIG_GLOBAL=/dev/null GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@example.com \
+        GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@example.com
+    HOME="$TMPDIR/gemhome"
+    DOTFILES_DIR="$TMPDIR/gemrepo"
+    mkdir -p "$DOTFILES_DIR/home/.gemini/config" "$HOME/.gemini"
+    echo '{}' >"$DOTFILES_DIR/home/.gemini/config/hooks.json"
+    git -C "$DOTFILES_DIR" init -q && git -C "$DOTFILES_DIR" add -A && git -C "$DOTFILES_DIR" commit -q -m init
+    ln -s "$DOTFILES_DIR/home/.gemini/config" "$HOME/.gemini/config"
+    echo runtime >"$HOME/.gemini/config/plugins.json"
+    migrate_gemini_dir >/dev/null 2>&1
+    [[ -d $HOME/.gemini/config && ! -L $HOME/.gemini/config ]] || exit 1
+    [[ -f $HOME/.gemini/config/plugins.json ]] || exit 2
+    [[ ! -e $DOTFILES_DIR/home/.gemini/config/plugins.json ]] || exit 3
+); then
+    :
+else
+    gem_rc=$?
+fi
+case $gem_rc in
+    0) ;;
+    1) err "migrate_gemini_dir left ~/.gemini/config folded" ;;
+    2) err "migrate_gemini_dir did not move agy's runtime file out of the repo" ;;
+    *) err "migrate_gemini_dir left agy's runtime file in the repo" ;;
+esac
+
 if ((fail == 0)); then
     echo "PASS"
     exit 0
