@@ -662,6 +662,7 @@ migrate_gemini_dir() {
     local gemini_dir="$HOME/.gemini"
     local cli_dir="$gemini_dir/antigravity-cli"
     local skills_dir="$gemini_dir/skills"
+    local config_dir="$gemini_dir/config"
     local migrated=false
     
     local files=()
@@ -684,12 +685,18 @@ migrate_gemini_dir() {
             execute rm "$skills_dir"
             migrated=true
         fi
+        if [[ -L "$config_dir" ]]; then
+            log_info "Removing folded .gemini/config symlink..."
+            execute rm "$config_dir"
+            migrated=true
+        fi
     fi
     
     if $migrated; then
         # Re-create correct directory structure
         execute mkdir -p "$cli_dir"
         execute mkdir -p "$skills_dir"
+        execute mkdir -p "$config_dir"
         
         # Move untracked files
         for f in "${files[@]}"; do
@@ -739,7 +746,7 @@ main() {
 
     # Migrate and pre-create Gemini directories to prevent folding
     migrate_gemini_dir
-    execute mkdir -p "$HOME/.gemini/antigravity-cli" "$HOME/.gemini/skills"
+    execute mkdir -p "$HOME/.gemini/antigravity-cli" "$HOME/.gemini/skills" "$HOME/.gemini/config"
 
     # 8. Create Links via GNU Stow
     log_info "Creating symlinks with GNU Stow..."
