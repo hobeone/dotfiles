@@ -49,6 +49,10 @@ check_url "ssh://git@example.com:2222/team/tool.git" "team/tool"
 check_url "/srv/git/team/tool.git" "team/tool"
 # A key becomes a path under the store, so nothing may climb out of it.
 check_url "https://github.com/HobeOne/GoNZBD.git" "hobeone/gonzbd"
+
+# Sourcing must not replace the caller's EXIT trap (this file relies on one).
+got=$(bash -c 'trap "echo caller-cleanup" EXIT; source "$1"' _ "$script")
+[[ $got == caller-cleanup ]] || err "sourcing replaced the caller's EXIT trap: '$got'"
 for bad in "https://example.com/../x" "https://example.com/a/.." "https://example.com/.git/x" "gonzbd"; do
 	key_from_url "$bad" >/dev/null 2>&1 && err "key_from_url accepted '$bad'"
 done
@@ -240,6 +244,8 @@ printf -- '---\nname: nodesc\n---\n' >"$p/nodesc.md"
 printf -- '---\ndescription: x\n---\n' >"$p/noname.md"
 printf -- '---\nname: other-name\ndescription: x\n---\n' >"$p/renamed.md"
 printf -- '---\nname: dup\ndescription: x\n---\n' >"$p/dup.md"
+printf -- '---\nname: unclosed\ndescription: x\nbody text\n' >"$p/unclosed.md"
+[[ -z $(front_matter_field "$p/unclosed.md" name) ]] || err "front matter read from an unclosed block"
 printf -- '---\nname: colon\ndescription: always brace: "x"\n---\n' >"$p/colon.md"
 printf -- '---\nname: quoted\ndescription: "fine: quoted"\n---\nbody: with colon\n' >"$p/quoted.md"
 AGENT_MEMORY_HOME="$cs" am check "$work/src/gonzbd"
@@ -249,10 +255,11 @@ for want in "projects/hobeone/gonzbd/bare.md: no front matter" \
 	"projects/hobeone/gonzbd/noname.md: front matter has no name" \
 	"projects/hobeone/gonzbd/renamed.md: name 'other-name' does not match the file name" \
 	"projects/hobeone/gonzbd/dup.md: global/dup.md has the same name" \
-	'projects/hobeone/gonzbd/colon.md: a value containing ": " must be quoted'; do
+	'projects/hobeone/gonzbd/colon.md: a value containing ": " must be quoted' \
+	"projects/hobeone/gonzbd/unclosed.md: front matter has no closing ---"; do
 	grep -qxF -- "$want" "$work/out" || err "check: missing '$want' in: $(cat "$work/out")"
 done
-[[ $(wc -l <"$work/out") -eq 6 ]] || err "check: want exactly 6 problems: $(cat "$work/out")"
+[[ $(wc -l <"$work/out") -eq 7 ]] || err "check: want exactly 7 problems: $(cat "$work/out")"
 
 # --- sync --if-needed and the lock ------------------------------------------
 git init -q --bare "$work/hremote.git"
@@ -270,11 +277,14 @@ am sync
 [[ $rc -ne 0 ]] || err "sync against a missing origin succeeded: the --if-needed check above proves nothing"
 git -C "$work/hs" remote set-url origin "$work/hremote.git"
 
-# A second sync waits for the lock instead of failing.
-if command -v flock >/dev/null 2>&1; then
+# A second sync waits for the lock instead of failing. Without flock there
+# is no lock to wait on, and the fixture is still created for later tests.
+printf -- '---\nname: waited\ndescription: behind the lock\n---\n' >"$work/hs/global/waited.md"
+if ! command -v flock >/dev/null 2>&1; then
+	am sync
+else
 	(flock 9 && sleep 2) 9>"$work/hs/.git/agent-memory.lock" &
 	sleep 0.3
-	printf -- '---\nname: waited\ndescription: behind the lock\n---\n' >"$work/hs/global/waited.md"
 	am sync
 	[[ $rc -eq 0 ]] || err "sync behind a held lock: $(cat "$work/out")"
 	wait
@@ -283,7 +293,8 @@ if command -v flock >/dev/null 2>&1; then
 fi
 
 # A rebase left in progress by a killed run is cancelled before syncing,
-# and the local commit survives.
+# and the local commit survives. A memory an agent edited after the rebase
+# stopped is copied out first, since the abort reverts it.
 git clone -q "$work/hremote.git" "$work/stale" 2>/dev/null
 mkdir -p "$work/stale/global"
 echo theirs >"$work/hs/global/clash.md"
@@ -292,12 +303,35 @@ echo mine >"$work/stale/global/clash.md"
 git -C "$work/stale" add -A && git -C "$work/stale" commit -q -m mine
 git -C "$work/stale" pull -q --rebase >/dev/null 2>&1
 [[ -d $work/stale/.git/rebase-merge || -d $work/stale/.git/rebase-apply ]] || err "stale rebase: fixture made no rebase"
+printf -- '---\nname: waited\ndescription: behind the lock\n---\nedited mid-rebase\n' >"$work/stale/global/waited.md"
 AGENT_MEMORY_HOME="$work/stale" am sync
+if [[ $rc -eq 0 ]] || ! grep -qF "copies are in" "$work/out"; then
+	err "stale rebase: rescue not reported: rc=$rc $(cat "$work/out")"
+fi
+grep -rqF "edited mid-rebase" "$work/stale/.git/agent-memory-rescue" 2>/dev/null ||
+	err "stale rebase: the edit made after the rebase stopped was not rescued"
 if [[ -d $work/stale/.git/rebase-merge || -d $work/stale/.git/rebase-apply ]]; then
 	err "stale rebase: still in progress after sync: $(cat "$work/out")"
 fi
 [[ $(git -C "$work/stale" show HEAD:global/clash.md 2>/dev/null) == mine ]] || err "stale rebase: local commit lost"
 git -C "$work/stale" symbolic-ref -q HEAD >/dev/null || err "stale rebase: left a detached HEAD"
+
+# The same when a sync's own pull conflicts while an agent writes: the
+# post-checkout hook fires inside the rebase and plays the agent.
+rm -rf "$work/stale/.git/agent-memory-rescue"
+cat >"$work/stale/.git/hooks/post-checkout" <<'HOOK'
+#!/bin/sh
+[ -d .git/rebase-merge ] && printf -- '---\nname: waited\ndescription: behind the lock\n---\nwritten during the pull\n' >global/waited.md
+exit 0
+HOOK
+chmod +x "$work/stale/.git/hooks/post-checkout"
+AGENT_MEMORY_HOME="$work/stale" am sync
+rm -f "$work/stale/.git/hooks/post-checkout"
+if [[ $rc -eq 0 ]] || ! grep -qF "copies are in" "$work/out"; then
+	err "conflicting pull: rescue not reported: rc=$rc $(cat "$work/out")"
+fi
+grep -rqF "written during the pull" "$work/stale/.git/agent-memory-rescue" 2>/dev/null ||
+	err "conflicting pull: the edit made during the rebase was not rescued"
 rm "$work/hs/global/clash.md"
 AGENT_MEMORY_HOME="$work/hs" am sync
 

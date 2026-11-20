@@ -45,10 +45,9 @@ set -euo pipefail
 STORE="${AGENT_MEMORY_HOME:-${HOME}/.agents/memory}"
 CLAUDE_PROJECTS="${CLAUDE_PROJECTS_DIR:-${HOME}/.claude/projects}"
 
-# The index being written, removed on any exit so a failed run leaves no
-# stray file for sync to commit.
+# The index being written, removed on exit (see the trap at the bottom) so
+# a failed run leaves no stray file for sync to commit.
 INDEX_TMP=""
-trap '[[ -n "${INDEX_TMP}" ]] && rm -f "${INDEX_TMP}"' EXIT
 
 die() {
   echo "agent-memory: $*" >&2
@@ -115,18 +114,25 @@ claude_project_dir() {
 }
 
 # front_matter_field <file> <field>: prints a top-level field from the YAML
-# front matter at the start of <file>, without surrounding quotes.
+# front matter at the start of <file>, without surrounding quotes. Prints
+# nothing unless the block is closed, so body lines never count as fields.
 front_matter_field() {
   awk -v field="$2" '
     NR == 1 { if ($0 != "---") exit; next }
-    $0 == "---" { exit }
-    index($0, field ":") == 1 {
+    $0 == "---" { closed = 1; exit }
+    !found && index($0, field ":") == 1 {
       v = substr($0, length(field) + 2)
       sub(/^[ \t]+/, "", v); sub(/[ \t]+$/, "", v)
       if (v ~ /^".*"$/ || v ~ /^'\''.*'\''$/) v = substr(v, 2, length(v) - 2)
-      print v
-      exit
-    }' "$1"
+      found = 1
+    }
+    END { if (closed && found) print v }' "$1"
+}
+
+# front_matter_closed <file>: succeeds when the front matter that opens
+# <file> has its closing "---".
+front_matter_closed() {
+  awk 'NR == 1 { next } $0 == "---" { closed = 1; exit } END { exit !closed }' "$1"
 }
 
 # index_dir <dir>: rewrites <dir>/MEMORY.md, one line per memory file,
@@ -175,6 +181,10 @@ check_dir() {
     case "${base}" in MEMORY | README) continue ;; esac
     if [[ "$(head -n 1 "${f}")" != "---" ]]; then
       printf '%s/%s.md: no front matter\n' "${label}" "${base}"
+      continue
+    fi
+    if ! front_matter_closed "${f}"; then
+      printf '%s/%s.md: front matter has no closing ---\n' "${label}" "${base}"
       continue
     fi
     name="$(front_matter_field "${f}" name)"
@@ -295,6 +305,27 @@ commit_all() {
   fi
 }
 
+# abort_rebase: cancels a rebase, which resets tracked files to the commit
+# the rebase started from. An agent may have edited a memory after the
+# rebase stopped; git's own half-applied changes are staged, the agent's
+# are not, so every file differing from the index (conflicted ones aside)
+# is copied out first. When anything was copied the sync stops and says
+# where, because the store no longer holds those edits.
+abort_rebase() {
+  local rescue f n=0
+  rescue=".git/agent-memory-rescue/$(date +%Y%m%dT%H%M%S)"
+  while IFS= read -r f; do
+    [[ -n "${f}" && -f "${f}" ]] || continue
+    mkdir -p "${rescue}/$(dirname "${f}")"
+    cp -p "${f}" "${rescue}/${f}"
+    n=$((n + 1))
+  done < <(git diff --name-only --diff-filter=MT)
+  git rebase --abort
+  if [[ "${n}" -gt 0 ]]; then
+    die "cancelled a rebase that would have reverted ${n} edited memory file(s); copies are in ${STORE}/${rescue}: restore them by hand, then sync"
+  fi
+}
+
 # needs_sync: succeeds when the store has something to commit or push.
 needs_sync() {
   [[ -n "$(git status --porcelain)" ]] && return 0
@@ -321,7 +352,7 @@ cmd_sync() {
   fi
   # A run killed mid-rebase leaves it in progress; only sync rebases here.
   if [[ -d .git/rebase-merge || -d .git/rebase-apply ]]; then
-    git rebase --abort
+    abort_rebase
   fi
   # Hooks run sync unattended: never wait for credentials, and give up on
   # a stalled transfer instead of holding up the session.
@@ -351,7 +382,7 @@ cmd_sync() {
   if git "${net[@]}" ls-remote --exit-code --heads origin "${branch}" >/dev/null 2>&1; then
     if ! git "${net[@]}" pull -q --rebase origin "${branch}"; then
       if [[ -d .git/rebase-merge || -d .git/rebase-apply ]]; then
-        git rebase --abort
+        abort_rebase
         die "pull --rebase conflicted; local commits are kept, resolve by hand in ${STORE}"
       fi
       die "pull from origin failed; local commits are kept"
@@ -443,6 +474,9 @@ main() {
 }
 
 # Run only when executed directly, so the helpers can be sourced for testing.
+# The trap is installed here, not at load, so sourcing this file does not
+# replace the caller's own EXIT trap.
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+  trap '[[ -n "${INDEX_TMP}" ]] && rm -f "${INDEX_TMP}"' EXIT
   main "$@"
 fi
