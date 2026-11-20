@@ -116,7 +116,7 @@ Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
 
 ## Memory has two tiers, shared with agy and across machines
 
-**Scope:** Active only when `~/.agents/memory/` exists and is not disabled (`~/.agents/memory.disabled` absent and `AGENT_MEMORY_DISABLED` unset). When disabled or absent (e.g., on work machines), skip this section and use Claude Code's local memory instead.
+**Scope:** Active only when `~/.agents/memory/` exists and is not disabled (no `~/.agents/memory.disabled` or `$AGENT_MEMORY_DISABLE_FILE` sentinel, and `AGENT_MEMORY_DISABLED` not set to `1`/`true`/`yes`). When disabled or absent (e.g., on work machines), skip this section and use Claude Code's local memory instead (note: if `~/.agents/memory/global/MEMORY.md` still exists on disk, Claude Code's static `@`-import below continues loading it until that file or store is removed).
 
 The store is `~/.agents/memory/`, a git repo; agy reads and writes the same files. Hooks keep
 it in step between machines: session start pulls and pushes, and the end of each response

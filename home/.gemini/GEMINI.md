@@ -38,7 +38,7 @@
 - **Interactive Questions (`ask_question`)**: Always use the `ask_question` tool when asking the user a question or requesting a selection from a list of options. Avoid asking questions in plain text or prompting for free-form input if they can be formatted as multiple-choice questions.
 
 ### 1.6 Shared Memory (two tiers, shared with Claude Code and across machines)
-- **Scope**: Active **only** when `~/.agents/memory` exists and is not disabled (`~/.agents/memory.disabled` absent and `AGENT_MEMORY_DISABLED` unset). When disabled or absent (e.g., on work machines), skip this entire section and use only the environment's native memory.
+- **Scope**: Active **only** when `~/.agents/memory` exists and is not disabled (no `~/.agents/memory.disabled` or `$AGENT_MEMORY_DISABLE_FILE` sentinel, and `AGENT_MEMORY_DISABLED` not set to `1`/`true`/`yes`). When disabled or absent (e.g., on work machines), skip this entire section and use only the environment's native memory.
 - **Already loaded**: When active, a session-start hook (`~/.gemini/config/hooks.json`) syncs the store and injects a "Shared agent memory" message: the `Global` folder (lessons that hold in any project), the `Project` folder (this repo, shared by every checkout of it on every machine) and an index of each, one line per memory. Open a memory file when its line bears on the task. If the hook did not run while active, `agent-memory context` prints the same thing.
 - **Rules for writing**: Read `~/.agents/memory/README.md` before saving a memory. Claude Code reads and writes the same files, so follow its format exactly.
 - **Which tier**: If the lesson would still be true in a different repo, write it to the Global folder; otherwise to the Project folder.

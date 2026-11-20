@@ -503,10 +503,33 @@ AGENT_MEMORY_HOME="$work/never-created" am disable
 [[ $rc -eq 0 && -e $work/never-created.disabled && ! -e $work/never-created ]] ||
 	err "disable created the store or failed: rc=$rc $(cat "$work/out")"
 
-# Disabling an active store makes hooks and mutating/reading commands no-ops.
+# A trailing slash on AGENT_MEMORY_HOME places the sentinel beside it, not inside.
+AGENT_MEMORY_HOME="$work/never-created-slash/" am disable
+[[ $rc -eq 0 && -e $work/never-created-slash.disabled && ! -e $work/never-created-slash ]] ||
+	err "disable with trailing slash placed sentinel wrong: rc=$rc $(cat "$work/out")"
+
+# Disabling an active store unlinks Claude project symlinks into the store,
+# preserves local memory directories and external symlinks, and makes hooks
+# and mutating/reading commands no-ops.
 make_repo "$work/src/disabled-repo" "git@github.com:hobeone/disabled-repo.git"
+make_repo "$work/src/already-linked" "git@github.com:hobeone/already-linked.git"
+AGENT_MEMORY_HOME="$work/hs" run_hook claude start "$work/src/already-linked"
+[[ -L $(mem_of "$work/src/already-linked") ]] || err "fixture: already-linked not linked"
+make_repo "$work/src/ext-link" "git@github.com:hobeone/ext-link.git"
+mkdir -p "$(dirname "$(mem_of "$work/src/ext-link")")" "$work/ext-mem"
+ln -s "$work/ext-mem" "$(mem_of "$work/src/ext-link")"
+make_repo "$work/src/local-mem" "git@github.com:hobeone/local-mem.git"
+mkdir -p "$(mem_of "$work/src/local-mem")"
+echo "local only" >"$(mem_of "$work/src/local-mem")/note.md"
+
 AGENT_MEMORY_HOME="$work/hs" am disable
 [[ $rc -eq 0 && -e $work/hs.disabled ]] || err "disable active store: rc=$rc $(cat "$work/out")"
+[[ ! -e $(mem_of "$work/src/already-linked") && ! -L $(mem_of "$work/src/already-linked") ]] ||
+	err "disable did not unlink Claude project symlink into store"
+[[ -L $(mem_of "$work/src/ext-link") && $(readlink -f "$(mem_of "$work/src/ext-link")") == "$work/ext-mem" ]] ||
+	err "disable touched an unrelated memory symlink"
+[[ -d $(mem_of "$work/src/local-mem") && ! -L $(mem_of "$work/src/local-mem") && -f $(mem_of "$work/src/local-mem")/note.md ]] ||
+	err "disable touched a real local memory directory"
 
 echo sentinel >"$work/hs/global/ignored-while-disabled.md"
 echo sentinel-index >"$work/hs/global/MEMORY.md"
@@ -525,11 +548,16 @@ AGENT_MEMORY_HOME="$work/hs" run_hook agy stop "$work/src/disabled-repo"
 [[ $rc -eq 0 && $(cat "$work/out") == "{}" ]] || err "agy stop while disabled: rc=$rc out=$(cat "$work/out")"
 pushed global/ignored-while-disabled.md && err "agy stop while disabled pushed a file"
 
-for subcmd in "paths $work/src/disabled-repo" "link $work/src/disabled-repo" "index" "check $work/src/disabled-repo" "context $work/src/disabled-repo" "sync"; do
-	# shellcheck disable=SC2086
-	AGENT_MEMORY_HOME="$work/hs" am $subcmd
-	[[ $rc -eq 0 ]] || err "$subcmd while disabled: rc=$rc $(cat "$work/out")"
-	grep -qF "agent-memory: disabled" "$work/out" || err "$subcmd while disabled gave no notice: $(cat "$work/out")"
+assert_disabled_cmd() {
+	AGENT_MEMORY_HOME="$work/hs" am "$@"
+	[[ $rc -eq 0 ]] || err "$* while disabled: rc=$rc $(cat "$work/out")"
+	grep -qF "agent-memory: disabled" "$work/out" || err "$* while disabled gave no notice: $(cat "$work/out")"
+}
+for subcmd in paths link check context; do
+	assert_disabled_cmd "$subcmd" "$work/src/disabled-repo"
+done
+for subcmd in index sync; do
+	assert_disabled_cmd "$subcmd"
 done
 [[ $(cat "$work/hs/global/MEMORY.md") == "sentinel-index" ]] || err "index while disabled modified MEMORY.md"
 [[ ! -e $(mem_of "$work/src/disabled-repo") ]] || err "link while disabled created project link"
@@ -542,6 +570,24 @@ AGENT_MEMORY_HOME="$work/hs" am key "$work/src/disabled-repo"
 AGENT_MEMORY_HOME="$work/hs" am disable extra
 [[ $rc -eq 2 ]] || err "disable with extra args: rc=$rc"
 
+# Symlink and directory edge cases for AGENT_MEMORY_DISABLE_FILE.
+ln -s "$work/dangling-target" "$work/dangling.disabled"
+AGENT_MEMORY_DISABLE_FILE="$work/dangling.disabled" AGENT_MEMORY_HOME="$work/hs" am sync
+if [[ $rc -ne 0 ]] || ! grep -qF "exists" "$work/out"; then
+	err "dangling symlink disable file not honored: $(cat "$work/out")"
+fi
+echo "keep me" >"$work/sym-target"
+ln -s "$work/sym-target" "$work/sym.disabled"
+AGENT_MEMORY_DISABLE_FILE="$work/sym.disabled" AGENT_MEMORY_HOME="$work/hs" am disable
+[[ $rc -eq 0 && ! -L $work/sym.disabled && $(cat "$work/sym-target") == "keep me" ]] ||
+	err "disable modified symlink target instead of replacing symlink"
+mkdir -p "$work/dir.disabled"
+echo "keep dir" >"$work/dir.disabled/inside"
+AGENT_MEMORY_DISABLE_FILE="$work/dir.disabled" AGENT_MEMORY_HOME="$work/hs" am disable
+[[ $rc -ne 0 && -f $work/dir.disabled/inside ]] || err "disable accepted or removed a directory: rc=$rc"
+AGENT_MEMORY_DISABLE_FILE="$work/dir.disabled" AGENT_MEMORY_HOME="$work/hs" am enable
+[[ $rc -ne 0 && -f $work/dir.disabled/inside ]] || err "enable accepted or removed a directory: rc=$rc"
+
 # Enabling restores normal operation.
 AGENT_MEMORY_HOME="$work/hs" am enable
 [[ $rc -eq 0 && ! -e $work/hs.disabled ]] || err "enable failed: rc=$rc $(cat "$work/out")"
@@ -553,14 +599,14 @@ if [[ $rc -ne 0 ]] || ! jq -e '.injectSteps[0].systemMessage.systemMessage' "$wo
 	err "agy start after enable failed: $(cat "$work/out")"
 fi
 
-# Environment variable opt-out (and 0 does not disable).
+# Environment variable opt-out (case-insensitive, and 0 does not disable).
 AGENT_MEMORY_DISABLED=1 AGENT_MEMORY_HOME="$work/hs" run_hook agy start "$work/src/hooked"
 [[ $rc -eq 0 && $(cat "$work/out") == "{}" ]] || err "AGENT_MEMORY_DISABLED=1 agy start: $(cat "$work/out")"
-AGENT_MEMORY_DISABLED=true AGENT_MEMORY_HOME="$work/hs" am sync
-if [[ $rc -ne 0 ]] || ! grep -qF "AGENT_MEMORY_DISABLED=true" "$work/out"; then
-	err "AGENT_MEMORY_DISABLED=true sync: $(cat "$work/out")"
+AGENT_MEMORY_DISABLED=True AGENT_MEMORY_HOME="$work/hs" am sync
+if [[ $rc -ne 0 ]] || ! grep -qF "AGENT_MEMORY_DISABLED=True" "$work/out"; then
+	err "AGENT_MEMORY_DISABLED=True sync: $(cat "$work/out")"
 fi
-AGENT_MEMORY_DISABLED=1 AGENT_MEMORY_HOME="$work/hs" am enable
+AGENT_MEMORY_DISABLED=True AGENT_MEMORY_HOME="$work/hs" am enable
 if [[ $rc -ne 0 ]] || ! grep -qF "still set in the environment" "$work/out"; then
 	err "enable with env set did not warn: $(cat "$work/out")"
 fi

@@ -50,6 +50,9 @@ set -euo pipefail
 STORE="${AGENT_MEMORY_HOME:-${HOME}/.agents/memory}"
 # sync changes into the store, so a relative path would resolve twice.
 [[ "${STORE}" == /* ]] || STORE="${PWD}/${STORE}"
+while [[ "${STORE}" != "/" && "${STORE}" == */ ]]; do
+  STORE="${STORE%/}"
+done
 DISABLE_FILE="${AGENT_MEMORY_DISABLE_FILE:-${STORE}.disabled}"
 [[ "${DISABLE_FILE}" == /* ]] || DISABLE_FILE="${PWD}/${DISABLE_FILE}"
 CLAUDE_PROJECTS="${CLAUDE_PROJECTS_DIR:-${HOME}/.claude/projects}"
@@ -63,16 +66,22 @@ die() {
   exit 1
 }
 
-# disabled_reason: succeeds and prints why agent-memory is disabled when either
-# AGENT_MEMORY_DISABLED is truthy or DISABLE_FILE exists.
-disabled_reason() {
+# env_disabled: succeeds when AGENT_MEMORY_DISABLED is truthy (bash 3.2 safe).
+env_disabled() {
   case "${AGENT_MEMORY_DISABLED:-}" in
-    1 | true | TRUE | yes | YES)
-      printf 'AGENT_MEMORY_DISABLED=%s\n' "${AGENT_MEMORY_DISABLED}"
-      return 0
-      ;;
+    1 | [tT][rR][uU][eE] | [yY][eE][sS]) return 0 ;;
+    *) return 1 ;;
   esac
-  if [[ -e "${DISABLE_FILE}" ]]; then
+}
+
+# disabled_reason: succeeds and prints why agent-memory is disabled when either
+# AGENT_MEMORY_DISABLED is truthy or DISABLE_FILE exists (including dangling symlinks).
+disabled_reason() {
+  if env_disabled; then
+    printf 'AGENT_MEMORY_DISABLED=%s\n' "${AGENT_MEMORY_DISABLED}"
+    return 0
+  fi
+  if [[ -e "${DISABLE_FILE}" || -L "${DISABLE_FILE}" ]]; then
     printf '%s exists\n' "${DISABLE_FILE}"
     return 0
   fi
@@ -94,13 +103,39 @@ require_enabled() {
   return 0
 }
 
+# unlink_claude_memories: removes any ~/.claude/projects/*/memory symlinks that
+# point into $STORE/projects/, so disabling stops Claude Code from writing
+# local notes into the shared memory repo.
+unlink_claude_memories() {
+  [[ -d "${CLAUDE_PROJECTS}" ]] || return 0
+  local store_real prefix mem raw resolved
+  store_real="$(readlink -f "${STORE}" 2>/dev/null || printf '%s\n' "${STORE}")"
+  while [[ "${store_real}" != "/" && "${store_real}" == */ ]]; do
+    store_real="${store_real%/}"
+  done
+  [[ "${store_real}" == "/" ]] && prefix="/projects/" || prefix="${store_real}/projects/"
+  for mem in "${CLAUDE_PROJECTS}"/*/memory; do
+    [[ -L "${mem}" ]] || continue
+    raw="$(readlink "${mem}" 2>/dev/null || true)"
+    resolved="$(readlink -f "${mem}" 2>/dev/null || printf '%s\n' "${raw}")"
+    if [[ "${resolved}" == "${prefix}"* || "${raw}" == "${STORE}/projects/"* ]]; then
+      rm -f "${mem}"
+    fi
+  done
+}
+
 cmd_disable() {
   if [[ $# -gt 0 ]]; then
     echo "Usage: agent-memory disable" >&2
     exit 2
   fi
+  if [[ -d "${DISABLE_FILE}" && ! -L "${DISABLE_FILE}" ]]; then
+    die "${DISABLE_FILE} is a directory"
+  fi
   mkdir -p "$(dirname "${DISABLE_FILE}")"
+  [[ -L "${DISABLE_FILE}" ]] && rm -f "${DISABLE_FILE}"
   : >"${DISABLE_FILE}"
+  unlink_claude_memories
   printf 'agent-memory: disabled (%s)\n' "${DISABLE_FILE}"
 }
 
@@ -109,14 +144,15 @@ cmd_enable() {
     echo "Usage: agent-memory enable" >&2
     exit 2
   fi
+  if [[ -d "${DISABLE_FILE}" && ! -L "${DISABLE_FILE}" ]]; then
+    die "${DISABLE_FILE} is a directory"
+  fi
   rm -f "${DISABLE_FILE}"
-  case "${AGENT_MEMORY_DISABLED:-}" in
-    1 | true | TRUE | yes | YES)
-      printf 'agent-memory: removed %s, but AGENT_MEMORY_DISABLED=%s is still set in the environment\n' \
-        "${DISABLE_FILE}" "${AGENT_MEMORY_DISABLED}" >&2
-      return 0
-      ;;
-  esac
+  if env_disabled; then
+    printf 'agent-memory: removed %s, but AGENT_MEMORY_DISABLED=%s is still set in the environment\n' \
+      "${DISABLE_FILE}" "${AGENT_MEMORY_DISABLED}" >&2
+    return 0
+  fi
   printf 'agent-memory: enabled\n'
 }
 
