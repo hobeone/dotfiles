@@ -206,6 +206,8 @@ git -C "$work/m3" symbolic-ref HEAD "refs/heads/$(git -C "$work/m1" symbolic-ref
 AGENT_MEMORY_HOME="$work/m3" am sync
 [[ $rc -eq 0 && -f $work/m3/global/from-m1.md ]] || err "sync unborn store: rc=$rc $(cat "$work/out")"
 [[ $(git -C "$work/m3" rev-list --max-parents=0 HEAD | wc -l) -eq 1 ]] || err "sync unborn store: started a second root"
+git -C "$work/remote.git" show HEAD:.gitignore | grep -qxF .DS_Store || err "sync unborn store: overwrote the remote's .gitignore"
+grep -qxF '.MEMORY.md.*' "$work/m3/.gitignore" || err "sync unborn store: .gitignore lacks this script's lines"
 git -C "$work/remote.git" log --format= --name-only | grep -x global/from-m3.md >/dev/null ||
 	err "sync unborn store: its own memory was not pushed"
 git -C "$work/remote.git" show HEAD:global/from-m1.md >/dev/null 2>&1 || err "sync unborn store: deleted the remote's memory"
@@ -339,6 +341,8 @@ git -C "$work/stale" pull -q --rebase >/dev/null 2>&1
 [[ -d $work/stale/.git/rebase-merge || -d $work/stale/.git/rebase-apply ]] || err "stale rebase: fixture made no rebase"
 printf -- '---\nname: waited\ndescription: behind the lock\n---\nedited mid-rebase\n' >"$work/stale/global/waited.md"
 printf -- '---\nname: café\ndescription: x\n---\naccented edit\n' >"$work/stale/global/café.md"
+sleep 0.05 # the conflicted file is edited strictly after git stopped
+echo "resolved by an agent" >"$work/stale/global/clash.md"
 AGENT_MEMORY_HOME="$work/stale" am sync
 if [[ $rc -eq 0 ]] || ! grep -qF "copies are in" "$work/out"; then
 	err "stale rebase: rescue not reported: rc=$rc $(cat "$work/out")"
@@ -347,6 +351,8 @@ grep -rqF "edited mid-rebase" "$work/stale/.git/agent-memory-rescue" 2>/dev/null
 	err "stale rebase: the edit made after the rebase stopped was not rescued"
 grep -rqF "accented edit" "$work/stale/.git/agent-memory-rescue" 2>/dev/null ||
 	err "stale rebase: an edit to a non-ASCII file name was not rescued"
+grep -rqF "resolved by an agent" "$work/stale/.git/agent-memory-rescue" 2>/dev/null ||
+	err "stale rebase: a conflicted file edited after the stop was not rescued"
 # Rescued copies are reported at every session start until deleted.
 AGENT_MEMORY_HOME="$work/stale" am context "$work/src/gonzbd"
 grep -qF "are waiting in $work/stale/.git/agent-memory-rescue" "$work/out" ||

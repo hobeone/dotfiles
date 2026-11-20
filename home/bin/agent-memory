@@ -329,19 +329,23 @@ commit_all() {
 # the rebase started from. An agent may have edited a memory after the
 # rebase stopped; git's own half-applied changes are staged, the agent's
 # are not, so every file differing from the index is copied out first.
-# Conflicted files are skipped: they differ from the index without anyone
-# editing them, and the local version is in the commit being replayed.
+# A conflicted file differs from the index without anyone editing it, so
+# it is copied only when written after git stopped: git writes it just
+# before .git/rebase-merge/stopped-sha. Without that marker it is copied.
 # When anything was copied the sync stops and says where, because the
 # store no longer holds those edits; session start keeps reporting the
 # folder until it is deleted.
 abort_rebase() {
-  local rescue f entry n=0 unmerged=$'\n'
+  local rescue f entry n=0 unmerged=$'\n' stopped=.git/rebase-merge/stopped-sha
   rescue=".git/agent-memory-rescue/$(date +%Y%m%dT%H%M%S)"
   while IFS= read -r -d '' entry; do
     unmerged+="${entry#*$'\t'}"$'\n'
   done < <(git ls-files -u -z)
   while IFS= read -r -d '' f; do
-    [[ "${unmerged}" == *$'\n'"${f}"$'\n'* ]] && continue
+    if [[ "${unmerged}" == *$'\n'"${f}"$'\n'* && -e "${stopped}" &&
+      -z "$(find "./${f}" -newer "${stopped}" 2>/dev/null)" ]]; then
+      continue
+    fi
     [[ -f "${f}" ]] || continue
     mkdir -p "${rescue}/$(dirname "${f}")"
     cp -p "${f}" "${rescue}/${f}"
@@ -409,7 +413,11 @@ cmd_sync() {
   export GIT_SSH_COMMAND="${GIT_SSH_COMMAND:-ssh -o BatchMode=yes -o ConnectTimeout=10}"
   local net=(-c http.lowSpeedLimit=1000 -c http.lowSpeedTime=10)
 
-  ensure_gitignore
+  # A store with no commits adopts the remote's .gitignore below; writing
+  # ours first would make it a local edit that overwrites the remote's.
+  if git rev-parse -q --verify HEAD >/dev/null; then
+    ensure_gitignore
+  fi
   if [[ "${if_needed}" -eq 1 ]] && ! needs_sync; then
     return 0
   fi
@@ -433,10 +441,10 @@ cmd_sync() {
       local missing=() f
       while IFS= read -r -d '' f; do missing+=("${f}"); done < <(git ls-files -z --deleted)
       [[ ${#missing[@]} -eq 0 ]] || git checkout -q -- "${missing[@]}"
-      ensure_gitignore
     fi
   fi
 
+  ensure_gitignore
   commit_all
   if [[ "${has_origin}" -eq 0 ]]; then
     index_all
