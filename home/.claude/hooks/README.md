@@ -17,18 +17,18 @@ Shell scripts that run at specific points in the Claude Code lifecycle. Configur
 
 **Output:** None (tmux status line only)
 
-### agent-memory-session.sh
-**Trigger:** `SessionStart`
+### agent-memory hook claude start|stop
+**Trigger:** `SessionStart` (`start`), `Stop` (`stop`). Lives in `~/bin/agent-memory`, not in this folder; agy runs the same hook as `agent-memory hook agy ...` from `~/.gemini/config/hooks.json`.
 
-**Purpose:** Wire the session's project into the shared two-tier memory store (`~/.agents/memory`, see `agent-memory --help`).
+**Purpose:** Keep the shared two-tier memory store (`~/.agents/memory`, see `agent-memory --help`) synced and wired up while an agent runs. There is no background timer.
 
 **Actions:**
-- `agent-memory link <cwd>`: point this project's Claude memory folder at `projects/<owner>/<repo>/` in the store
-- `agent-memory index`: regenerate every `MEMORY.md` from its folder's front matter
+- `start`: sync the store (commit, pull, push), point this project's Claude memory folder at `projects/<owner>/<repo>/`, regenerate the indexes, and check the memory files' front matter
+- `stop`: sync only when there is something to commit or push; otherwise no network
 
 **Input:** Reads `cwd` from the hook JSON (falls back to `$PWD`).
 
-**Output:** Nothing on success. On failure, one line of session context saying what went wrong; it still exits 0, so the session always starts. Does nothing on a machine without the store or without `agent-memory` on `PATH`.
+**Output:** `start` prints nothing when all is well, otherwise lines of session context: a failed sync, a project that could not be linked, or memory files to fix. `stop` prints nothing. Both exit 0, so a session is never blocked. Nothing happens on a machine without the store or without `~/bin/agent-memory`.
 
 ## Writing Hooks
 

@@ -18,7 +18,17 @@
 #   link [dir]    point Claude Code's memory folder for dir's project at the
 #                 project folder; refuses to replace a folder holding files
 #   index         regenerate every MEMORY.md from its folder's front matter
-#   sync          index, commit, pull --rebase and push the store
+#   check [dir]   report memory files in the global tier and dir's project
+#                 with broken front matter; exits 1 when there are any
+#   context [dir] print both indexes, the folders and any problems: what an
+#                 agent needs at the start of a session
+#   sync [--if-needed]
+#                 index, commit, pull --rebase and push the store; with
+#                 --if-needed, do nothing unless there is something to commit
+#                 or push
+#   hook <claude|agy> <start|stop>
+#                 the session hooks: read the hook's JSON on stdin, sync, and
+#                 wire up or report memory. Never fails the session.
 #
 # Environment:
 #   AGENT_MEMORY_HOME     the store (default ~/.agents/memory)
@@ -155,6 +165,69 @@ index_all() {
   done < <(find "${STORE}/projects" -mindepth 2 -maxdepth 2 -type d | sort)
 }
 
+# check_dir <dir> <label>: prints "<label>/<file>: <problem>" for each
+# memory file in <dir> whose front matter the index cannot use.
+check_dir() {
+  local dir="$1" label="$2" f base name
+  for f in "${dir}"/*.md; do
+    [[ -f "${f}" ]] || continue
+    base="$(basename "${f}" .md)"
+    case "${base}" in MEMORY | README) continue ;; esac
+    if [[ "$(head -n 1 "${f}")" != "---" ]]; then
+      printf '%s/%s.md: no front matter\n' "${label}" "${base}"
+      continue
+    fi
+    name="$(front_matter_field "${f}" name)"
+    [[ -n "${name}" ]] || printf '%s/%s.md: front matter has no name\n' "${label}" "${base}"
+    [[ -n "$(front_matter_field "${f}" description)" ]] ||
+      printf '%s/%s.md: front matter has no description\n' "${label}" "${base}"
+    if [[ -n "${name}" && "${name}" != "${base}" ]]; then
+      printf '%s/%s.md: name '\''%s'\'' does not match the file name\n' "${label}" "${base}" "${name}"
+    fi
+    if [[ "${label}" != global && -f "${STORE}/global/${base}.md" ]]; then
+      printf '%s/%s.md: global/%s.md has the same name\n' "${label}" "${base}" "${base}"
+    fi
+  done
+}
+
+cmd_check() {
+  local key problems
+  key="$(project_key "${1:-.}")"
+  problems="$(check_dir "${STORE}/global" global; check_dir "${STORE}/projects/${key}" "projects/${key}")"
+  [[ -z "${problems}" ]] && return 0
+  printf '%s\n' "${problems}"
+  return 1
+}
+
+# index_lines <dir>: prints the entries of <dir>'s index, or a placeholder.
+index_lines() {
+  if [[ -f "$1/MEMORY.md" ]] && grep -q '^- ' "$1/MEMORY.md"; then
+    grep '^- ' "$1/MEMORY.md"
+  else
+    echo "(no memories yet)"
+  fi
+}
+
+cmd_context() {
+  local dir="${1:-.}" key global project problems
+  key="$(project_key "${dir}")"
+  global="${STORE}/global"
+  project="${STORE}/projects/${key}"
+  mkdir -p "${global}" "${project}"
+  index_dir "${global}"
+  index_dir "${project}"
+  printf '# Shared agent memory\n\n'
+  printf 'Memories saved by earlier sessions, shared with other agents and machines.\n'
+  printf 'Open a file when its line bears on the task. Read %s/README.md before saving one.\n\n' "${STORE}"
+  printf '## Global: %s\n\n' "${global}"
+  index_lines "${global}"
+  printf '\n## Project %s: %s\n\n' "${key}" "${project}"
+  index_lines "${project}"
+  if ! problems="$(cmd_check "${dir}")"; then
+    printf '\n## Memory files to fix\n\n%s\n' "${problems}"
+  fi
+}
+
 cmd_key() {
   project_key "${1:-.}"
 }
@@ -215,19 +288,47 @@ commit_all() {
   fi
 }
 
+# needs_sync: succeeds when the store has something to commit or push.
+needs_sync() {
+  [[ -n "$(git status --porcelain)" ]] && return 0
+  git remote get-url origin >/dev/null 2>&1 || return 1
+  local ahead
+  if ahead="$(git rev-list --count '@{u}..HEAD' 2>/dev/null)"; then
+    [[ "${ahead}" -gt 0 ]]
+  else
+    git rev-parse -q --verify HEAD >/dev/null
+  fi
+}
+
 cmd_sync() {
+  local if_needed=0 branch
+  [[ "${1:-}" == "--if-needed" ]] && if_needed=1
   [[ -d "${STORE}/.git" ]] || die "${STORE} is not a git repository"
   cd "${STORE}"
+  # Claude and agy can finish a turn at the same moment: the second sync
+  # waits for the first rather than skipping, so it carries whatever the
+  # first missed.
   if command -v flock >/dev/null 2>&1; then
     exec 9>"${STORE}/.git/agent-memory.lock"
-    flock -n 9 || die "another sync is running"
+    flock -w 20 9 || die "another sync held the lock for 20s"
   fi
+  # A run killed mid-rebase leaves it in progress; only sync rebases here.
+  if [[ -d .git/rebase-merge || -d .git/rebase-apply ]]; then
+    git rebase --abort
+  fi
+  # Hooks run sync unattended: never wait for credentials, and give up on
+  # a stalled transfer instead of holding up the session.
+  export GIT_TERMINAL_PROMPT=0
+  export GIT_SSH_COMMAND="${GIT_SSH_COMMAND:-ssh -o BatchMode=yes -o ConnectTimeout=10}"
+  local net=(-c http.lowSpeedLimit=1000 -c http.lowSpeedTime=10)
 
   ensure_gitignore
   index_all
+  if [[ "${if_needed}" -eq 1 ]] && ! needs_sync; then
+    return 0
+  fi
   commit_all
   git remote get-url origin >/dev/null 2>&1 || return 0
-  local branch
   branch="$(git symbolic-ref -q --short HEAD)" || die "${STORE} has a detached HEAD; check out a branch"
 
   # An agent may write between the commit and the pull, and pull --rebase
@@ -240,8 +341,8 @@ cmd_sync() {
   fi
 
   # An empty remote (a newly created repo) has no branch to pull yet.
-  if git ls-remote --exit-code --heads origin "${branch}" >/dev/null 2>&1; then
-    if ! git pull -q --rebase origin "${branch}"; then
+  if git "${net[@]}" ls-remote --exit-code --heads origin "${branch}" >/dev/null 2>&1; then
+    if ! git "${net[@]}" pull -q --rebase origin "${branch}"; then
       if [[ -d .git/rebase-merge || -d .git/rebase-apply ]]; then
         git rebase --abort
         die "pull --rebase conflicted; local commits are kept, resolve by hand in ${STORE}"
@@ -249,8 +350,69 @@ cmd_sync() {
       die "pull from origin failed; local commits are kept"
     fi
   fi
-  git push -q -u origin "${branch}"
+  git "${net[@]}" push -q -u origin "${branch}"
   index_all
+}
+
+# hook_cwd <json>: prints the session's working directory from a hook's
+# input. Both Claude Code and agy send it as "cwd"; agy runs the hook from
+# its config folder, so $PWD is no substitute there.
+hook_cwd() {
+  local cwd=""
+  if command -v jq >/dev/null 2>&1; then
+    cwd="$(jq -r '.cwd // empty' <<<"$1" 2>/dev/null || true)"
+  else
+    cwd="$(sed -n 's/.*"cwd"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' <<<"$1" | head -n 1)"
+  fi
+  [[ -n "${cwd}" && -d "${cwd}" ]] || cwd="${PWD}"
+  printf '%s\n' "${cwd}"
+}
+
+# cmd_hook <claude|agy> <start|stop>: each step runs as its own process so
+# its errors stay fatal to it and are reported, never to the session.
+cmd_hook() {
+  local tool="${1:-}" event="${2:-}" self="${BASH_SOURCE[0]}" input cwd out notes=""
+  case "${tool}:${event}" in
+    claude:start | claude:stop | agy:start | agy:stop) ;;
+    *)
+      echo "Usage: agent-memory hook <claude|agy> <start|stop>" >&2
+      exit 2
+      ;;
+  esac
+  input="$(cat)"
+  if [[ ! -d "${STORE}" ]]; then
+    [[ "${tool}" == agy ]] && echo '{}'
+    return 0
+  fi
+  cwd="$(hook_cwd "${input}")"
+
+  if [[ "${event}" == stop ]]; then
+    "${self}" sync --if-needed </dev/null >/dev/null 2>&1 || true
+    [[ "${tool}" == agy ]] && echo '{}'
+    return 0
+  fi
+
+  if ! out="$("${self}" sync </dev/null 2>&1)"; then
+    notes+="agent-memory: sync failed, working from the local copy: ${out}"$'\n'
+  fi
+  if [[ "${tool}" == claude ]]; then
+    if ! out="$("${self}" link "${cwd}" </dev/null 2>&1)"; then
+      notes+="agent-memory: shared memory is not wired up for this project: ${out}"$'\n'
+    fi
+    "${self}" index </dev/null >/dev/null 2>&1 || true
+    if ! out="$("${self}" check "${cwd}" </dev/null 2>&1)"; then
+      notes+="agent-memory: memory files to fix:"$'\n'"${out}"$'\n'
+    fi
+    printf '%s' "${notes}"
+    return 0
+  fi
+
+  out="$("${self}" context "${cwd}" </dev/null 2>&1)" || true
+  if command -v jq >/dev/null 2>&1; then
+    jq -n --arg m "${notes}${out}" '{injectSteps: [{systemMessage: {systemMessage: $m}}]}'
+  else
+    echo '{}'
+  fi
 }
 
 main() {
@@ -261,10 +423,13 @@ main() {
     paths) cmd_paths "$@" ;;
     link) cmd_link "$@" ;;
     index) cmd_index ;;
-    sync) cmd_sync ;;
+    check) cmd_check "$@" ;;
+    context) cmd_context "$@" ;;
+    sync) cmd_sync "$@" ;;
+    hook) cmd_hook "$@" ;;
     -h | --help | help) sed -n '2,$ { /^#/!q; s/^# \{0,1\}//; p }' "${BASH_SOURCE[0]}" ;;
     *)
-      echo "Usage: agent-memory key|paths|link|index|sync [dir]  (--help for details)" >&2
+      echo "Usage: agent-memory key|paths|link|index|check|context|sync|hook ...  (--help for details)" >&2
       exit 2
       ;;
   esac

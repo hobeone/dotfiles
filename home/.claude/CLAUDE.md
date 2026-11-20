@@ -116,13 +116,14 @@ Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
 
 ## Memory has two tiers, shared with agy and across machines
 
-The store is `~/.agents/memory/`, a git repo that `agent-memory sync` keeps in step between
-machines; agy reads and writes the same files. **Read `~/.agents/memory/README.md` before
+The store is `~/.agents/memory/`, a git repo; agy reads and writes the same files. Hooks keep
+it in step between machines: session start pulls and pushes, and the end of each response
+pushes when a memory changed. You never sync by hand. **Read `~/.agents/memory/README.md` before
 saving a memory** — it holds the rules for both tiers and both harnesses.
 
 - **Global tier**, `~/.agents/memory/global/`: lessons that hold in any project. Its index is
   imported at the end of this section.
-- **Project tier**: your auto-memory directory. A SessionStart hook links it to
+- **Project tier**: your auto-memory directory. The session-start hook links it to
   `~/.agents/memory/projects/<owner>/<repo>/`, keyed by the `origin` remote, so every checkout
   of a repo on every machine shares one folder. Worktrees resolve to their main checkout.
 
@@ -133,7 +134,7 @@ invariants, its CI setup, its scripts) stay in the project tier.
 
 Each `MEMORY.md` is generated from the memory files' front matter by `agent-memory index`, so
 a line added by hand is overwritten: the file's `name` and `description` are what the index
-shows.
+shows. When session start reports memory files to fix, fix them.
 
 @~/.agents/memory/global/MEMORY.md
 

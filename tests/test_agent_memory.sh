@@ -173,13 +173,13 @@ AGENT_MEMORY_HOME="$work/m1" am sync
 [[ -f $work/m1/projects/hobeone/gonzbd/from-m2.md && -f $work/m2/global/from-m1.md ]] ||
 	err "sync: machines did not converge"
 grep -qF "from-m1.md" "$work/m2/global/MEMORY.md" || err "sync: index not rebuilt after pull"
-git -C "$work/m1" ls-files | grep -q 'MEMORY.md' && err "sync: committed a generated index"
+git -C "$work/m1" ls-files | grep 'MEMORY.md' >/dev/null && err "sync: committed a generated index"
 grep -qxF '.MEMORY.md.*' "$work/m1/.gitignore" || err "sync: .gitignore lacks the index temp files"
 
 # A temp index left by a killed run is never committed.
 echo junk >"$work/m1/global/.MEMORY.md.Stray1"
 AGENT_MEMORY_HOME="$work/m1" am sync
-git -C "$work/m1" ls-files | grep -q 'Stray1' && err "sync: committed a stray temp index"
+git -C "$work/m1" ls-files | grep 'Stray1' >/dev/null && err "sync: committed a stray temp index"
 
 # A new machine whose store has no commits yet takes the remote's.
 mkdir -p "$work/m3" && git -C "$work/m3" init -q && git -C "$work/m3" remote add origin "$work/remote.git"
@@ -227,33 +227,154 @@ if [[ $rc -eq 0 ]] || ! grep -qF "not a git repository" "$work/out"; then
 	err "sync outside git: $(cat "$work/out")"
 fi
 
-# --- SessionStart hook ------------------------------------------------------
-hook="$PWD/home/.claude/hooks/agent-memory-session.sh"
-mkdir -p "$work/hookbin"
-ln -sf "$script" "$work/hookbin/agent-memory"
-# run_hook CWD: feeds the hook Claude's SessionStart JSON; stdout to $work/out.
+# --- check ------------------------------------------------------------------
+cs="$work/checkstore"
+mkdir -p "$cs/global" "$cs/projects/hobeone/gonzbd"
+printf -- '---\nname: ok\ndescription: fine\n---\n' >"$cs/global/ok.md"
+printf -- '---\nname: dup\ndescription: fine\n---\n' >"$cs/global/dup.md"
+AGENT_MEMORY_HOME="$cs" am check "$work/src/gonzbd"
+[[ $rc -eq 0 && ! -s $work/out ]] || err "check clean: rc=$rc $(cat "$work/out")"
+p="$cs/projects/hobeone/gonzbd"
+printf 'no front matter\n' >"$p/bare.md"
+printf -- '---\nname: nodesc\n---\n' >"$p/nodesc.md"
+printf -- '---\ndescription: x\n---\n' >"$p/noname.md"
+printf -- '---\nname: other-name\ndescription: x\n---\n' >"$p/renamed.md"
+printf -- '---\nname: dup\ndescription: x\n---\n' >"$p/dup.md"
+AGENT_MEMORY_HOME="$cs" am check "$work/src/gonzbd"
+[[ $rc -eq 1 ]] || err "check problems: exit $rc, want 1"
+for want in "projects/hobeone/gonzbd/bare.md: no front matter" \
+	"projects/hobeone/gonzbd/nodesc.md: front matter has no description" \
+	"projects/hobeone/gonzbd/noname.md: front matter has no name" \
+	"projects/hobeone/gonzbd/renamed.md: name 'other-name' does not match the file name" \
+	"projects/hobeone/gonzbd/dup.md: global/dup.md has the same name"; do
+	grep -qxF -- "$want" "$work/out" || err "check: missing '$want' in: $(cat "$work/out")"
+done
+[[ $(wc -l <"$work/out") -eq 5 ]] || err "check: want exactly 5 problems: $(cat "$work/out")"
+
+# --- sync --if-needed and the lock ------------------------------------------
+git init -q --bare "$work/hremote.git"
+git clone -q "$work/hremote.git" "$work/hs" 2>/dev/null
+export AGENT_MEMORY_HOME="$work/hs"
+am sync
+[[ $rc -eq 0 ]] || err "hook store first sync: $(cat "$work/out")"
+
+# Nothing to commit or push: no network at all, proved by an origin that
+# does not exist, which a real sync then fails on.
+git -C "$work/hs" remote set-url origin "$work/nowhere.git"
+am sync --if-needed
+[[ $rc -eq 0 ]] || err "sync --if-needed with nothing to do touched the network: $(cat "$work/out")"
+am sync
+[[ $rc -ne 0 ]] || err "sync against a missing origin succeeded: the --if-needed check above proves nothing"
+git -C "$work/hs" remote set-url origin "$work/hremote.git"
+
+# A second sync waits for the lock instead of failing.
+if command -v flock >/dev/null 2>&1; then
+	(flock 9 && sleep 2) 9>"$work/hs/.git/agent-memory.lock" &
+	sleep 0.3
+	printf -- '---\nname: waited\ndescription: behind the lock\n---\n' >"$work/hs/global/waited.md"
+	am sync
+	[[ $rc -eq 0 ]] || err "sync behind a held lock: $(cat "$work/out")"
+	wait
+	git -C "$work/hremote.git" log --format= --name-only | grep -x global/waited.md >/dev/null ||
+		err "sync behind a held lock did not push"
+fi
+
+# A rebase left in progress by a killed run is cancelled before syncing,
+# and the local commit survives.
+git clone -q "$work/hremote.git" "$work/stale" 2>/dev/null
+mkdir -p "$work/stale/global"
+echo theirs >"$work/hs/global/clash.md"
+AGENT_MEMORY_HOME="$work/hs" am sync
+echo mine >"$work/stale/global/clash.md"
+git -C "$work/stale" add -A && git -C "$work/stale" commit -q -m mine
+git -C "$work/stale" pull -q --rebase >/dev/null 2>&1
+[[ -d $work/stale/.git/rebase-merge || -d $work/stale/.git/rebase-apply ]] || err "stale rebase: fixture made no rebase"
+AGENT_MEMORY_HOME="$work/stale" am sync
+if [[ -d $work/stale/.git/rebase-merge || -d $work/stale/.git/rebase-apply ]]; then
+	err "stale rebase: still in progress after sync: $(cat "$work/out")"
+fi
+[[ $(git -C "$work/stale" show HEAD:global/clash.md 2>/dev/null) == mine ]] || err "stale rebase: local commit lost"
+git -C "$work/stale" symbolic-ref -q HEAD >/dev/null || err "stale rebase: left a detached HEAD"
+rm "$work/hs/global/clash.md"
+AGENT_MEMORY_HOME="$work/hs" am sync
+
+# --- hooks ------------------------------------------------------------------
+# run_hook TOOL EVENT CWD: feeds the hook its JSON from an unrelated working
+# directory, as agy does; stdout to $work/out.
 run_hook() {
-	printf '{"session_id":"s","cwd":"%s","hook_event_name":"SessionStart"}' "$1" |
-		PATH="$work/hookbin:$PATH" "$hook" >"$work/out" 2>&1
+	printf '{"cwd":"%s","hookEventName":"x","workspacePaths":["%s"]}' "$3" "$3" |
+		(cd / && "$script" hook "$1" "$2") >"$work/out" 2>"$work/err"
 	rc=$?
 }
+# grep without -q reads all of git's output: under pipefail, -q can exit
+# first and fail the pipeline with SIGPIPE although the file was pushed.
+pushed() { git -C "$work/hremote.git" log --format= --name-only | grep -x "$1" >/dev/null; }
+
 make_repo "$work/src/hooked" "git@github.com:hobeone/hooked.git"
-run_hook "$work/src/hooked"
-[[ $rc -eq 0 && ! -s $work/out ]] || err "hook: exit $rc, output: $(cat "$work/out")"
-[[ $(readlink -f "$(mem_of "$work/src/hooked")") == "$work/store/projects/hobeone/hooked" ]] ||
-	err "hook: project not linked"
-[[ -f $work/store/projects/hobeone/hooked/MEMORY.md ]] || err "hook: index not built"
+run_hook claude start "$work/src/hooked"
+[[ $rc -eq 0 && ! -s $work/out ]] || err "claude start: rc=$rc out=$(cat "$work/out") err=$(cat "$work/err")"
+[[ $(readlink -f "$(mem_of "$work/src/hooked")") == "$work/hs/projects/hobeone/hooked" ]] ||
+	err "claude start: project not linked"
+[[ -f $work/hs/projects/hobeone/hooked/MEMORY.md ]] || err "claude start: index not built"
 
-# A failure is one line of context, and the session still starts.
-run_hook "$work/src/keep"
-[[ $rc -eq 0 ]] || err "hook failure: exit $rc, want 0"
-grep -qF "shared memory is not wired up" "$work/out" || err "hook failure not reported: $(cat "$work/out")"
+printf -- '---\nname: learned\ndescription: from a turn\n---\n' >"$work/hs/projects/hobeone/hooked/learned.md"
+run_hook claude stop "$work/src/hooked"
+[[ $rc -eq 0 && ! -s $work/out ]] || err "claude stop: rc=$rc out=$(cat "$work/out")"
+pushed projects/hobeone/hooked/learned.md || err "claude stop: new memory not pushed"
 
-# No store on this machine: nothing happens.
-make_repo "$work/src/nostore" "git@github.com:hobeone/nostore.git"
-AGENT_MEMORY_HOME="$work/absent" run_hook "$work/src/nostore"
-[[ $rc -eq 0 && ! -s $work/out && ! -e $(mem_of "$work/src/nostore") ]] ||
-	err "hook without a store: rc=$rc out=$(cat "$work/out")"
+printf -- '---\nname: wrong\n---\n' >"$work/hs/projects/hobeone/hooked/broken.md"
+run_hook claude start "$work/src/hooked"
+if ! grep -qF "memory files to fix" "$work/out" || ! grep -qF "broken.md: front matter has no description" "$work/out"; then
+	err "claude start: problems not reported: $(cat "$work/out")"
+fi
+rm "$work/hs/projects/hobeone/hooked/broken.md"
+
+run_hook claude start "$work/src/keep"
+if [[ $rc -ne 0 ]] || ! grep -qF "not wired up" "$work/out"; then
+	err "claude start link failure: rc=$rc $(cat "$work/out")"
+fi
+
+run_hook agy start "$work/src/hooked"
+[[ $rc -eq 0 ]] || err "agy start: exit $rc"
+msg=$(jq -r '.injectSteps[0].systemMessage.systemMessage' "$work/out" 2>/dev/null)
+for want in "## Project hobeone/hooked: $work/hs/projects/hobeone/hooked" \
+	"- [learned](learned.md) — from a turn" "## Global: $work/hs/global" \
+	"- [waited](waited.md) — behind the lock"; do
+	grep -qxF -- "$want" <<<"$msg" || err "agy start: context lacks '$want': $(cat "$work/out")"
+done
+
+printf -- '---\nname: wrong\n---\n' >"$work/hs/projects/hobeone/hooked/broken.md"
+run_hook agy start "$work/src/hooked"
+msg=$(jq -r '.injectSteps[0].systemMessage.systemMessage' "$work/out" 2>/dev/null)
+if ! grep -qxF "## Memory files to fix" <<<"$msg" ||
+	! grep -qF "broken.md: front matter has no description" <<<"$msg"; then
+	err "agy start: problems not in context: $(cat "$work/out")"
+fi
+rm "$work/hs/projects/hobeone/hooked/broken.md"
+
+echo x >"$work/hs/global/agy-wrote.md"
+run_hook agy stop "$work/src/hooked"
+[[ $rc -eq 0 && $(cat "$work/out") == "{}" ]] || err "agy stop: rc=$rc out=$(cat "$work/out")"
+pushed global/agy-wrote.md || err "agy stop: memory not pushed"
+
+# A failing sync is reported and the session still gets its memory.
+git -C "$work/hs" remote set-url origin "$work/nowhere.git"
+run_hook agy start "$work/src/hooked"
+msg=$(jq -r '.injectSteps[0].systemMessage.systemMessage' "$work/out" 2>/dev/null)
+if ! grep -qF "sync failed" <<<"$msg" || ! grep -qF "[learned](learned.md)" <<<"$msg"; then
+	err "agy start with a failing sync: $(cat "$work/out")"
+fi
+git -C "$work/hs" remote set-url origin "$work/hremote.git"
+
+# No store on this machine: nothing happens, and agy still gets valid JSON.
+AGENT_MEMORY_HOME="$work/absent" run_hook claude start "$work/src/hooked"
+[[ $rc -eq 0 && ! -s $work/out ]] || err "claude start without a store: $(cat "$work/out")"
+AGENT_MEMORY_HOME="$work/absent" run_hook agy start "$work/src/hooked"
+[[ $rc -eq 0 && $(cat "$work/out") == "{}" ]] || err "agy start without a store: $(cat "$work/out")"
+
+printf '{}' | "$script" hook gemini start >/dev/null 2>&1
+[[ $? -eq 2 ]] || err "hook with an unknown tool: want exit 2"
+export AGENT_MEMORY_HOME="$work/store"
 
 # --- arguments --------------------------------------------------------------
 am bogus

@@ -38,11 +38,12 @@
 - **Interactive Questions (`ask_question`)**: Always use the `ask_question` tool when asking the user a question or requesting a selection from a list of options. Avoid asking questions in plain text or prompting for free-form input if they can be formatted as multiple-choice questions.
 
 ### 1.6 Shared Memory (two tiers, shared with Claude Code and across machines)
-- **Load it first**: At the start of every session, before PRAR Step 1 (Perceive), run `agent-memory paths` in the workspace. It prints a `global:` folder (lessons that hold in any project) and a `project:` folder (this repo, shared by every checkout of it on every machine). Read `MEMORY.md` in both: each is an index, one line per memory; open a memory file when its line bears on the task.
+- **Already loaded**: A session-start hook (`~/.gemini/config/hooks.json`) syncs the store and injects a "Shared agent memory" message: the `Global` folder (lessons that hold in any project), the `Project` folder (this repo, shared by every checkout of it on every machine) and an index of each, one line per memory. Open a memory file when its line bears on the task. If the hook did not run, `agent-memory context` prints the same thing.
 - **Rules for writing**: Read `~/.agents/memory/README.md` before saving a memory. Claude Code reads and writes the same files, so follow its format exactly.
-- **Which tier**: If the lesson would still be true in a different repo, write it to `global:`; otherwise to `project:`.
+- **Which tier**: If the lesson would still be true in a different repo, write it to the Global folder; otherwise to the Project folder.
 - **Capture here, not only in agy's own memory**: Record gotchas, tool quirks and user corrections during PRAR Step 4 (Refine) as files in the shared store, so Claude Code sessions and other machines see them too.
-- **Never edit `MEMORY.md`**: it is generated from each file's front matter (`name`, `description`) and a hand edit is overwritten.
+- **Never edit `MEMORY.md`**: it is generated from each file's front matter (`name`, `description`) and a hand edit is overwritten. When the message lists memory files to fix, fix them.
+- **No manual sync**: A hook pushes the store at the end of each turn in which a memory changed.
 
 ### 1.7 Review, Audit & Fix-Precondition Discipline (4-Gate Protocol)
 Apply these four gates whenever reviewing code, auditing a subsystem, filing an issue, or designing/validating a fix:
