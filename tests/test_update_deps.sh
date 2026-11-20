@@ -20,7 +20,10 @@ export GIT_COMMITTER_NAME=test GIT_COMMITTER_EMAIL=test@example.com
 
 # Stub go and bun: each call appends "<cmd> <cwd basename> <args>" to $STUB_LOG.
 # `bun update` also bumps foo in bun.lock when STUB_BUMP is set, so there is a
-# dependency change to commit.
+# dependency change to commit. `go list -m go@latest` reports STUB_GO_LATEST
+# (default 1.27, the fixtures' go line, so nothing moves) and fails when
+# STUB_GO_LATEST_FAIL is set; `go get go@X` and `go get toolchain@goX` rewrite
+# that go.mod line.
 mkdir -p "$work/bin"
 for cmd in go bun; do
 	cat >"$work/bin/$cmd" <<'EOF'
@@ -31,6 +34,20 @@ if [[ $(basename "$0") == bun && ${1:-} == update && -n ${STUB_BUMP:-} ]]; then
 fi
 if [[ $(basename "$0") == go && ${1:-} == get && -n ${STUB_GO_BUMP:-} ]]; then
 	sed -i.bak 's/v1.0.0/v1.1.0/' go.mod && rm -f go.mod.bak
+fi
+if [[ $(basename "$0") == go && ${1:-} == list && ${*: -1} == go@latest ]]; then
+	if [[ -n ${STUB_GO_LATEST_FAIL:-} ]]; then
+		echo "go: stub go@latest failure" >&2
+		exit 1
+	fi
+	echo "go ${STUB_GO_LATEST:-1.27}"
+	exit 0
+fi
+if [[ $(basename "$0") == go && ${1:-} == get && ${2:-} == go@* ]]; then
+	sed -i.bak "s/^go .*/go ${2#go@}/" go.mod && rm -f go.mod.bak
+fi
+if [[ $(basename "$0") == go && ${1:-} == get && ${2:-} == toolchain@* ]]; then
+	sed -i.bak "s/^toolchain .*/toolchain ${2#toolchain@}/" go.mod && rm -f go.mod.bak
 fi
 if [[ $(basename "$0") == go && ${1:-} == list && -n ${STUB_GO_LIST_FAIL:-} ]]; then
 	echo "go: stub list failure" >&2
@@ -205,6 +222,86 @@ STUB_GO_LIST_FAIL=1 run_main "$work/listfail" --go-only --skip-verify
 [[ $rc -ne 0 ]] || err "go list failure: exit 0, want non-zero"
 grep -qF "stub list failure" "$work/out" || err "go list failure: error not shown: $(cat "$work/out")"
 no_log "go list failure" "^go listfail get"
+
+# --- Go version ---------------------------------------------------------------
+# A newer release moves the go line and the matching golang image tags; a
+# longer version that merely starts with the old one, and vendored
+# Dockerfiles, are left alone.
+make_repo "$work/gover" ui 0
+printf 'module example.com/m\n\ngo 1.27.3\n' >"$work/gover/go.mod"
+mkdir -p "$work/gover/deploy" "$work/gover/vendor/x"
+printf 'FROM golang:1.27.3-alpine AS go-builder\nFROM golang:1.27.30\nFROM golang:1.27.3\n' \
+	>"$work/gover/Dockerfile"
+printf 'FROM golang:1.27-alpine\n' >"$work/gover/deploy/app.Dockerfile"
+printf 'FROM golang:1.27.3\n' >"$work/gover/vendor/x/Dockerfile"
+git -C "$work/gover" add -A
+git -C "$work/gover" commit -q -m "pin go"
+STUB_GO_LATEST=1.27.4 run_main "$work/gover" --go-only --commit --yes
+[[ $rc -eq 0 ]] || err "go version: exit $rc: $(cat "$work/out")"
+want_log "go version" "go gover get go@1.27.4"
+# The version moves before the modules, which may need the newer Go.
+order=$(grep -E '^go gover (get go@|mod tidy)' "$STUB_LOG" | cut -d' ' -f3 | paste -sd' ' -)
+[[ $order == "get mod" ]] || err "go version: want the version bump before tidy, got '$order'"
+grep -qx 'go 1.27.4' "$work/gover/go.mod" || err "go version: go.mod: $(cat "$work/gover/go.mod")"
+want_df=$'FROM golang:1.27.4-alpine AS go-builder\nFROM golang:1.27.30\nFROM golang:1.27.4'
+[[ $(cat "$work/gover/Dockerfile") == "$want_df" ]] ||
+	err "go version: Dockerfile: $(cat "$work/gover/Dockerfile")"
+[[ $(cat "$work/gover/deploy/app.Dockerfile") == "FROM golang:1.27-alpine" ]] ||
+	err "go version: a patch release moved a minor-only tag"
+[[ $(cat "$work/gover/vendor/x/Dockerfile") == "FROM golang:1.27.3" ]] ||
+	err "go version: vendored Dockerfile was rewritten"
+msg=$(git -C "$work/gover" log -1 --format=%B)
+grep -qxF -- "- go 1.27.3 -> 1.27.4" <<<"$msg" || err "go version: no go bump in message: '$msg'"
+[[ $(git -C "$work/gover" show --name-only --format= HEAD | sort | paste -sd' ' -) == "Dockerfile go.mod" ]] ||
+	err "go version: committed $(git -C "$work/gover" show --name-only --format= HEAD | paste -sd' ' -)"
+
+# A new minor release moves minor-only tags too.
+make_repo "$work/gominor" ui 0
+printf 'module example.com/m\n\ngo 1.27.3\n' >"$work/gominor/go.mod"
+printf 'FROM golang:1.27-alpine\nFROM golang:1.27\n' >"$work/gominor/Dockerfile"
+
+git -C "$work/gominor" add -A && git -C "$work/gominor" commit -q -m "add Dockerfile"
+STUB_GO_LATEST=1.28.0 run_main "$work/gominor" --go-only --skip-verify
+[[ $rc -eq 0 ]] || err "go minor: exit $rc: $(cat "$work/out")"
+[[ $(cat "$work/gominor/Dockerfile") == $'FROM golang:1.28-alpine\nFROM golang:1.28' ]] ||
+	err "go minor: Dockerfile: $(cat "$work/gominor/Dockerfile")"
+
+# With a toolchain line, the toolchain moves and the go line (the minimum
+# Go the module supports) stays.
+make_repo "$work/gotool" ui 0
+printf 'module example.com/m\n\ngo 1.25.0\n\ntoolchain go1.26.3\n' >"$work/gotool/go.mod"
+git -C "$work/gotool" commit -q -a -m "pin toolchain"
+STUB_GO_LATEST=1.27.4 run_main "$work/gotool" --go-only --skip-verify
+[[ $rc -eq 0 ]] || err "toolchain: exit $rc: $(cat "$work/out")"
+want_log "toolchain" "go gotool get toolchain@go1.27.4"
+no_log "toolchain" "get go@"
+grep -qx 'go 1.25.0' "$work/gotool/go.mod" || err "toolchain: go line moved: $(cat "$work/gotool/go.mod")"
+
+# Already current, or ahead of the latest release: nothing is fetched.
+make_repo "$work/gocur" ui 0
+printf 'module example.com/m\n\ngo 1.27.4\n' >"$work/gocur/go.mod"
+git -C "$work/gocur" commit -q -a -m "pin go"
+STUB_GO_LATEST=1.27.4 run_main "$work/gocur" --go-only --skip-verify
+[[ $rc -eq 0 ]] || err "go current: exit $rc: $(cat "$work/out")"
+no_log "go current" "get go@"
+grep -qF "is the latest release" "$work/out" || err "go current: not reported: $(cat "$work/out")"
+STUB_GO_LATEST=1.27.2 run_main "$work/gocur" --go-only --skip-verify
+no_log "go ahead" "get go@"
+
+# --skip-go-version and --bun-only leave the version alone.
+STUB_GO_LATEST=1.28.0 run_main "$work/gocur" --go-only --skip-verify --skip-go-version
+[[ $rc -eq 0 ]] || err "skip-go-version: exit $rc: $(cat "$work/out")"
+no_log "skip-go-version" "go@latest"
+no_log "skip-go-version" "get go@"
+STUB_GO_LATEST=1.28.0 run_main "$work/gocur" --bun-only --skip-verify
+no_log "bun-only go version" "go@"
+
+# A failed lookup of the latest release stops the run before any update.
+STUB_GO_LATEST_FAIL=1 run_main "$work/gocur" --skip-verify
+[[ $rc -ne 0 ]] || err "go@latest failure: exit 0, want non-zero"
+grep -qF "stub go@latest failure" "$work/out" || err "go@latest failure: error not shown: $(cat "$work/out")"
+no_log "go@latest failure" "get"
+no_log "go@latest failure" "bun"
 
 # --- --go-only / --bun-only filtering ---------------------------------------
 make_repo "$work/filter" ui 0
