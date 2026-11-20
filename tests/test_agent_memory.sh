@@ -48,7 +48,8 @@ check_url "https://github.com/hobeone/gonzbd.git/" "hobeone/gonzbd"
 check_url "ssh://git@example.com:2222/team/tool.git" "team/tool"
 check_url "/srv/git/team/tool.git" "team/tool"
 # A key becomes a path under the store, so nothing may climb out of it.
-for bad in "https://example.com/../x" "https://example.com/a/.." "gonzbd"; do
+check_url "https://github.com/HobeOne/GoNZBD.git" "hobeone/gonzbd"
+for bad in "https://example.com/../x" "https://example.com/a/.." "https://example.com/.git/x" "gonzbd"; do
 	key_from_url "$bad" >/dev/null 2>&1 && err "key_from_url accepted '$bad'"
 done
 
@@ -145,13 +146,15 @@ want="- [alpha-rule](a.md) — first: one
 $got"
 grep -qF "hand-written" "$g/MEMORY.md" && err "index: hand edits survived"
 grep -qF "[proj](proj.md)" "$target/MEMORY.md" || err "index: project folder not indexed"
+mkdir -p "$work/store/projects/hobeone/.github" && echo y >"$work/store/projects/hobeone/.github/d.md"
+am index
+[[ -f $work/store/projects/hobeone/.github/MEMORY.md ]] || err "index: skipped a dot-named repo"
 for f in "$g"/.MEMORY*; do [[ -e $f ]] && err "index: temp file left behind: $f"; done
 
 # --- sync -------------------------------------------------------------------
 git init -q --bare "$work/remote.git"
 mk_store() {
 	git clone -q "$work/remote.git" "$1" 2>/dev/null
-	printf 'MEMORY.md\n' >"$1/.gitignore"
 }
 mk_store "$work/m1"
 mk_store "$work/m2"
@@ -171,6 +174,31 @@ AGENT_MEMORY_HOME="$work/m1" am sync
 	err "sync: machines did not converge"
 grep -qF "from-m1.md" "$work/m2/global/MEMORY.md" || err "sync: index not rebuilt after pull"
 git -C "$work/m1" ls-files | grep -q 'MEMORY.md' && err "sync: committed a generated index"
+grep -qxF '.MEMORY.md.*' "$work/m1/.gitignore" || err "sync: .gitignore lacks the index temp files"
+
+# A temp index left by a killed run is never committed.
+echo junk >"$work/m1/global/.MEMORY.md.Stray1"
+AGENT_MEMORY_HOME="$work/m1" am sync
+git -C "$work/m1" ls-files | grep -q 'Stray1' && err "sync: committed a stray temp index"
+
+# A new machine whose store has no commits yet takes the remote's.
+mkdir -p "$work/m3" && git -C "$work/m3" init -q && git -C "$work/m3" remote add origin "$work/remote.git"
+git -C "$work/m3" symbolic-ref HEAD "refs/heads/$(git -C "$work/m1" symbolic-ref --short HEAD)"
+AGENT_MEMORY_HOME="$work/m3" am sync
+[[ $rc -eq 0 && -f $work/m3/global/from-m1.md ]] || err "sync unborn store: rc=$rc $(cat "$work/out")"
+
+# Files still changing during the sync wait for the next run; it is not a failure.
+cat >"$work/m1/.git/hooks/post-commit" <<'HOOK'
+#!/bin/sh
+date +%s%N >>"$AGENT_MEMORY_HOME/global/busy.md"
+HOOK
+chmod +x "$work/m1/.git/hooks/post-commit"
+echo start >"$work/m1/global/busy.md"
+AGENT_MEMORY_HOME="$work/m1" am sync
+[[ $rc -eq 0 ]] || err "sync while files change: exit $rc: $(cat "$work/out")"
+grep -qF "go out with the next run" "$work/out" || err "sync while files change: $(cat "$work/out")"
+rm -f "$work/m1/.git/hooks/post-commit"
+AGENT_MEMORY_HOME="$work/m1" am sync
 
 # The same memory edited on both machines: the run fails, nothing is lost.
 echo "m1 edit" >"$work/m1/global/from-m1.md"
@@ -181,6 +209,18 @@ AGENT_MEMORY_HOME="$work/m2" am sync
 grep -qF "conflicted" "$work/out" || err "sync conflict message: $(cat "$work/out")"
 [[ $(git -C "$work/m2" show HEAD:global/from-m1.md) == "m2 edit" ]] || err "sync conflict: local edit lost"
 [[ ! -d $work/m2/.git/rebase-merge && ! -d $work/m2/.git/rebase-apply ]] || err "sync conflict: rebase left in progress"
+
+# A store with no remote just commits.
+git init -q "$work/solo"
+echo x >"$work/solo/fact.md"
+AGENT_MEMORY_HOME="$work/solo" am sync
+[[ $rc -eq 0 && -n $(git -C "$work/solo" ls-files fact.md) ]] || err "sync without origin: rc=$rc $(cat "$work/out")"
+
+git -C "$work/m3" checkout -q --detach
+AGENT_MEMORY_HOME="$work/m3" am sync
+if [[ $rc -eq 0 ]] || ! grep -qF "detached HEAD" "$work/out"; then
+	err "sync detached: rc=$rc $(cat "$work/out")"
+fi
 
 AGENT_MEMORY_HOME="$work/not-a-repo" am sync
 if [[ $rc -eq 0 ]] || ! grep -qF "not a git repository" "$work/out"; then

@@ -5,3 +5,8 @@ After=network-online.target
 [Service]
 Type=oneshot
 ExecStart=%h/bin/agent-memory sync
+# A hung push would otherwise hold the lock and stop every later run.
+TimeoutStartSec=120
+# Never wait for credentials nobody is there to type.
+Environment=GIT_TERMINAL_PROMPT=0
+Environment="GIT_SSH_COMMAND=ssh -o BatchMode=yes"
