@@ -189,9 +189,15 @@ if [[ -n "$TMUX" ]]; then
     (( _TMUX_AGENT_TITLE_DIRTY )) || return 0
     _TMUX_AGENT_TITLE_DIRTY=0
     [[ -n "${TMUX_PANE:-}" ]] || return 0
-    local tmux_state window_id window_name agy_title claude_title
-    tmux_state=$(tmux display-message -t "$TMUX_PANE" -p $'#{window_id}\x1f#{window_name}\x1f#{@agy_title}\x1f#{@claude_title}' 2>/dev/null || true)
-    IFS=$'\x1f' read -r window_id window_name agy_title claude_title <<< "$tmux_state"
+    local tmux_state tab window_id window_name agy_title claude_title
+    local -a fields
+    tab=$'\t'
+    tmux_state=$(tmux display-message -t "$TMUX_PANE" -p $'#{window_id}\t#{window_name}\t#{@agy_title}\t#{@claude_title}' 2>/dev/null || true)
+    fields=("${(@ps:$tab:)tmux_state}")
+    window_id="${fields[1]}"
+    window_name="${fields[2]}"
+    agy_title="${fields[3]}"
+    claude_title="${fields[4]}"
     if [[ -n "$window_id" && ( -n "$agy_title" || -n "$claude_title" ) ]]; then
       tmux set-option -p -u -t "$TMUX_PANE" @agy_title 2>/dev/null || true
       tmux set-option -p -u -t "$TMUX_PANE" @claude_title 2>/dev/null || true

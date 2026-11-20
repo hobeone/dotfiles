@@ -15,7 +15,7 @@ cat << MOCK_TMUX > "$TMP_DIR/tmux"
 echo "tmux \$*" >> "$MOCK_TMUX_LOG"
 case "\$*" in
   *"display-message -t %99 -p #{window_id}"*"#{window_name}"*"#{@agy_title}"*"#{@claude_title}"*)
-    printf '%b\n' "\${MOCK_AGENT_STATE:-@99\x1f\x1f\x1f}"
+    printf '%b\n' "\${MOCK_AGENT_STATE:-@99\t\t\t}"
     exit 0
     ;;
   *"display-message -t %99 -p #{window_id} #{window_name}"*)
@@ -198,7 +198,7 @@ if command -v zsh >/dev/null 2>&1; then
       run_preexec() { local fn; for fn in "${preexec_functions[@]}"; do "$fn" "$1"; done; }
 
       echo "--- startup-dirty ---" >> "'"$MOCK_TMUX_LOG"'"
-      export MOCK_AGENT_STATE="@99\x1f[AGY] ● stale\x1f[AGY] ● stale\x1f"
+      export MOCK_AGENT_STATE="@99\t[AGY] ● stale\t[AGY] ● stale\t"
       run_precmd
 
       echo "--- empty-prompt ---" >> "'"$MOCK_TMUX_LOG"'"
@@ -206,12 +206,12 @@ if command -v zsh >/dev/null 2>&1; then
 
       echo "--- manual-rename-during-agent ---" >> "'"$MOCK_TMUX_LOG"'"
       run_preexec "claude"
-      export MOCK_AGENT_STATE="@99\x1fcustom-win\x1f\x1f⏳ mock-repo"
+      export MOCK_AGENT_STATE="@99\tcustom-win\t\t⏳ mock-repo"
       run_precmd
 
       echo "--- clean-manual-window ---" >> "'"$MOCK_TMUX_LOG"'"
       run_preexec "ls"
-      export MOCK_AGENT_STATE="@99\x1fcustom-win\x1f\x1f"
+      export MOCK_AGENT_STATE="@99\tcustom-win\t\t"
       run_precmd
     '
 
