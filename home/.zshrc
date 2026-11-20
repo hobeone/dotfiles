@@ -179,8 +179,38 @@ if [[ -n "$TMUX" ]]; then
       [[ -n "$val" && "$val" != -* ]] && export "$val"
     done
   }
+
+  # Reset agent-managed tmux window titles once control returns to zsh
+  _TMUX_AGENT_TITLE_DIRTY=1
+  _tmux_mark_agent_title_dirty() {
+    _TMUX_AGENT_TITLE_DIRTY=1
+  }
+  _tmux_reset_agent_title() {
+    (( _TMUX_AGENT_TITLE_DIRTY )) || return 0
+    _TMUX_AGENT_TITLE_DIRTY=0
+    [[ -n "${TMUX_PANE:-}" ]] || return 0
+    local tmux_state tab window_id window_name agy_title claude_title
+    local -a fields
+    tab=$'\t'
+    tmux_state=$(tmux display-message -t "$TMUX_PANE" -p $'#{window_id}\t#{window_name}\t#{@agy_title}\t#{@claude_title}' 2>/dev/null || true)
+    fields=("${(@ps:$tab:)tmux_state}")
+    window_id="${fields[1]}"
+    window_name="${fields[2]}"
+    agy_title="${fields[3]}"
+    claude_title="${fields[4]}"
+    if [[ -n "$window_id" && ( -n "$agy_title" || -n "$claude_title" ) ]]; then
+      tmux set-option -p -u -t "$TMUX_PANE" @agy_title 2>/dev/null || true
+      tmux set-option -p -u -t "$TMUX_PANE" @claude_title 2>/dev/null || true
+      if [[ ( -n "$agy_title" && "$window_name" == "$agy_title" ) || ( -n "$claude_title" && "$window_name" == "$claude_title" ) ]]; then
+        tmux set-window-option -t "$window_id" automatic-rename on 2>/dev/null || true
+      fi
+    fi
+  }
+
   autoload -Uz add-zsh-hook
   add-zsh-hook preexec refresh
+  add-zsh-hook preexec _tmux_mark_agent_title_dirty
+  add-zsh-hook precmd _tmux_reset_agent_title
 fi
 
 # Search for processes using a pattern, preserving the header and excluding this search process
@@ -325,4 +355,4 @@ export NVM_DIR="$HOME/.nvm"
 [[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh
 
 # bun completions
-[ -s "/home/hobe/.bun/_bun" ] && source "/home/hobe/.bun/_bun"
+[[ ! -s "${BUN_INSTALL:-$HOME/.bun}/_bun" ]] || source "${BUN_INSTALL:-$HOME/.bun}/_bun"

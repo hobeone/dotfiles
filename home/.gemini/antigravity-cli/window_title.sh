@@ -96,10 +96,10 @@ if [[ -n "${TMUX:-}" && -n "${TMUX_PANE:-}" ]]; then
     CURRENT_NAME="${TARGET_INFO#* }"
     tmux set-option -p -t "$TMUX_PANE" @agy_title "$TMUX_TITLE" 2>/dev/null || true
     tmux set-window-option -t "$WINDOW_ID" allow-rename off 2>/dev/null || true
-    tmux set-window-option -t "$WINDOW_ID" automatic-rename off 2>/dev/null || true
     if [[ "$CURRENT_NAME" != "$TMUX_TITLE" ]]; then
       tmux rename-window -t "$WINDOW_ID" "$TMUX_TITLE" 2>/dev/null || true
     fi
+    tmux set-window-option -t "$WINDOW_ID" automatic-rename on 2>/dev/null || true
   fi
 fi
 
