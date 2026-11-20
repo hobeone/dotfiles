@@ -8,7 +8,7 @@
     "allow": [],
     "defaultMode": "auto"
   },
-  "model": "opus[1m]",
+  "model": "opus",
   "hooks": {
     "UserPromptSubmit": [
       {
@@ -76,7 +76,8 @@
     "frontend-design@claude-plugins-official": true,
     "clangd-lsp@claude-plugins-official": false,
     "code-review@claude-plugins-official": true,
-    "github@claude-plugins-official": true
+    "github@claude-plugins-official": true,
+    "cc-plugin-you-should-know@builtin": false
   },
   "extraKnownMarketplaces": {
     "claude-code-workflows": {
@@ -87,9 +88,16 @@
     }
   },
   "effortLevel": "medium",
+  "modelSettings": {
+    "claude-sonnet-5": {
+      "effortLevel": "high"
+    }
+  },
+  "autoCompactWindow": 500000,
   "askUserQuestionTimeout": "never",
   "tui": "fullscreen",
   "skipDangerousModePermissionPrompt": true,
+  "skipWorkflowUsageWarning": true,
   "verbose": true,
   "autoCompactEnabled": true,
   "fileCheckpointingEnabled": true,
