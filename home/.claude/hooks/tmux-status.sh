@@ -38,13 +38,15 @@ fi
 
 case "$STATE" in
     working)
-        # Disable automatic-rename and allow-rename so our title sticks
+        # Mark pane as Claude-managed and lock rename while active
+        tmux set-option -p -t "$PANE_ID" @claude_title "⏳ $DIR_NAME" 2>/dev/null || true
         tmux set-window-option -t "$WINDOW_ID" automatic-rename off 2>/dev/null || true
         tmux set-window-option -t "$WINDOW_ID" allow-rename off 2>/dev/null || true
         tmux rename-window -t "$WINDOW_ID" "⏳ $DIR_NAME" 2>/dev/null || true
         ;;
     waiting)
-        # Remove hourglass indicator
+        # Remove hourglass indicator; zsh precmd clears @claude_title and restores automatic-rename on exit
+        tmux set-option -p -t "$PANE_ID" @claude_title "$DIR_NAME" 2>/dev/null || true
         tmux rename-window -t "$WINDOW_ID" "$DIR_NAME" 2>/dev/null || true
         ;;
     *)

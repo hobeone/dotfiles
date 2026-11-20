@@ -38,11 +38,13 @@ jobs:
             tests/test_update_deps.sh \
             tests/test_agent_memory.sh
 
-      - name: Run shellcheck on Claude hooks
+      - name: Run shellcheck on Claude and antigravity hooks
         run: |
           shellcheck -x \
             home/.claude/hooks/*.sh \
-            home/.claude/statusline-command.sh
+            home/.claude/statusline-command.sh \
+            home/.gemini/antigravity-cli/window_title.sh \
+            tests/test_window_title.sh
 
       - name: Run shellcheck on shared skill scripts and script tests
         run: |
@@ -116,6 +118,9 @@ jobs:
 
       - name: agent-memory behavior
         run: bash tests/test_agent_memory.sh
+
+      - name: window_title and tmux reset behavior
+        run: bash tests/test_window_title.sh
 
   structure:
     name: Verify structure

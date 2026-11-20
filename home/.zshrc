@@ -250,8 +250,22 @@ fi
 case $TERM in
   xterm*|rxvt|Eterm|tmux*|screen*)
     if [[ -n "$TMUX" ]]; then
+      # Reset agent-managed tmux window titles once control returns to zsh
+      _tmux_reset_agent_title () {
+        [[ -n "${TMUX_PANE:-}" ]] || return 0
+        local tmux_state window_id agent_titles
+        tmux_state=$(tmux display-message -t "$TMUX_PANE" -p '#{window_id}|#{@agy_title}#{@claude_title}' 2>/dev/null || true)
+        window_id="${tmux_state%%|*}"
+        agent_titles="${tmux_state#*|}"
+        if [[ -n "$window_id" && -n "$agent_titles" ]]; then
+          tmux set-option -p -u -t "$TMUX_PANE" @agy_title 2>/dev/null || true
+          tmux set-option -p -u -t "$TMUX_PANE" @claude_title 2>/dev/null || true
+          tmux set-window-option -t "$window_id" automatic-rename on 2>/dev/null || true
+        fi
+      }
       # precmd now includes the last run command instead of wiping it out
       precmd () {
+        _tmux_reset_agent_title
         print -Pn "\e]0;%~${LAST_CMD:+ | $LAST_CMD}\a"
       }
       preexec () {
@@ -325,4 +339,4 @@ export NVM_DIR="$HOME/.nvm"
 [[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh
 
 # bun completions
-[ -s "/home/hobe/.bun/_bun" ] && source "/home/hobe/.bun/_bun"
+[[ ! -s "${BUN_INSTALL:-$HOME/.bun}/_bun" ]] || source "${BUN_INSTALL:-$HOME/.bun}/_bun"
