@@ -116,6 +116,8 @@ Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
 
 ## Memory has two tiers, shared with agy and across machines
 
+**Scope:** Active only when `~/.agents/memory/` exists and is not disabled (`~/.agents/memory.disabled` absent and `AGENT_MEMORY_DISABLED` unset). When disabled or absent (e.g., on work machines), skip this section and use Claude Code's local memory instead.
+
 The store is `~/.agents/memory/`, a git repo; agy reads and writes the same files. Hooks keep
 it in step between machines: session start pulls and pushes, and the end of each response
 pushes when a memory changed. You never sync by hand. **Read `~/.agents/memory/README.md` before

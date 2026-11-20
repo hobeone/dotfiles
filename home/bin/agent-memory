@@ -27,14 +27,18 @@
 #                 index, commit, pull --rebase and push the store; with
 #                 --if-needed, do nothing unless there is something to commit
 #                 or push
+#   disable       create the disable sentinel so hooks and commands no-op
+#   enable        remove the disable sentinel
 #   hook <claude|agy> <start|stop>
 #                 the session hooks: read the hook's JSON on stdin, sync, and
 #                 wire up or report memory. Never fails the session.
 #
 # Environment:
-#   AGENT_MEMORY_HOME     the store (default ~/.agents/memory)
-#   CLAUDE_PROJECTS_DIR   Claude Code's per-project folders
-#                         (default ~/.claude/projects)
+#   AGENT_MEMORY_HOME         the store (default ~/.agents/memory)
+#   AGENT_MEMORY_DISABLED     set to 1/true/yes to disable all memory actions
+#   AGENT_MEMORY_DISABLE_FILE sentinel file path (default $AGENT_MEMORY_HOME.disabled)
+#   CLAUDE_PROJECTS_DIR       Claude Code's per-project folders
+#                             (default ~/.claude/projects)
 #
 # MEMORY.md is derived from the memory files' front matter, so the store's
 # .gitignore excludes it and every machine regenerates its own: it never
@@ -46,6 +50,8 @@ set -euo pipefail
 STORE="${AGENT_MEMORY_HOME:-${HOME}/.agents/memory}"
 # sync changes into the store, so a relative path would resolve twice.
 [[ "${STORE}" == /* ]] || STORE="${PWD}/${STORE}"
+DISABLE_FILE="${AGENT_MEMORY_DISABLE_FILE:-${STORE}.disabled}"
+[[ "${DISABLE_FILE}" == /* ]] || DISABLE_FILE="${PWD}/${DISABLE_FILE}"
 CLAUDE_PROJECTS="${CLAUDE_PROJECTS_DIR:-${HOME}/.claude/projects}"
 
 # The index being written, removed on exit (see the trap at the bottom) so
@@ -55,6 +61,63 @@ INDEX_TMP=""
 die() {
   echo "agent-memory: $*" >&2
   exit 1
+}
+
+# disabled_reason: succeeds and prints why agent-memory is disabled when either
+# AGENT_MEMORY_DISABLED is truthy or DISABLE_FILE exists.
+disabled_reason() {
+  case "${AGENT_MEMORY_DISABLED:-}" in
+    1 | true | TRUE | yes | YES)
+      printf 'AGENT_MEMORY_DISABLED=%s\n' "${AGENT_MEMORY_DISABLED}"
+      return 0
+      ;;
+  esac
+  if [[ -e "${DISABLE_FILE}" ]]; then
+    printf '%s exists\n' "${DISABLE_FILE}"
+    return 0
+  fi
+  return 1
+}
+
+is_disabled() {
+  disabled_reason >/dev/null
+}
+
+# require_enabled: succeeds when enabled; otherwise explains why on stderr and
+# returns 1 so non-hook subcommands can exit 0 as clean no-ops.
+require_enabled() {
+  local reason
+  if reason="$(disabled_reason)"; then
+    printf 'agent-memory: disabled (%s)\n' "${reason}" >&2
+    return 1
+  fi
+  return 0
+}
+
+cmd_disable() {
+  if [[ $# -gt 0 ]]; then
+    echo "Usage: agent-memory disable" >&2
+    exit 2
+  fi
+  mkdir -p "$(dirname "${DISABLE_FILE}")"
+  : >"${DISABLE_FILE}"
+  printf 'agent-memory: disabled (%s)\n' "${DISABLE_FILE}"
+}
+
+cmd_enable() {
+  if [[ $# -gt 0 ]]; then
+    echo "Usage: agent-memory enable" >&2
+    exit 2
+  fi
+  rm -f "${DISABLE_FILE}"
+  case "${AGENT_MEMORY_DISABLED:-}" in
+    1 | true | TRUE | yes | YES)
+      printf 'agent-memory: removed %s, but AGENT_MEMORY_DISABLED=%s is still set in the environment\n' \
+        "${DISABLE_FILE}" "${AGENT_MEMORY_DISABLED}" >&2
+      return 0
+      ;;
+  esac
+  printf 'agent-memory: enabled\n'
 }
 
 # safe_component <s>: succeeds when <s> can be one path component of a key.
@@ -221,6 +284,7 @@ check_dir() {
 }
 
 cmd_check() {
+  require_enabled || return 0
   local key problems
   key="$(project_key "${1:-.}")"
   problems="$(check_dir "${STORE}/global" global; check_dir "${STORE}/projects/${key}" "projects/${key}")"
@@ -239,6 +303,7 @@ index_lines() {
 }
 
 cmd_context() {
+  require_enabled || return 0
   local dir="${1:-.}" key global project problems
   key="$(project_key "${dir}")"
   global="${STORE}/global"
@@ -265,6 +330,7 @@ cmd_key() {
 }
 
 cmd_paths() {
+  require_enabled || return 0
   local key
   key="$(project_key "${1:-.}")"
   mkdir -p "${STORE}/global" "${STORE}/projects/${key}"
@@ -273,6 +339,7 @@ cmd_paths() {
 }
 
 cmd_link() {
+  require_enabled || return 0
   local dir="${1:-.}" key target cdir mem
   key="$(project_key "${dir}")"
   target="${STORE}/projects/${key}"
@@ -305,6 +372,7 @@ cmd_link() {
 }
 
 cmd_index() {
+  require_enabled || return 0
   index_all
 }
 
@@ -388,6 +456,7 @@ cmd_sync() {
         ;;
     esac
   done
+  require_enabled || return 0
   [[ -d "${STORE}/.git" ]] || die "${STORE} is not a git repository"
   cd "${STORE}"
   # Claude and agy can finish a turn at the same moment: the second sync
@@ -503,7 +572,7 @@ cmd_hook() {
       ;;
   esac
   input="$(cat)"
-  if [[ ! -d "${STORE}" ]]; then
+  if is_disabled || [[ ! -d "${STORE}" ]]; then
     [[ "${tool}" == agy ]] && echo '{}'
     return 0
   fi
@@ -554,10 +623,12 @@ main() {
     check) cmd_check "$@" ;;
     context) cmd_context "$@" ;;
     sync) cmd_sync "$@" ;;
+    disable) cmd_disable "$@" ;;
+    enable) cmd_enable "$@" ;;
     hook) cmd_hook "$@" ;;
     -h | --help | help) sed -n '2,$ { /^#/!q; s/^# \{0,1\}//; p; }' "${BASH_SOURCE[0]}" ;;
     *)
-      echo "Usage: agent-memory key|paths|link|index|check|context|sync|hook ...  (--help for details)" >&2
+      echo "Usage: agent-memory key|paths|link|index|check|context|sync|disable|enable|hook ...  (--help for details)" >&2
       exit 2
       ;;
   esac

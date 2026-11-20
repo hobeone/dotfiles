@@ -16,6 +16,7 @@ export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
 export GIT_AUTHOR_NAME=test GIT_AUTHOR_EMAIL=test@example.com
 export GIT_COMMITTER_NAME=test GIT_COMMITTER_EMAIL=test@example.com
 export AGENT_MEMORY_HOME="$work/store" CLAUDE_PROJECTS_DIR="$work/claude-projects"
+unset AGENT_MEMORY_DISABLED AGENT_MEMORY_DISABLE_FILE
 
 # am ARGS...: runs agent-memory; output to $work/out, exit code to $rc.
 am() {
@@ -495,6 +496,79 @@ AGENT_MEMORY_HOME="$work/absent" run_hook agy start "$work/src/hooked"
 
 printf '{}' | "$script" hook gemini start >/dev/null 2>&1
 [[ $? -eq 2 ]] || err "hook with an unknown tool: want exit 2"
+
+# --- disable / enable -------------------------------------------------------
+# Disabling without an existing store creates only the sentinel, not the store.
+AGENT_MEMORY_HOME="$work/never-created" am disable
+[[ $rc -eq 0 && -e $work/never-created.disabled && ! -e $work/never-created ]] ||
+	err "disable created the store or failed: rc=$rc $(cat "$work/out")"
+
+# Disabling an active store makes hooks and mutating/reading commands no-ops.
+make_repo "$work/src/disabled-repo" "git@github.com:hobeone/disabled-repo.git"
+AGENT_MEMORY_HOME="$work/hs" am disable
+[[ $rc -eq 0 && -e $work/hs.disabled ]] || err "disable active store: rc=$rc $(cat "$work/out")"
+
+echo sentinel >"$work/hs/global/ignored-while-disabled.md"
+echo sentinel-index >"$work/hs/global/MEMORY.md"
+AGENT_MEMORY_HOME="$work/hs" run_hook claude start "$work/src/disabled-repo"
+[[ $rc -eq 0 && ! -s $work/out ]] || err "claude start while disabled: rc=$rc out=$(cat "$work/out")"
+[[ ! -e $(mem_of "$work/src/disabled-repo") ]] || err "claude start while disabled created project link"
+
+AGENT_MEMORY_HOME="$work/hs" run_hook claude stop "$work/src/disabled-repo"
+[[ $rc -eq 0 && ! -s $work/out ]] || err "claude stop while disabled: rc=$rc out=$(cat "$work/out")"
+pushed global/ignored-while-disabled.md && err "claude stop while disabled pushed a file"
+
+AGENT_MEMORY_HOME="$work/hs" run_hook agy start "$work/src/disabled-repo"
+[[ $rc -eq 0 && $(cat "$work/out") == "{}" ]] || err "agy start while disabled: rc=$rc out=$(cat "$work/out")"
+
+AGENT_MEMORY_HOME="$work/hs" run_hook agy stop "$work/src/disabled-repo"
+[[ $rc -eq 0 && $(cat "$work/out") == "{}" ]] || err "agy stop while disabled: rc=$rc out=$(cat "$work/out")"
+pushed global/ignored-while-disabled.md && err "agy stop while disabled pushed a file"
+
+for subcmd in "paths $work/src/disabled-repo" "link $work/src/disabled-repo" "index" "check $work/src/disabled-repo" "context $work/src/disabled-repo" "sync"; do
+	# shellcheck disable=SC2086
+	AGENT_MEMORY_HOME="$work/hs" am $subcmd
+	[[ $rc -eq 0 ]] || err "$subcmd while disabled: rc=$rc $(cat "$work/out")"
+	grep -qF "agent-memory: disabled" "$work/out" || err "$subcmd while disabled gave no notice: $(cat "$work/out")"
+done
+[[ $(cat "$work/hs/global/MEMORY.md") == "sentinel-index" ]] || err "index while disabled modified MEMORY.md"
+[[ ! -e $(mem_of "$work/src/disabled-repo") ]] || err "link while disabled created project link"
+
+# Flag validation and read-only key lookup still work while disabled.
+AGENT_MEMORY_HOME="$work/hs" am sync --bogus
+[[ $rc -eq 2 ]] || err "sync --bogus while disabled: rc=$rc"
+AGENT_MEMORY_HOME="$work/hs" am key "$work/src/disabled-repo"
+[[ $rc -eq 0 && $(cat "$work/out") == hobeone/disabled-repo ]] || err "key while disabled: rc=$rc $(cat "$work/out")"
+AGENT_MEMORY_HOME="$work/hs" am disable extra
+[[ $rc -eq 2 ]] || err "disable with extra args: rc=$rc"
+
+# Enabling restores normal operation.
+AGENT_MEMORY_HOME="$work/hs" am enable
+[[ $rc -eq 0 && ! -e $work/hs.disabled ]] || err "enable failed: rc=$rc $(cat "$work/out")"
+AGENT_MEMORY_HOME="$work/hs" am enable extra
+[[ $rc -eq 2 ]] || err "enable with extra args: rc=$rc"
+rm -f "$work/hs/global/ignored-while-disabled.md"
+AGENT_MEMORY_HOME="$work/hs" run_hook agy start "$work/src/hooked"
+if [[ $rc -ne 0 ]] || ! jq -e '.injectSteps[0].systemMessage.systemMessage' "$work/out" >/dev/null 2>&1; then
+	err "agy start after enable failed: $(cat "$work/out")"
+fi
+
+# Environment variable opt-out (and 0 does not disable).
+AGENT_MEMORY_DISABLED=1 AGENT_MEMORY_HOME="$work/hs" run_hook agy start "$work/src/hooked"
+[[ $rc -eq 0 && $(cat "$work/out") == "{}" ]] || err "AGENT_MEMORY_DISABLED=1 agy start: $(cat "$work/out")"
+AGENT_MEMORY_DISABLED=true AGENT_MEMORY_HOME="$work/hs" am sync
+if [[ $rc -ne 0 ]] || ! grep -qF "AGENT_MEMORY_DISABLED=true" "$work/out"; then
+	err "AGENT_MEMORY_DISABLED=true sync: $(cat "$work/out")"
+fi
+AGENT_MEMORY_DISABLED=1 AGENT_MEMORY_HOME="$work/hs" am enable
+if [[ $rc -ne 0 ]] || ! grep -qF "still set in the environment" "$work/out"; then
+	err "enable with env set did not warn: $(cat "$work/out")"
+fi
+AGENT_MEMORY_DISABLED=0 AGENT_MEMORY_HOME="$work/hs" run_hook agy start "$work/src/hooked"
+if [[ $rc -ne 0 ]] || ! jq -e '.injectSteps[0].systemMessage.systemMessage' "$work/out" >/dev/null 2>&1; then
+	err "AGENT_MEMORY_DISABLED=0 should not disable: $(cat "$work/out")"
+fi
+
 export AGENT_MEMORY_HOME="$work/store"
 
 # --- arguments --------------------------------------------------------------

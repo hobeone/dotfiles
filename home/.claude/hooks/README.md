@@ -28,7 +28,7 @@ Shell scripts that run at specific points in the Claude Code lifecycle. Configur
 
 **Input:** Reads `cwd` from the hook JSON (falls back to `$PWD`).
 
-**Output:** `start` prints nothing when all is well, otherwise lines of session context: a failed sync, a project that could not be linked, or memory files to fix. `stop` prints nothing. Both exit 0, so a session is never blocked. Nothing happens on a machine without the store or without `~/bin/agent-memory`.
+**Output:** `start` prints nothing when all is well, otherwise lines of session context: a failed sync, a project that could not be linked, or memory files to fix. `stop` prints nothing. Both exit 0, so a session is never blocked. Nothing happens on a machine without the store, without `~/bin/agent-memory`, or when disabled via `agent-memory disable` or `AGENT_MEMORY_DISABLED=1`.
 
 ## Writing Hooks
 
