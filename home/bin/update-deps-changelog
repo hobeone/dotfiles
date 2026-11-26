@@ -1,0 +1,1362 @@
+#!/usr/bin/env python3
+"""
+update-deps-changelog
+
+Inspects uncommitted dependency changes in go.mod and <ui_dir>/bun.lock,
+queries OSV.dev for security vulnerabilities fixed by the update, fetches
+release notes / changelogs (GitHub Releases, local Go module cache, local
+node_modules, GitLab Releases), and highlights critical changes with
+security fixes prioritized above all others.
+
+Uses only the Python 3 standard library.
+"""
+
+from __future__ import annotations
+
+import argparse
+import concurrent.futures
+import dataclasses
+import html
+import json
+import os
+import re
+import subprocess
+import sys
+import urllib.error
+import urllib.parse
+import urllib.request
+from pathlib import Path
+from typing import Any
+
+OSV_BATCH_URL = "https://api.osv.dev/v1/querybatch"
+OSV_VULN_URL = "https://api.osv.dev/v1/vulns/{id}"
+GO_PROXY_INFO_URL = "https://proxy.golang.org/{mod}/@v/{ver}.info"
+GITHUB_RELEASES_URL = "https://api.github.com/repos/{owner}/{repo}/releases?per_page=40"
+GITLAB_RELEASES_URL = "https://gitlab.com/api/v4/projects/{project}/releases?per_page=20"
+NPM_REGISTRY_URL = "https://registry.npmjs.org/{pkg}"
+GO_RELEASE_NOTES_URL = "https://go.dev/doc/devel/release"
+
+HTTP_TIMEOUT = 10
+MAX_WORKERS = 10
+
+SEVERITY_RANK = {
+    "CRITICAL": 4,
+    "HIGH": 3,
+    "MODERATE": 2,
+    "MEDIUM": 2,
+    "LOW": 1,
+    "UNKNOWN": 0,
+}
+
+# Patterns for classifying changelog / release-note bullets.
+SECURITY_RE = re.compile(
+    r"(?:"
+    r"\bCVE-\d{4}-\d{4,}\b"
+    r"|\bGHSA-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}\b"
+    r"|\bGO-\d{4}-\d{4,}\b"
+    r"|\bsecurit(?:y|ies)\b"
+    r"|\bvulnerabilit(?:y|ies)\b"
+    r"|\b(?:XSS|CSRF|SSRF|RCE|XXE|SQLi|CRLF)\b"
+    r"|\bprototype pollution\b"
+    r"|\b(?:command|path|header|sql|code)\s+injection\b"
+    r"|\bpath\s+traversal\b"
+    r"|\bauth(?:entication|orization)?\s+bypass\b"
+    r"|\bdenial[- ]of[- ]service\b"
+    r"|\bDoS\b"
+    r"|\bprivilege\s+escalation\b"
+    r"|\barbitrary\s+(?:code|file)\b"
+    r"|\bsaniti[sz](?:e|ed|ing|ation)\b"
+    r")",
+    re.IGNORECASE,
+)
+
+BREAKING_RE = re.compile(
+    r"(?:"
+    r"^\s*breaking(?:\s*[:!]|\s+change)"
+    r"|\bbreaking\s+(?:change|changes|behavior|api)\b"
+    r"|^[a-z]+(?:\([^)]*\))?!:"
+    r"|\bdeprecated?\b"
+    r"|\bremoved?\s+(?:support|the|deprecated|legacy|option|method|flag|api|`[^`]+`)\b"
+    r"|\bdrop(?:ped|s)?\s+(?:support|node|go|compatibility)\b"
+    r"|\bincompatible\b"
+    r"|\bmigration\s+(?:guide|required|needed)\b"
+    r"|\bno\s+longer\s+(?:supports?|returns?|accepts?|allows?|defaults?)\b"
+    r"|\bnow\s+(?:reads?\s+as|returns?|requires?|defaults?\s+to|opens?\s+with)\b"
+    r")",
+    re.IGNORECASE,
+)
+BREAKING_UPPER_RE = re.compile(r"\bBREAKING\b")
+
+CRITICAL_FIX_RE = re.compile(
+    r"(?:"
+    r"\bcrash(?:es|ed|ing)?\b"
+    r"|\bpanic(?:s|ked|king)?\b"
+    r"|\bnil\s+pointer\b"
+    r"|\bsegfault\b"
+    r"|\bdata\s+(?:loss|corruption)\b"
+    r"|\bcorrupt(?:s|ed|ing|ion)?\b"
+    r"|\bdeadlock(?:s|ed|ing)?\b"
+    r"|\brace\s+condition\b"
+    r"|\bdata\s+race\b"
+    r"|\bmemory\s+leak\b"
+    r"|\bgoroutine\s+leak\b"
+    r"|\bregression\b"
+    r"|\binfinite\s+loop\b"
+    r"|\bhang(?:s|ing)?\b"
+    r"|\bout\s+of\s+memory\b"
+    r"|\bOOM\b"
+    r")",
+    re.IGNORECASE,
+)
+
+# Noise lines to skip when extracting release note bullets.
+NOISE_BULLET_RE = re.compile(
+    r"(?:"
+    r"^\s*(?:chore|ci|docs|test|tests|style|build)\s*(?:\([^)]*\))?:"
+    r"|^\s*(?:bump|update)\s+(?:dev)?dependencies"
+    r"|^\s*full\s+changelog\s*:"
+    r"|^\s*new\s+contributors"
+    r"|^\s*@\S+\s+made\s+their\s+first\s+contribution"
+    r"|^\s*see\s+the\s+changelog"
+    r"|^\s*all\s+changes\s+can\s+be\s+found"
+    r")",
+    re.IGNORECASE,
+)
+
+# Platform-specific native binding packages that are noise for changelog lookup.
+PLATFORM_BINDING_RE = re.compile(
+    r"(?:^@[^/]+/binding-|-(?:linux|darwin|win32|freebsd|android|openharmony|wasm32|sunos|aix|s390x|ppc64|arm64|x64)(?:-|$))"
+)
+
+
+@dataclasses.dataclass(frozen=True)
+class DepChange:
+    ecosystem: str  # "Go" or "npm"
+    name: str
+    old_ver: str
+    new_ver: str
+    direct: bool = True
+    is_go_runtime: bool = False
+    kind: str = "updated"  # "updated", "added", "removed"
+
+    @property
+    def is_major_bump(self) -> bool:
+        if self.kind != "updated" or not self.old_ver or not self.new_ver:
+            return False
+        o = parse_semver(self.old_ver)
+        n = parse_semver(self.new_ver)
+        if o is None or n is None:
+            return False
+        return n[0] > o[0]
+
+
+@dataclasses.dataclass
+class SecurityFix:
+    dep_name: str
+    ecosystem: str
+    old_ver: str
+    new_ver: str
+    vuln_id: str
+    aliases: list[str]
+    severity: str
+    summary: str
+    url: str
+    status: str = "fixed"  # "fixed" or "remaining"
+
+
+@dataclasses.dataclass
+class ReleaseHighlight:
+    dep_name: str
+    ecosystem: str
+    old_ver: str
+    new_ver: str
+    category: str  # "security", "breaking", "critical", "notable"
+    text: str
+    version_tag: str = ""
+    url: str = ""
+
+
+@dataclasses.dataclass
+class DepReport:
+    dep: DepChange
+    repo_url: str = ""
+    release_url: str = ""
+    highlights: list[ReleaseHighlight] = dataclasses.field(default_factory=list)
+    release_count: int = 0
+    deduped_with: str = ""
+
+
+# ---------------------------------------------------------------------------
+# Semver helpers
+# ---------------------------------------------------------------------------
+
+SEMVER_RE = re.compile(
+    r"^v?(\d+)\.(\d+)(?:\.(\d+))?(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$"
+)
+
+
+def parse_semver(ver: str) -> tuple[int, int, int, str] | None:
+    m = SEMVER_RE.match(ver.strip())
+    if not m:
+        return None
+    major = int(m.group(1))
+    minor = int(m.group(2))
+    patch = int(m.group(3) or 0)
+    pre = m.group(4) or ""
+    return (major, minor, patch, pre)
+
+
+def semver_key(ver: str) -> tuple[int, int, int, int, str] | None:
+    p = parse_semver(ver)
+    if p is None:
+        return None
+    # Stable release (pre == "") sorts after pre-release of same version.
+    return (p[0], p[1], p[2], 1 if not p[3] else 0, p[3])
+
+
+def version_in_range(ver: str, old_ver: str, new_ver: str) -> bool:
+    """True when old_ver < ver <= new_ver."""
+    vk = semver_key(ver)
+    ok = semver_key(old_ver)
+    nk = semver_key(new_ver)
+    if vk is None or ok is None or nk is None:
+        return False
+    return ok < vk <= nk
+
+
+# ---------------------------------------------------------------------------
+# Diff parsers (go.mod, bun.lock, package.json)
+# ---------------------------------------------------------------------------
+
+
+def run_git_diff(repo_root: str, rel_file: str, base_ref: str | None = None) -> str:
+    cmd = ["git", "-C", repo_root, "diff", "-U0"]
+    if base_ref:
+        cmd.append(base_ref)
+    cmd.extend(["--", rel_file])
+    res = subprocess.run(cmd, capture_output=True, text=True, check=False)
+    return res.stdout if res.returncode == 0 else ""
+
+
+def parse_go_mod_diff(diff_text: str) -> list[DepChange]:
+    old: dict[str, tuple[str, bool, bool]] = {}
+    new: dict[str, tuple[str, bool, bool]] = {}
+
+    for raw in diff_text.splitlines():
+        if raw.startswith("---") or raw.startswith("+++"):
+            continue
+        if not raw or raw[0] not in ("-", "+"):
+            continue
+        side = old if raw[0] == "-" else new
+        line = raw[1:]
+        indirect = "// indirect" in line
+        clean = line.split("//", 1)[0].strip()
+        if not clean:
+            continue
+        parts = clean.split()
+        if parts[0] in ("go", "toolchain") and len(parts) >= 2:
+            ver = parts[1].removeprefix("go")
+            side[parts[0]] = (ver, True, True)
+            continue
+        if parts[0] == "require" and len(parts) >= 3:
+            parts = parts[1:]
+        if len(parts) >= 2 and re.match(r"^v\d", parts[1]):
+            side[parts[0]] = (parts[1], not indirect, False)
+
+    changes: list[DepChange] = []
+    for name in sorted(set(old) | set(new)):
+        if name in old and name in new:
+            ov, od, ort = old[name]
+            nv, nd, nrt = new[name]
+            if ov != nv:
+                changes.append(
+                    DepChange(
+                        ecosystem="Go",
+                        name=name,
+                        old_ver=ov,
+                        new_ver=nv,
+                        direct=od or nd,
+                        is_go_runtime=ort or nrt,
+                        kind="updated",
+                    )
+                )
+        elif name in new:
+            nv, nd, nrt = new[name]
+            changes.append(
+                DepChange(
+                    ecosystem="Go",
+                    name=name,
+                    old_ver="",
+                    new_ver=nv,
+                    direct=nd,
+                    is_go_runtime=nrt,
+                    kind="added",
+                )
+            )
+        else:
+            ov, od, ort = old[name]
+            changes.append(
+                DepChange(
+                    ecosystem="Go",
+                    name=name,
+                    old_ver=ov,
+                    new_ver="",
+                    direct=od,
+                    is_go_runtime=ort,
+                    kind="removed",
+                )
+            )
+    return changes
+
+
+def normalize_bun_pkg_name(lock_key: str) -> str:
+    """
+    Convert a bun.lock package key to its real npm package name.
+    Examples:
+      "svelte" -> "svelte"
+      "@sveltejs/kit" -> "@sveltejs/kit"
+      "rolldown/@oxc-project/types" -> "@oxc-project/types"
+      "@rolldown/binding-wasm32-wasi/@emnapi/core/@emnapi/wasi-threads" -> "@emnapi/wasi-threads"
+      "svelte/devalue" -> "devalue"
+    """
+    parts = lock_key.split("/")
+    if len(parts) >= 2 and parts[-2].startswith("@"):
+        return f"{parts[-2]}/{parts[-1]}"
+    return parts[-1]
+
+
+def load_direct_npm_deps(package_json_path: Path) -> set[str]:
+    if not package_json_path.is_file():
+        return set()
+    try:
+        data = json.loads(package_json_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return set()
+    direct: set[str] = set()
+    for field in ("dependencies", "devDependencies", "optionalDependencies", "peerDependencies"):
+        section = data.get(field)
+        if isinstance(section, dict):
+            direct.update(section.keys())
+    return direct
+
+
+BUN_LOCK_ENTRY_RE = re.compile(r'"([^"]+)":\s*\["([^"]+)@([^"]+)"')
+
+
+def parse_bun_lock_diff(diff_text: str, direct_deps: set[str]) -> list[DepChange]:
+    old: dict[str, str] = {}
+    new: dict[str, str] = {}
+
+    for raw in diff_text.splitlines():
+        if raw.startswith("---") or raw.startswith("+++"):
+            continue
+        if not raw or raw[0] not in ("-", "+"):
+            continue
+        m = BUN_LOCK_ENTRY_RE.search(raw[1:])
+        if not m:
+            continue
+        lock_key, _pkg_ref, ver = m.group(1), m.group(2), m.group(3)
+        side = old if raw[0] == "-" else new
+        side[lock_key] = ver
+
+    # Deduplicate by (normalized_name, old_ver, new_ver) so nested copies
+    # of the same package bump don't duplicate entries.
+    seen: set[tuple[str, str, str, str]] = set()
+    changes: list[DepChange] = []
+    for lock_key in sorted(set(old) | set(new)):
+        pkg_name = normalize_bun_pkg_name(lock_key)
+        is_direct = pkg_name in direct_deps and lock_key == pkg_name
+        if lock_key in old and lock_key in new:
+            ov, nv = old[lock_key], new[lock_key]
+            if ov != nv:
+                key = ("updated", pkg_name, ov, nv)
+                if key not in seen:
+                    seen.add(key)
+                    changes.append(
+                        DepChange(
+                            ecosystem="npm",
+                            name=pkg_name,
+                            old_ver=ov,
+                            new_ver=nv,
+                            direct=is_direct,
+                            kind="updated",
+                        )
+                    )
+        elif lock_key in new:
+            nv = new[lock_key]
+            key = ("added", pkg_name, "", nv)
+            if key not in seen:
+                seen.add(key)
+                changes.append(
+                    DepChange(
+                        ecosystem="npm",
+                        name=pkg_name,
+                        old_ver="",
+                        new_ver=nv,
+                        direct=is_direct,
+                        kind="added",
+                    )
+                )
+        else:
+            ov = old[lock_key]
+            key = ("removed", pkg_name, ov, "")
+            if key not in seen:
+                seen.add(key)
+                changes.append(
+                    DepChange(
+                        ecosystem="npm",
+                        name=pkg_name,
+                        old_ver=ov,
+                        new_ver="",
+                        direct=is_direct,
+                        kind="removed",
+                    )
+                )
+    return changes
+
+
+# ---------------------------------------------------------------------------
+# HTTP helpers
+# ---------------------------------------------------------------------------
+
+
+def http_get_json(
+    url: str,
+    headers: dict[str, str] | None = None,
+    timeout: int = HTTP_TIMEOUT,
+) -> Any | None:
+    req = urllib.request.Request(url, headers=headers or {})
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return json.loads(resp.read().decode("utf-8", errors="replace"))
+    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, OSError):
+        return None
+
+
+def http_post_json(
+    url: str,
+    payload: Any,
+    headers: dict[str, str] | None = None,
+    timeout: int = HTTP_TIMEOUT,
+) -> Any | None:
+    hdrs = {"Content-Type": "application/json"}
+    if headers:
+        hdrs.update(headers)
+    req = urllib.request.Request(
+        url,
+        data=json.dumps(payload).encode("utf-8"),
+        headers=hdrs,
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return json.loads(resp.read().decode("utf-8", errors="replace"))
+    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, OSError):
+        return None
+
+
+def get_github_token() -> str:
+    env_tok = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
+    if env_tok:
+        return env_tok.strip()
+    try:
+        res = subprocess.run(
+            ["gh", "auth", "token"],
+            capture_output=True,
+            text=True,
+            timeout=3,
+            check=False,
+        )
+        if res.returncode == 0:
+            return res.stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        pass
+    return ""
+
+
+# ---------------------------------------------------------------------------
+# OSV.dev security vulnerability check
+# ---------------------------------------------------------------------------
+
+
+def osv_version(dep: DepChange, ver: str) -> tuple[str, str, str]:
+    """Return (ecosystem, package_name, version) formatted for OSV."""
+    if dep.is_go_runtime:
+        return ("Go", "stdlib", ver.removeprefix("go"))
+    if dep.ecosystem == "Go":
+        return ("Go", dep.name, ver.removeprefix("v"))
+    return ("npm", dep.name, ver)
+
+
+def extract_osv_severity(vuln: dict[str, Any]) -> str:
+    db_spec = vuln.get("database_specific") or {}
+    sev = db_spec.get("severity")
+    if isinstance(sev, str) and sev.upper() in SEVERITY_RANK:
+        return sev.upper()
+    # Check eco-specific or CVSS scores if database_specific.severity is absent.
+    for s in vuln.get("severity") or []:
+        score = str(s.get("score", ""))
+        # CVSS vector doesn't always carry numeric score, but sometimes numeric appears.
+        try:
+            num = float(score)
+            if num >= 9.0:
+                return "CRITICAL"
+            if num >= 7.0:
+                return "HIGH"
+            if num >= 4.0:
+                return "MODERATE"
+            return "LOW"
+        except ValueError:
+            pass
+    return "UNKNOWN"
+
+
+def extract_osv_summary(vuln: dict[str, Any]) -> str:
+    summary = (vuln.get("summary") or "").strip()
+    if summary:
+        return " ".join(summary.split())
+    details = (vuln.get("details") or "").strip()
+    if details:
+        first_line = details.splitlines()[0].strip()
+        return " ".join(first_line.split())[:140]
+    return "Security vulnerability"
+
+
+def query_osv_security(changes: list[DepChange]) -> tuple[list[SecurityFix], list[SecurityFix]]:
+    """
+    Query OSV.dev for all updated dependencies.
+    Returns (fixed_vulns, remaining_vulns).
+    """
+    updated = [c for c in changes if c.kind == "updated" and c.old_ver and c.new_ver]
+    if not updated:
+        return [], []
+
+    queries: list[dict[str, Any]] = []
+    # For each updated dep, append two queries: old_ver and new_ver.
+    for dep in updated:
+        eco, pkg, old_v = osv_version(dep, dep.old_ver)
+        _, _, new_v = osv_version(dep, dep.new_ver)
+        queries.append({"package": {"name": pkg, "ecosystem": eco}, "version": old_v})
+        queries.append({"package": {"name": pkg, "ecosystem": eco}, "version": new_v})
+
+    # OSV batch API accepts up to 1000 queries per request.
+    all_results: list[dict[str, Any]] = []
+    for i in range(0, len(queries), 500):
+        chunk = queries[i : i + 500]
+        resp = http_post_json(OSV_BATCH_URL, {"queries": chunk})
+        if not resp or "results" not in resp:
+            return [], []
+        all_results.extend(resp["results"])
+
+    if len(all_results) != len(queries):
+        return [], []
+
+    fixed_pairs: list[tuple[DepChange, str]] = []
+    remaining_pairs: list[tuple[DepChange, str]] = []
+    needed_ids: set[str] = set()
+
+    for idx, dep in enumerate(updated):
+        old_ids = {v["id"] for v in all_results[2 * idx].get("vulns", []) if "id" in v}
+        new_ids = {v["id"] for v in all_results[2 * idx + 1].get("vulns", []) if "id" in v}
+        for vid in sorted(old_ids - new_ids):
+            fixed_pairs.append((dep, vid))
+            needed_ids.add(vid)
+        for vid in sorted(new_ids):
+            remaining_pairs.append((dep, vid))
+            needed_ids.add(vid)
+
+    if not needed_ids:
+        return [], []
+
+    details: dict[str, dict[str, Any]] = {}
+    with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
+        futs = {
+            pool.submit(http_get_json, OSV_VULN_URL.format(id=urllib.parse.quote(vid))): vid
+            for vid in needed_ids
+        }
+        for fut in concurrent.futures.as_completed(futs):
+            vid = futs[fut]
+            data = fut.result()
+            if isinstance(data, dict):
+                details[vid] = data
+
+    def build_list(pairs: list[tuple[DepChange, str]], status: str) -> list[SecurityFix]:
+        items: list[SecurityFix] = []
+        seen_keys: set[tuple[str, str]] = set()
+        for dep, vid in pairs:
+            vdata = details.get(vid, {})
+            aliases = [a for a in (vdata.get("aliases") or []) if isinstance(a, str)]
+            # Deduplicate GO-* / GHSA-* entries that refer to the same CVE on the same dep.
+            cve = next((a for a in aliases if a.startswith("CVE-")), "")
+            dedup_id = cve or vid
+            if (dep.name, dedup_id) in seen_keys:
+                continue
+            seen_keys.add((dep.name, dedup_id))
+            items.append(
+                SecurityFix(
+                    dep_name=dep.name,
+                    ecosystem=dep.ecosystem,
+                    old_ver=dep.old_ver,
+                    new_ver=dep.new_ver,
+                    vuln_id=vid,
+                    aliases=aliases,
+                    severity=extract_osv_severity(vdata),
+                    summary=extract_osv_summary(vdata),
+                    url=f"https://osv.dev/vulnerability/{vid}",
+                    status=status,
+                )
+            )
+        items.sort(
+            key=lambda x: (-SEVERITY_RANK.get(x.severity, 0), x.dep_name, x.vuln_id)
+        )
+        return items
+
+    return build_list(fixed_pairs, "fixed"), build_list(remaining_pairs, "remaining")
+
+
+# ---------------------------------------------------------------------------
+# Repository & Changelog Resolution
+# ---------------------------------------------------------------------------
+
+GITHUB_REPO_RE = re.compile(
+    r"(?:https?://|git\+https?://|git://|ssh://git@|git@)?github\.com[:/]([^/\s]+)/([^/\s#?]+)"
+)
+GITLAB_REPO_RE = re.compile(
+    r"(?:https?://|git\+https?://|git://)?gitlab\.com[:/]([^/\s]+(?:/[^/\s#?]+)+)"
+)
+
+
+def parse_github_repo(url: str) -> tuple[str, str] | None:
+    if not url:
+        return None
+    m = GITHUB_REPO_RE.search(url)
+    if not m:
+        return None
+    owner, repo = m.group(1), m.group(2)
+    repo = repo.removesuffix(".git")
+    return (owner, repo)
+
+
+def parse_gitlab_project(url: str) -> str | None:
+    if not url:
+        return None
+    m = GITLAB_REPO_RE.search(url)
+    if not m:
+        return None
+    proj = m.group(1).removesuffix(".git")
+    # Strip trailing /-/... if present
+    proj = proj.split("/-/", 1)[0]
+    return proj
+
+
+def escape_go_module_path(mod: str) -> str:
+    """Go module cache / proxy escaping: uppercase X -> !x."""
+    return re.sub(r"([A-Z])", lambda m: "!" + m.group(1).lower(), mod)
+
+
+def get_go_modcache() -> str:
+    env_val = os.environ.get("GOMODCACHE")
+    if env_val:
+        return env_val
+    try:
+        res = subprocess.run(
+            ["go", "env", "GOMODCACHE"],
+            capture_output=True,
+            text=True,
+            timeout=3,
+            check=False,
+        )
+        if res.returncode == 0:
+            return res.stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        pass
+    return ""
+
+
+def find_local_changelog(directory: Path) -> str | None:
+    if not directory.is_dir():
+        return None
+    for name in ("CHANGELOG.md", "CHANGELOG", "CHANGES.md", "HISTORY.md", "NEWS.md", "changelog.md"):
+        p = directory / name
+        if p.is_file():
+            try:
+                return p.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                return None
+    return None
+
+
+def resolve_go_repo_url(dep: DepChange) -> str:
+    if dep.is_go_runtime:
+        return "https://github.com/golang/go"
+    if dep.name.startswith("github.com/"):
+        parts = dep.name.split("/")
+        if len(parts) >= 3:
+            return f"https://github.com/{parts[1]}/{parts[2]}"
+    escaped = escape_go_module_path(dep.name)
+    info = http_get_json(GO_PROXY_INFO_URL.format(mod=escaped, ver=dep.new_ver))
+    if isinstance(info, dict):
+        origin = info.get("Origin")
+        if isinstance(origin, dict) and isinstance(origin.get("URL"), str):
+            return origin["URL"]
+    return ""
+
+
+def resolve_npm_repo_url(dep: DepChange, ui_dir: Path | None) -> str:
+    # 1. Local node_modules/<pkg>/package.json (fastest, already on disk).
+    if ui_dir is not None:
+        pjson = ui_dir / "node_modules" / dep.name / "package.json"
+        if pjson.is_file():
+            try:
+                data = json.loads(pjson.read_text(encoding="utf-8"))
+                repo = data.get("repository")
+                if isinstance(repo, dict) and isinstance(repo.get("url"), str):
+                    return repo["url"]
+                if isinstance(repo, str):
+                    return repo
+                if isinstance(data.get("homepage"), str):
+                    return data["homepage"]
+            except (OSError, json.JSONDecodeError):
+                pass
+    # 2. Fallback to npm registry metadata.
+    encoded = urllib.parse.quote(dep.name, safe="@/")
+    data = http_get_json(NPM_REGISTRY_URL.format(pkg=encoded))
+    if isinstance(data, dict):
+        repo = data.get("repository")
+        if isinstance(repo, dict) and isinstance(repo.get("url"), str):
+            return repo["url"]
+        if isinstance(repo, str):
+            return repo
+    return ""
+
+
+# ---------------------------------------------------------------------------
+# Tag matching & Changelog parsing
+# ---------------------------------------------------------------------------
+
+
+def extract_version_from_tag(tag: str, pkg_name: str, repo_name: str) -> str | None:
+    """
+    Extract a semver string from a release tag if it belongs to pkg_name.
+    Handles:
+      - "v1.2.3", "1.2.3" (standard single-package repos or primary package)
+      - "<pkg>@1.2.3", "<pkg>@v1.2.3" (monorepo npm packages like svelte@5.59.2, @sveltejs/kit@3.4.1)
+      - "<short_pkg>@1.2.3" (e.g. kit@3.4.1)
+      - "<subpath>/v1.2.3" (Go multi-module repos)
+    Rejects tags explicitly prefixed with a *different* package name (e.g.
+    "create-vite@9.4.0" when looking for "vite").
+    """
+    t = tag.strip()
+    if not t:
+        return None
+
+    # Package-prefixed with '@': e.g. "@sveltejs/kit@3.4.1" or "svelte@5.59.2"
+    if "@" in t:
+        prefix, ver = t.rsplit("@", 1)
+        short_pkg = pkg_name.split("/")[-1]
+        if prefix in (pkg_name, short_pkg, f"@{repo_name}/{short_pkg}"):
+            if parse_semver(ver):
+                return ver.lstrip("v")
+        return None
+
+    # Slash-prefixed: e.g. "pkg/sub/v1.2.3"
+    if "/" in t:
+        prefix, ver = t.rsplit("/", 1)
+        if pkg_name.endswith("/" + prefix) or pkg_name.split("/")[-1] == prefix:
+            if parse_semver(ver):
+                return ver.lstrip("v")
+        return None
+
+    # Plain version tag: "v1.2.3" or "1.2.3"
+    if parse_semver(t):
+        return t.lstrip("v")
+
+    return None
+
+
+CHANGELOG_HEADING_RE = re.compile(
+    r"^(?:#{1,4}\s+|\s*-\s+\d{4}-\d{2}-\d{2}\s+|\[?)v?(\d+\.\d+(?:\.\d+)?(?:-[0-9A-Za-z.-]+)?)"
+)
+
+
+def parse_markdown_changelog_range(
+    text: str, old_ver: str, new_ver: str
+) -> list[tuple[str, str]]:
+    """
+    Extract (version, section_body) tuples from a CHANGELOG.md where
+    old_ver < version <= new_ver.
+    Supports both heading style (`## v1.2.3`, `## [1.2.3]`) and bullet-date
+    style (` - 2026-11-22 v1.63.0:` as used by modernc.org/sqlite).
+    """
+    sections: list[tuple[str, list[str]]] = []
+    cur_ver: str | None = None
+    cur_lines: list[str] = []
+
+    for line in text.splitlines():
+        m = CHANGELOG_HEADING_RE.match(line)
+        # Require either a markdown heading, bracketed version, or date-prefixed bullet
+        is_header = False
+        if m:
+            if line.startswith("#") or re.match(r"^\s*-\s+\d{4}-\d{2}-\d{2}\s+v?\d", line):
+                is_header = True
+        if is_header and m:
+            if cur_ver is not None:
+                sections.append((cur_ver, cur_lines))
+            cur_ver = m.group(1)
+            cur_lines = []
+        elif cur_ver is not None:
+            cur_lines.append(line)
+
+    if cur_ver is not None:
+        sections.append((cur_ver, cur_lines))
+
+    matched: list[tuple[str, str]] = []
+    for ver, lines in sections:
+        if version_in_range(ver, old_ver, new_ver):
+            matched.append((ver, "\n".join(lines)))
+    return matched
+
+
+def clean_markdown_line(text: str) -> str:
+    """Strip noisy markdown/HTML formatting for clean single-line terminal display."""
+    s = html.unescape(text.strip())
+    # Strip leading bullet markers
+    s = re.sub(r"^[-*+]\s+", "", s)
+    # Remove <samp>(commit)</samp> (and any empty markdown link wrapping it)
+    s = re.sub(r"\[<samp>[^<]*</samp>\]\([^)]+\)", "", s)
+    s = re.sub(r"<samp>[^<]*</samp>", "", s)
+    s = re.sub(r"\[\]\([^)]+\)", "", s)
+    # Strip common HTML formatting tags without touching backticked tags like `<style>`
+    s = re.sub(r"</?(?:a|b|br|code|details|div|em|i|img|p|span|strong|sub|summary|sup)(?:\s[^>]*)?>", "", s)
+    # Convert [label](url) -> label
+    s = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", s)
+    # Strip bold markers
+    s = re.sub(r"\*\*([^*]+)\*\*", r"\1", s)
+    # Normalize non-breaking spaces and collapse whitespace
+    s = " ".join(s.replace("\u00a0", " ").split())
+    # Drop trailing " - " left after stripping <samp>
+    s = re.sub(r"\s+-\s*$", "", s)
+    if len(s) > 150:
+        s = s[:147].rstrip() + "..."
+    return s
+
+
+def extract_highlights_from_body(
+    dep: DepChange,
+    body: str,
+    version_tag: str,
+    url: str,
+) -> list[ReleaseHighlight]:
+    """Parse a release body or changelog section into categorized highlights."""
+    highlights: list[ReleaseHighlight] = []
+    section_category: str | None = None
+    seen_texts: set[str] = set()
+
+    for raw_line in body.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+
+        # Track section headings inside release notes (e.g. "### Breaking Changes", "### Security")
+        if line.startswith("#"):
+            heading = line.lstrip("#").strip().lower()
+            if "security" in heading or "vulnerabilit" in heading:
+                section_category = "security"
+            elif "breaking" in heading or "migration" in heading or "deprecat" in heading:
+                section_category = "breaking"
+            elif "bug" in heading or "fix" in heading:
+                section_category = "fix"
+            elif "contributor" in heading or "chore" in heading or "internal" in heading:
+                section_category = "ignore"
+            else:
+                section_category = None
+            continue
+
+        if section_category == "ignore":
+            continue
+
+        # Only consider bullet items (or bold lead-ins).
+        if not re.match(r"^[-*+]\s+", line):
+            continue
+
+        cleaned = clean_markdown_line(line)
+        if len(cleaned) < 8 or cleaned.endswith(":") or NOISE_BULLET_RE.search(cleaned):
+            continue
+
+        norm_key = cleaned.lower()
+        if norm_key in seen_texts:
+            continue
+        seen_texts.add(norm_key)
+
+        if section_category == "security" or SECURITY_RE.search(cleaned):
+            cat = "security"
+        elif section_category == "breaking" or BREAKING_RE.search(cleaned) or BREAKING_UPPER_RE.search(cleaned):
+            cat = "breaking"
+        elif CRITICAL_FIX_RE.search(cleaned):
+            cat = "critical"
+        else:
+            cat = "notable"
+
+        highlights.append(
+            ReleaseHighlight(
+                dep_name=dep.name,
+                ecosystem=dep.ecosystem,
+                old_ver=dep.old_ver,
+                new_ver=dep.new_ver,
+                category=cat,
+                text=cleaned,
+                version_tag=version_tag,
+                url=url,
+            )
+        )
+
+    return highlights
+
+
+def fetch_dep_report(
+    dep: DepChange,
+    ui_dir: Path | None,
+    gomodcache: str,
+    gh_token: str,
+    gh_releases_cache: dict[tuple[str, str], list[dict[str, Any]] | None],
+) -> DepReport:
+    report = DepReport(dep=dep)
+
+    if dep.is_go_runtime:
+        report.repo_url = "https://go.dev/doc/devel/release"
+        report.release_url = f"https://go.dev/doc/devel/release#go{dep.new_ver}"
+        return report
+
+    # Resolve repo URL.
+    if dep.ecosystem == "Go":
+        repo_url = resolve_go_repo_url(dep)
+    else:
+        repo_url = resolve_npm_repo_url(dep, ui_dir)
+    report.repo_url = repo_url
+
+    gh = parse_github_repo(repo_url)
+    gl = parse_gitlab_project(repo_url) if not gh else None
+
+    if gh:
+        owner, repo = gh
+        report.release_url = f"https://github.com/{owner}/{repo}/releases"
+        target_is_pre = bool((parse_semver(dep.new_ver) or (0, 0, 0, ""))[3])
+        releases = gh_releases_cache.get((owner, repo))
+        if releases:
+            for rel in releases:
+                if rel.get("draft"):
+                    continue
+                if rel.get("prerelease") and not target_is_pre:
+                    continue
+                tag = str(rel.get("tag_name") or "")
+                ver = extract_version_from_tag(tag, dep.name, repo)
+                if ver and version_in_range(ver, dep.old_ver, dep.new_ver):
+                    report.release_count += 1
+                    body = str(rel.get("body") or "")
+                    rel_url = str(rel.get("html_url") or report.release_url)
+                    report.highlights.extend(
+                        extract_highlights_from_body(dep, body, tag, rel_url)
+                    )
+    elif gl:
+        report.release_url = f"https://gitlab.com/{gl}/-/releases"
+
+    # Deduplicate highlights across multiple releases in the range.
+    if report.highlights:
+        deduped: list[ReleaseHighlight] = []
+        seen_h: set[str] = set()
+        for h in report.highlights:
+            key = h.text.lower()
+            if key not in seen_h:
+                seen_h.add(key)
+                deduped.append(h)
+        report.highlights = deduped
+
+    # Fallback 1: Local CHANGELOG.md (Go module cache or node_modules).
+    if not report.highlights:
+        local_text: str | None = None
+        if dep.ecosystem == "Go" and gomodcache:
+            mod_dir = Path(gomodcache) / f"{escape_go_module_path(dep.name)}@{dep.new_ver}"
+            local_text = find_local_changelog(mod_dir)
+        elif dep.ecosystem == "npm" and ui_dir is not None:
+            pkg_dir = ui_dir / "node_modules" / dep.name
+            local_text = find_local_changelog(pkg_dir)
+
+        if local_text:
+            sections = parse_markdown_changelog_range(local_text, dep.old_ver, dep.new_ver)
+            for ver, body in sections:
+                report.release_count += 1
+                report.highlights.extend(
+                    extract_highlights_from_body(dep, body, f"v{ver}", report.release_url or repo_url)
+                )
+
+    # Fallback 2: GitLab Releases API (if GitLab repo and still no highlights).
+    if not report.highlights and gl:
+        report.release_url = f"https://gitlab.com/{gl}/-/releases"
+        encoded_gl = urllib.parse.quote(gl, safe="")
+        gl_releases = http_get_json(GITLAB_RELEASES_URL.format(project=encoded_gl))
+        if isinstance(gl_releases, list):
+            for rel in gl_releases:
+                tag = str(rel.get("tag_name") or "")
+                ver = extract_version_from_tag(tag, dep.name, gl.split("/")[-1])
+                if ver and version_in_range(ver, dep.old_ver, dep.new_ver):
+                    report.release_count += 1
+                    body = str(rel.get("description") or "")
+                    rel_url = f"https://gitlab.com/{gl}/-/releases/{tag}"
+                    report.highlights.extend(
+                        extract_highlights_from_body(dep, body, tag, rel_url)
+                    )
+
+    return report
+
+
+def select_deps_for_notes(
+    changes: list[DepChange],
+    security_dep_names: set[str],
+) -> list[DepChange]:
+    """
+    Pick which updated dependencies to fetch release notes for:
+      - All direct dependencies (including Go runtime)
+      - Any transitive dependency with a major bump or confirmed OSV security fix
+      - Skipping noisy platform-specific native binding packages
+    """
+    selected: list[DepChange] = []
+    for c in changes:
+        if c.kind != "updated":
+            continue
+        if PLATFORM_BINDING_RE.search(c.name) and c.name not in security_dep_names:
+            continue
+        if c.direct or c.is_major_bump or c.name in security_dep_names:
+            selected.append(c)
+    return selected
+
+
+def fetch_all_reports(
+    deps: list[DepChange],
+    ui_dir: Path | None,
+    gomodcache: str,
+    gh_token: str,
+) -> list[DepReport]:
+    if not deps:
+        return []
+
+    # Step 1: Resolve repo URLs concurrently.
+    repo_urls: dict[tuple[str, str], str] = {}
+    with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
+        futs = {}
+        for dep in deps:
+            if dep.is_go_runtime:
+                repo_urls[(dep.ecosystem, dep.name)] = "https://go.dev/doc/devel/release"
+            elif dep.ecosystem == "Go":
+                futs[pool.submit(resolve_go_repo_url, dep)] = dep
+            else:
+                futs[pool.submit(resolve_npm_repo_url, dep, ui_dir)] = dep
+        for fut in concurrent.futures.as_completed(futs):
+            dep = futs[fut]
+            repo_urls[(dep.ecosystem, dep.name)] = fut.result() or ""
+
+    # Step 2: Deduplicate GitHub (owner, repo) and fetch releases concurrently once per repo.
+    gh_repos: set[tuple[str, str]] = set()
+    for url in repo_urls.values():
+        gh = parse_github_repo(url)
+        if gh:
+            gh_repos.add(gh)
+
+    gh_headers = {"Accept": "application/vnd.github+json", "User-Agent": "update-deps-changelog"}
+    if gh_token:
+        gh_headers["Authorization"] = f"Bearer {gh_token}"
+
+    gh_releases_cache: dict[tuple[str, str], list[dict[str, Any]] | None] = {}
+    if gh_repos:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
+            futs = {
+                pool.submit(
+                    http_get_json,
+                    GITHUB_RELEASES_URL.format(owner=o, repo=r),
+                    gh_headers,
+                ): (o, r)
+                for o, r in gh_repos
+            }
+            for fut in concurrent.futures.as_completed(futs):
+                key = futs[fut]
+                res = fut.result()
+                gh_releases_cache[key] = res if isinstance(res, list) else None
+
+    # Step 3: Build reports, preferring primary repo-named packages first
+    # (e.g. "vitest" before "@vitest/coverage-v8") so monorepo siblings
+    # deduplicate cleanly onto the primary package.
+    def _dep_sort_key(d: DepChange) -> tuple[int, int, str]:
+        u = repo_urls.get((d.ecosystem, d.name), "")
+        gh_pair = parse_github_repo(u)
+        is_primary = 0 if (gh_pair and d.name == gh_pair[1]) else 1
+        is_unscoped = 0 if not d.name.startswith("@") else 1
+        return (is_primary, is_unscoped, d.name)
+
+    reports: list[DepReport] = []
+    seen_repo_range: dict[tuple[str, str, str, str], str] = {}
+    for dep in sorted(deps, key=_dep_sort_key):
+        url = repo_urls.get((dep.ecosystem, dep.name), "")
+        gh = parse_github_repo(url)
+        report = fetch_dep_report(dep, ui_dir, gomodcache, gh_token, gh_releases_cache)
+        if gh and report.highlights:
+            sig = (gh[0], gh[1], dep.old_ver, dep.new_ver)
+            # Only dedup if the matched tags aren't package-specific.
+            if all("@" not in h.version_tag for h in report.highlights):
+                if sig in seen_repo_range:
+                    report.highlights = []
+                    report.deduped_with = seen_repo_range[sig]
+                else:
+                    seen_repo_range[sig] = dep.name
+        reports.append(report)
+
+    return reports
+
+
+# ---------------------------------------------------------------------------
+# Formatting & Output
+# ---------------------------------------------------------------------------
+
+
+class Style:
+    def __init__(self, color: bool) -> None:
+        self.color = color
+
+    def _wrap(self, code: str, text: str) -> str:
+        return f"\033[{code}m{text}\033[0m" if self.color else text
+
+    def bold(self, s: str) -> str:
+        return self._wrap("1", s)
+
+    def dim(self, s: str) -> str:
+        return self._wrap("2", s)
+
+    def red_bold(self, s: str) -> str:
+        return self._wrap("1;31", s)
+
+    def yellow_bold(self, s: str) -> str:
+        return self._wrap("1;33", s)
+
+    def cyan_bold(self, s: str) -> str:
+        return self._wrap("1;36", s)
+
+    def green(self, s: str) -> str:
+        return self._wrap("32", s)
+
+
+def format_report(
+    changes: list[DepChange],
+    fixed_vulns: list[SecurityFix],
+    remaining_vulns: list[SecurityFix],
+    reports: list[DepReport],
+    use_color: bool,
+) -> str:
+    st = Style(use_color)
+    out: list[str] = []
+
+    # Collect highlights by category across all reports.
+    sec_notes: list[ReleaseHighlight] = []
+    breaking_notes: list[ReleaseHighlight] = []
+    critical_notes: list[ReleaseHighlight] = []
+    notable_by_dep: dict[str, tuple[DepReport, list[ReleaseHighlight]]] = {}
+
+    for rep in reports:
+        dep_notable: list[ReleaseHighlight] = []
+        for h in rep.highlights:
+            if h.category == "security":
+                sec_notes.append(h)
+            elif h.category == "breaking":
+                breaking_notes.append(h)
+            elif h.category == "critical":
+                critical_notes.append(h)
+            else:
+                dep_notable.append(h)
+        if dep_notable:
+            notable_by_dep[rep.dep.name] = (rep, dep_notable)
+
+    major_bumps = [
+        c for c in changes if c.kind == "updated" and c.is_major_bump and not PLATFORM_BINDING_RE.search(c.name)
+    ]
+
+    # 1. SECURITY FIXES (always top priority!)
+    if fixed_vulns or sec_notes:
+        out.append(st.red_bold("=== SECURITY FIXES ==="))
+        for v in fixed_vulns:
+            cve_part = ""
+            cves = [a for a in v.aliases if a.startswith("CVE-")]
+            if cves:
+                cve_part = f" / {cves[0]}"
+            badge = f"[{v.severity}]"
+            out.append(
+                f"  {st.red_bold(badge)} {st.bold(v.dep_name)} ({v.old_ver} -> {v.new_ver}): "
+                f"{v.vuln_id}{cve_part}"
+            )
+            out.append(f"    {v.summary}")
+            out.append(f"    {st.dim(v.url)}")
+        for h in sec_notes[:10]:
+            out.append(
+                f"  {st.red_bold('[SECURITY NOTE]')} {st.bold(h.dep_name)} ({h.old_ver} -> {h.new_ver}): {h.text}"
+            )
+        out.append("")
+    else:
+        out.append(st.green("Security advisories (OSV): no known vulnerabilities fixed or remaining in bumped deps."))
+        out.append("")
+
+    # 2. REMAINING VULNERABILITIES (warning if new version is still vulnerable!)
+    if remaining_vulns:
+        out.append(st.yellow_bold("=== WARNING: REMAINING VULNERABILITIES IN NEW VERSIONS ==="))
+        for v in remaining_vulns:
+            cves = [a for a in v.aliases if a.startswith("CVE-")]
+            cve_part = f" / {cves[0]}" if cves else ""
+            out.append(
+                f"  {st.yellow_bold(f'[{v.severity}]')} {st.bold(v.dep_name)} ({v.new_ver}): "
+                f"{v.vuln_id}{cve_part} — {v.summary}"
+            )
+            out.append(f"    {st.dim(v.url)}")
+        out.append("")
+
+    # 3. BREAKING CHANGES & MAJOR VERSION BUMPS
+    if major_bumps or breaking_notes:
+        out.append(st.yellow_bold("=== BREAKING CHANGES & MAJOR BUMPS ==="))
+        for c in major_bumps:
+            scope = "direct" if c.direct else "transitive"
+            out.append(
+                f"  {st.yellow_bold('[MAJOR]')} {st.bold(c.name)} {c.old_ver} -> {c.new_ver} ({c.ecosystem}, {scope})"
+            )
+        for h in breaking_notes[:12]:
+            out.append(
+                f"  {st.yellow_bold('[BREAKING]')} {st.bold(h.dep_name)} ({h.old_ver} -> {h.new_ver}): {h.text}"
+            )
+        if len(breaking_notes) > 12:
+            out.append(st.dim(f"  ... and {len(breaking_notes) - 12} more breaking/behavior notes"))
+        out.append("")
+
+    # 4. CRITICAL FIXES (crashes, panics, data corruption, races, leaks)
+    if critical_notes:
+        out.append(st.cyan_bold("=== CRITICAL FIXES ==="))
+        for h in critical_notes[:12]:
+            out.append(
+                f"  {st.cyan_bold('[FIX]')} {st.bold(h.dep_name)} ({h.old_ver} -> {h.new_ver}): {h.text}"
+            )
+        if len(critical_notes) > 12:
+            out.append(st.dim(f"  ... and {len(critical_notes) - 12} more critical fix notes"))
+        out.append("")
+
+    # 5. OTHER NOTABLE RELEASE NOTES (compact, up to 3 bullets per direct dep)
+    if notable_by_dep:
+        out.append(st.bold("=== RELEASE HIGHLIGHTS ==="))
+        for dep_name in sorted(notable_by_dep):
+            rep, items = notable_by_dep[dep_name]
+            header = f"  {st.bold(rep.dep.name)} {rep.dep.old_ver} -> {rep.dep.new_ver}"
+            if rep.release_url:
+                header += f"  {st.dim(rep.release_url)}"
+            out.append(header)
+            for h in items[:3]:
+                out.append(f"    - {h.text}")
+            if len(items) > 3:
+                out.append(st.dim(f"    ... and {len(items) - 3} more changes"))
+        out.append("")
+
+    # Show any direct deps that had no fetched notes so the user knows they were checked.
+    quiet_direct = [
+        r
+        for r in reports
+        if r.dep.direct and not r.highlights and not r.dep.is_major_bump and not r.deduped_with
+    ]
+    if quiet_direct:
+        names = ", ".join(f"{r.dep.name} ({r.dep.old_ver}->{r.dep.new_ver})" for r in quiet_direct)
+        out.append(st.dim(f"No release notes found for: {names}"))
+
+    return "\n".join(out).rstrip() + "\n"
+
+
+def format_commit_security_summary(fixed_vulns: list[SecurityFix]) -> str:
+    if not fixed_vulns:
+        return ""
+    lines = [f"Security fixes ({len(fixed_vulns)}):"]
+    for v in fixed_vulns:
+        cves = [a for a in v.aliases if a.startswith("CVE-")]
+        id_str = f"{v.vuln_id} / {cves[0]}" if cves else v.vuln_id
+        lines.append(f"- [{v.severity}] {v.dep_name}: {id_str} — {v.summary}")
+    return "\n".join(lines) + "\n"
+
+
+# ---------------------------------------------------------------------------
+# CLI entrypoint
+# ---------------------------------------------------------------------------
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(
+        description="Highlight security fixes and critical changes in updated Go & Bun dependencies."
+    )
+    parser.add_argument("--repo", default=".", help="Git repository root (default: .)")
+    parser.add_argument("--ui-dir", default="", help="Frontend directory holding bun.lock")
+    parser.add_argument("--go", action="store_true", help="Inspect go.mod changes")
+    parser.add_argument("--bun", action="store_true", help="Inspect bun.lock changes")
+    parser.add_argument(
+        "--base",
+        default="",
+        help="Optional git ref to diff against (default: working tree vs HEAD)",
+    )
+    parser.add_argument(
+        "--commit-security-summary",
+        action="store_true",
+        help="Print only a plain-text Security fixes block for commit messages",
+    )
+    parser.add_argument(
+        "--no-color",
+        action="store_true",
+        help="Disable ANSI color output",
+    )
+    args = parser.parse_args(argv)
+
+    # Default to inspecting both if neither --go nor --bun is explicitly passed.
+    check_go = args.go or not args.bun
+    check_bun = args.bun or not args.go
+
+    repo_root = os.path.abspath(args.repo)
+    base_ref = args.base or None
+    changes: list[DepChange] = []
+
+    if check_go and (Path(repo_root) / "go.mod").is_file():
+        go_diff = run_git_diff(repo_root, "go.mod", base_ref=base_ref)
+        changes.extend(parse_go_mod_diff(go_diff))
+
+    ui_path: Path | None = None
+    if check_bun and args.ui_dir:
+        ui_path = Path(repo_root) / args.ui_dir
+        lock_rel = f"{args.ui_dir.rstrip('/')}/bun.lock"
+        bun_diff = run_git_diff(repo_root, lock_rel, base_ref=base_ref)
+        direct_npm = load_direct_npm_deps(ui_path / "package.json")
+        changes.extend(parse_bun_lock_diff(bun_diff, direct_npm))
+
+    updated = [c for c in changes if c.kind == "updated"]
+    if not updated:
+        return 0
+
+    fixed_vulns, remaining_vulns = query_osv_security(changes)
+
+    if args.commit_security_summary:
+        summary = format_commit_security_summary(fixed_vulns)
+        if summary:
+            sys.stdout.write(summary)
+        return 0
+
+    sec_dep_names = {v.dep_name for v in fixed_vulns} | {v.dep_name for v in remaining_vulns}
+    note_deps = select_deps_for_notes(changes, sec_dep_names)
+    gomodcache = get_go_modcache() if check_go else ""
+    gh_token = get_github_token()
+    reports = fetch_all_reports(note_deps, ui_path, gomodcache, gh_token)
+
+    use_color = (
+        not args.no_color
+        and not os.environ.get("NO_COLOR")
+        and sys.stdout.isatty()
+    )
+    sys.stdout.write(
+        format_report(changes, fixed_vulns, remaining_vulns, reports, use_color=use_color)
+    )
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

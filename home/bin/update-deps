@@ -4,8 +4,8 @@
 # Updates Go and bun dependencies of a Go repo with a bun frontend, then
 # verifies the result. Run it from anywhere inside the repo.
 #
-# Usage: update-deps [--latest] [--skip-verify] [--skip-go-version] [--commit] [--yes]
-#                    [--go-only | --bun-only]
+# Usage: update-deps [--latest] [--skip-verify] [--skip-go-version] [--skip-notes]
+#                    [--commit] [--yes] [--go-only | --bun-only]
 #   --go-only, --go
 #                  only update Go (version and modules)
 #   --bun-only, --bun, --node-only, --node
@@ -16,6 +16,7 @@
 #                  skipped when the update changed no dependency file)
 #   --skip-go-version
 #                  leave the Go version in go.mod and Dockerfiles alone
+#   --skip-notes   skip fetching OSV security advisories and release notes
 #   --commit       commit the dependency files with a summary of what changed;
 #                  shows the message and asks for confirmation first
 #   --yes          with --commit, skip the confirmation prompt (also skipped
@@ -268,14 +269,65 @@ section() {
   printf '\n'
 }
 
-# build_commit_message <verification: verified|skip-flag|unchanged>
+# resolve_notes_bin: prints the path to update-deps-changelog, or returns 1.
+resolve_notes_bin() {
+  if [[ -n "${UPDATE_DEPS_NOTES_BIN:-}" ]]; then
+    [[ -x "${UPDATE_DEPS_NOTES_BIN}" ]] && printf '%s\n' "${UPDATE_DEPS_NOTES_BIN}" && return 0
+    return 1
+  fi
+  local self="${BASH_SOURCE[0]}" dir
+  if [[ -L "${self}" ]]; then
+    local target
+    target="$(readlink "${self}")"
+    if [[ "${target}" == /* ]]; then
+      self="${target}"
+    else
+      self="$(dirname "${self}")/${target}"
+    fi
+  fi
+  dir="$(cd "$(dirname "${self}")" && pwd)"
+  if [[ -x "${dir}/update-deps-changelog" ]]; then
+    printf '%s\n' "${dir}/update-deps-changelog"
+    return 0
+  fi
+  command -v update-deps-changelog 2>/dev/null
+}
+
+# run_notes <extra-args...>: runs update-deps-changelog scoped to active ecosystems.
+run_notes() {
+  local notes_bin
+  notes_bin="$(resolve_notes_bin)" || return 1
+  local -a args=(--repo "${PWD}")
+  if [[ "${UPDATE_GO}" -eq 1 ]]; then
+    args+=(--go)
+  fi
+  if [[ "${UPDATE_BUN}" -eq 1 && -n "${UI_DIR}" ]]; then
+    args+=(--bun --ui-dir "${UI_DIR}")
+  fi
+  "${notes_bin}" "${args[@]}" "$@"
+}
+
+# show_dependency_highlights: fetches and displays security fixes and critical
+# release-note highlights for updated dependencies. Non-fatal on network/tool errors.
+show_dependency_highlights() {
+  echo
+  echo "=== Dependency Changes & Security Highlights ==="
+  if ! run_notes; then
+    echo "Note: could not fetch dependency changelogs/advisories (continuing)." >&2
+  fi
+}
+
+# build_commit_message <verification: verified|skip-flag|unchanged> [include_notes: 1|0]
 build_commit_message() {
-  local verification="$1" go_summary="" bun_summary=""
+  local verification="$1" include_notes="${2:-0}" go_summary="" bun_summary="" sec_summary=""
   if [[ "${UPDATE_GO}" -eq 1 ]]; then
     go_summary="$(summarize_changes go go.mod)"
   fi
   if [[ "${UPDATE_BUN}" -eq 1 && -n "${UI_DIR}" ]]; then
     bun_summary="$(summarize_changes bun "${UI_DIR}/bun.lock")"
+  fi
+  if [[ "${include_notes}" -eq 1 ]]; then
+    sec_summary="$(run_notes --commit-security-summary 2>/dev/null || true)"
   fi
 
   local title_target
@@ -288,6 +340,9 @@ build_commit_message() {
   fi
 
   printf 'chore(deps): update %s dependencies\n\n' "${title_target}"
+  if [[ -n "${sec_summary}" ]]; then
+    printf '%s\n\n' "${sec_summary}"
+  fi
   if [[ "${UPDATE_GO}" -eq 1 ]]; then
     section "Go modules" "${go_summary}"
   fi
@@ -310,7 +365,7 @@ build_commit_message() {
 }
 
 main() {
-  local latest=0 verify=1 go_version=1 commit=0 yes=0 arg root before verification
+  local latest=0 verify=1 go_version=1 notes=1 commit=0 yes=0 arg root before verification
   local mode="all"
   for arg in "$@"; do
     case "${arg}" in
@@ -331,6 +386,7 @@ main() {
       --latest) latest=1 ;;
       --skip-verify) verify=0 ;;
       --skip-go-version) go_version=0 ;;
+      --skip-notes) notes=0 ;;
       --commit) commit=1 ;;
       --yes) yes=1 ;;
       -h|--help) sed -n '2,$ { /^#/!q; s/^# \{0,1\}//; p }' "${BASH_SOURCE[0]}"; exit 0 ;;
@@ -427,6 +483,10 @@ main() {
     fi
   fi
 
+  if [[ "${notes}" -eq 1 ]] && ! git diff --quiet -- "${DEP_FILES[@]}"; then
+    show_dependency_highlights
+  fi
+
   if [[ "${commit}" -eq 1 ]]; then
     echo "=== Committing ==="
     if git diff --quiet -- "${DEP_FILES[@]}"; then
@@ -437,7 +497,7 @@ main() {
       # Expand now: `msg` is local and out of scope when the EXIT trap fires.
       # shellcheck disable=SC2064
       trap "rm -f '${msg}'" EXIT
-      build_commit_message "${verification}" >"${msg}"
+      build_commit_message "${verification}" "${notes}" >"${msg}"
 
       echo
       git --no-pager diff --stat -- "${DEP_FILES[@]}"

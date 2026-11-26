@@ -59,6 +59,28 @@ fi
 EOF
 	chmod +x "$work/bin/$cmd"
 done
+
+# Stub update-deps-changelog so tests stay offline and can assert how it is invoked.
+cat >"$work/bin/notes-stub" <<'EOF'
+#!/usr/bin/env bash
+printf 'notes %s %s\n' "$(basename "$PWD")" "$*" >>"$STUB_LOG"
+for arg in "$@"; do
+	if [[ "$arg" == "--commit-security-summary" ]]; then
+		if [[ -n ${STUB_NOTES_SECURITY:-} ]]; then
+			printf 'Security fixes (1):\n- [HIGH] foo: GHSA-1234-5678-9012 / CVE-2026-0001 — Fixed XSS\n'
+		fi
+		exit 0
+	fi
+done
+if [[ -n ${STUB_NOTES_FAIL:-} ]]; then
+	echo "stub notes failure" >&2
+	exit 1
+fi
+echo "=== SECURITY FIXES ==="
+echo "  [HIGH] foo (1.0.0 -> 1.1.0): GHSA-1234-5678-9012"
+EOF
+chmod +x "$work/bin/notes-stub"
+export UPDATE_DEPS_NOTES_BIN="$work/bin/notes-stub"
 export PATH="$work/bin:$PATH"
 
 # make_repo DIR UI_DIR KIT: a committed git repo with go.mod and a frontend in
@@ -324,6 +346,31 @@ no_log "bun-only" "go filterbun get"
 no_log "bun-only" "go filterbun build"
 msg=$(git -C "$work/filterbun" log -1 --format=%B)
 [[ $msg == "chore(deps): update bun dependencies"* ]] || err "bun-only: subject: '$msg'"
+
+# --- dependency changelog & security highlights integration -----------------
+make_repo "$work/notes" ui 0
+STUB_BUMP=1 STUB_NOTES_SECURITY=1 run_main "$work/notes" --skip-verify --commit --yes
+[[ $rc -eq 0 ]] || err "notes commit: exit $rc: $(cat "$work/out")"
+grep -qF "=== Dependency Changes & Security Highlights ===" "$work/out" ||
+	err "notes commit: highlights header missing: $(cat "$work/out")"
+grep -qF "GHSA-1234-5678-9012" "$work/out" ||
+	err "notes commit: security output missing: $(cat "$work/out")"
+msg=$(git -C "$work/notes" log -1 --format=%B)
+grep -qF "Security fixes (1):" <<<"$msg" ||
+	err "notes commit: security summary missing from commit message: '$msg'"
+
+# --skip-notes skips the changelog helper completely.
+make_repo "$work/skipnotes" ui 0
+STUB_BUMP=1 run_main "$work/skipnotes" --skip-verify --skip-notes --commit --yes
+[[ $rc -eq 0 ]] || err "skip-notes: exit $rc: $(cat "$work/out")"
+no_log "skip-notes" "^notes "
+
+# A failing notes helper is non-fatal so updates still succeed offline.
+make_repo "$work/notesfail" ui 0
+STUB_BUMP=1 STUB_NOTES_FAIL=1 run_main "$work/notesfail" --skip-verify --commit --yes
+[[ $rc -eq 0 ]] || err "notes-fail: exit $rc, want 0 (non-fatal): $(cat "$work/out")"
+grep -qF "could not fetch dependency changelogs" "$work/out" ||
+	err "notes-fail: warning not shown: $(cat "$work/out")"
 
 # --- arguments and preconditions --------------------------------------------
 run_main "$work/kit" --go-only --bun-only
