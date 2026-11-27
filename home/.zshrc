@@ -355,4 +355,14 @@ export NVM_DIR="$HOME/.nvm"
 [[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh
 
 # bun completions
+<<<<<<< Updated upstream
 [[ ! -s "${BUN_INSTALL:-$HOME/.bun}/_bun" ]] || source "${BUN_INSTALL:-$HOME/.bun}/_bun"
+||||||| Stash base
+[ -s "/home/hobe/.bun/_bun" ] && source "/home/hobe/.bun/_bun"
+=======
+[ -s "/home/hobe/.bun/_bun" ] && source "/home/hobe/.bun/_bun"
+
+
+# Added by Antigravity CLI installer
+export PATH="/home/hobe/.local/bin:$PATH"
+>>>>>>> Stashed changes

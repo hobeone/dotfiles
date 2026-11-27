@@ -136,3 +136,7 @@ fi
 # ------------------------------------------------------------------------------
 # Load ~/.bashrc.local for local overrides if it exists
 [ -f "$HOME/.bashrc.local" ] && . "$HOME/.bashrc.local"
+
+
+# Added by Antigravity CLI installer
+export PATH="/home/hobe/.local/bin:$PATH"
